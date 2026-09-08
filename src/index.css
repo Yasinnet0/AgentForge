@@ -1,0 +1,148 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+@import "tailwindcss";
+
+:root {
+  --bg-app: #090d16;
+  --bg-sidebar: #0d121f;
+  --bg-header: #0d121f;
+  --bg-surface: #121826;
+  --bg-surface-hover: #182032;
+  --bg-card: #131927;
+  --bg-card-border: #1e283d;
+  --border-subtle: #1c2538;
+  --border-hover: #2e3c5a;
+
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --text-dim: #475569;
+
+  --accent-purple: #7c3aed;
+  --accent-purple-light: #8b5cf6;
+  --accent-purple-dim: rgba(124, 58, 237, 0.15);
+  --accent-indigo: #6366f1;
+
+  --status-green: #10b981;
+  --status-green-dim: rgba(16, 185, 129, 0.15);
+  --status-amber: #f59e0b;
+  --status-amber-dim: rgba(245, 158, 11, 0.15);
+  --status-red: #ef4444;
+  --status-red-dim: rgba(239, 68, 68, 0.15);
+  --status-blue: #3b82f6;
+  --status-blue-dim: rgba(59, 130, 246, 0.15);
+
+  --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  background-color: var(--bg-app);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  user-select: none;
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #222f46;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #334466;
+}
+
+/* Window Drag Regions for Electron Frameless Window */
+.drag-region {
+  -webkit-app-region: drag;
+}
+
+.no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* Badge styles */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.badge-green {
+  background-color: var(--status-green-dim);
+  color: var(--status-green);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+}
+
+.badge-amber {
+  background-color: var(--status-amber-dim);
+  color: var(--status-amber);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+}
+
+.badge-red {
+  background-color: var(--status-red-dim);
+  color: var(--status-red);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+.badge-purple {
+  background-color: var(--accent-purple-dim);
+  color: var(--accent-purple-light);
+  border: 1px solid rgba(139, 92, 246, 0.3);
+}
+
+.badge-blue {
+  background-color: var(--status-blue-dim);
+  color: var(--status-blue);
+  border: 1px solid rgba(59, 130, 246, 0.25);
+}
+
+.badge-muted {
+  background-color: rgba(100, 116, 139, 0.18);
+  color: var(--text-secondary);
+  border: 1px solid rgba(100, 116, 139, 0.25);
+}
+
+/* Status indicators (clean, static) */
+.pulse-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.pulse-dot.green {
+  background-color: var(--status-green);
+}
+
+/* Monospace font utility */
+.font-mono {
+  font-family: var(--font-mono);
+}

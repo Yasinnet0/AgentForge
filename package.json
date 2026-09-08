@@ -1,0 +1,70 @@
+{
+  "name": "agentforge",
+  "version": "0.0.1",
+  "private": true,
+  "description": "AgentForge AI Agent & MCP Server Management Desktop Dashboard",
+  "author": "AgentForge Team",
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "build:electron": "tsc -p electron/tsconfig.json",
+    "electron:dev": "npm run build:electron && concurrently -k \"vite\" \"wait-on http://127.0.0.1:5173 && cross-env NODE_ENV=development electron .\"",
+    "electron:build": "npm run build && npm run build:electron && electron-builder",
+    "electron:win": "npm run build && npm run build:electron && electron-builder --win",
+    "electron:portable": "npm run build && npm run build:electron && electron-builder --win portable"
+  },
+  "dependencies": {
+    "lucide-react": "^0.475.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/node": "^22.13.4",
+    "@types/react": "^19.0.8",
+    "@types/react-dom": "^19.0.3",
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.2",
+    "cross-env": "^7.0.3",
+    "electron": "^34.2.0",
+    "electron-builder": "^25.1.8",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^5.7.3",
+    "vite": "^6.2.0",
+    "wait-on": "^8.0.2"
+  },
+  "build": {
+    "appId": "com.agentforge.desktop",
+    "productName": "AgentForge",
+    "forceCodeSigning": false,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*"
+    ],
+    "win": {
+      "signAndEditExecutable": false,
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  }
+}
