@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  Search, 
-  Bell, 
-  Minus, 
-  Square, 
-  X, 
-  Command 
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  Search,
+  Bell,
+  Minus,
+  Square,
+  X,
+  Command
 } from 'lucide-react';
 
 interface TopBarProps {
@@ -16,10 +16,11 @@ interface TopBarProps {
 export const TopBar: React.FC<TopBarProps> = ({ currentEnv = 'Default' }) => {
   const [isMaximized, setIsMaximized] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (window.electronAPI) {
-      window.electronAPI.isMaximized().then(setIsMaximized).catch(() => {});
+     window.electronAPI.isMaximized().then(setIsMaximized).catch(() => {});
       const unsubscribe = window.electronAPI.onMaximizeChange((maximized) => {
         setIsMaximized(maximized);
       });
@@ -27,6 +28,28 @@ export const TopBar: React.FC<TopBarProps> = ({ currentEnv = 'Default' }) => {
     }
   }, []);
 
+  useEffect(() => {
+    const handleSearchShortcut = (event: KeyboardEvent) => {
+      const isSearchShortcut =
+        (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k';
+
+      const isSlashShortcut =
+        event.key === '/' &&
+        event.target instanceof HTMLElement &&
+        !['INPUT', 'TEXTAREA'].includes(event.target.tagName);
+
+      if (isSearchShortcut || isSlashShortcut) {
+        event.preventDefault();
+        searchInputRef.current?.focus();
+      }
+    };
+
+    window.addEventListener('keydown', handleSearchShortcut);
+
+    return () => {
+      window.removeEventListener('keydown', handleSearchShortcut);
+    };
+  }, []);
   const handleMinimize = () => {
     window.electronAPI?.minimizeWindow();
   };
@@ -60,6 +83,7 @@ export const TopBar: React.FC<TopBarProps> = ({ currentEnv = 'Default' }) => {
         <div className="search-bar-container">
           <Search size={15} className="search-icon" />
           <input
+            ref={searchInputRef}
             type="text"
             className="search-input"
             placeholder="Search agents, skills, rules, MCP servers..."
@@ -85,22 +109,22 @@ export const TopBar: React.FC<TopBarProps> = ({ currentEnv = 'Default' }) => {
 
         {/* Custom Window Controls */}
         <div className="window-controls">
-          <button 
-            className="window-control-btn minimize" 
+          <button
+            className="window-control-btn minimize"
             onClick={handleMinimize}
             title="Minimize"
           >
             <Minus size={13} />
           </button>
-          <button 
-            className="window-control-btn maximize" 
+          <button
+            className="window-control-btn maximize"
             onClick={handleMaximize}
             title={isMaximized ? "Restore" : "Maximize"}
           >
             <Square size={11} />
           </button>
-          <button 
-            className="window-control-btn close" 
+          <button
+            className="window-control-btn close"
             onClick={handleClose}
             title="Close"
           >
@@ -200,8 +224,22 @@ export const TopBar: React.FC<TopBarProps> = ({ currentEnv = 'Default' }) => {
           border-color: #6366f1;
           box-shadow: 0 0 0 1px #6366f1;
           background: #161e30;
+          animation: search-focus-pulse 0.3s ease-out;
         }
 
+        @keyframes search-focus-pulse {
+          0% {
+            transform: scale(1);
+          }
+
+          50% {
+            transform: scale(1.015);
+          }
+
+          100% {
+            transform: scale(1);
+          }
+        }
         .search-icon {
           color: #64748b;
           margin-right: 8px;
