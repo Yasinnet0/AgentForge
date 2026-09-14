@@ -4,7 +4,9 @@ import {
   ArrowUpCircle, 
   Check, 
   RefreshCw, 
-  ArrowRight
+  ArrowRight,
+  Clock,
+  CheckCircle2
 } from 'lucide-react';
 
 interface ActivityItem {
@@ -25,69 +27,8 @@ interface UpdateItem {
 }
 
 export const RightPanel: React.FC = () => {
-  const activities: ActivityItem[] = [
-    {
-      id: '1',
-      time: '14:12:02',
-      title: 'postgres-mcp',
-      description: 'Connected to local pool',
-      type: 'MCP',
-    },
-    {
-      id: '2',
-      time: '13:58:15',
-      title: 'Code Reviewer',
-      description: 'Agent spawned successfully',
-      type: 'AGENT',
-    },
-    {
-      id: '3',
-      time: '13:45:00',
-      title: 'git-master',
-      description: 'Skill invoked on branch main',
-      type: 'SKILL',
-    },
-    {
-      id: '4',
-      time: '12:10:44',
-      title: 'Rule: no-eval',
-      description: 'Verified across 4 modified files',
-      type: 'RULE',
-    },
-    {
-      id: '5',
-      time: '11:00:30',
-      title: 'Web App Dev',
-      description: 'Environment profile activated',
-      type: 'ENV',
-    },
-    {
-      id: '6',
-      time: '09:15:22',
-      title: 'Claude Daemon',
-      description: 'Started daemon on port 4819',
-      type: 'DAEMON',
-    },
-  ];
-
-  const [updates, setUpdates] = useState<UpdateItem[]>([
-    {
-      id: 'postgres',
-      name: 'postgres-mcp',
-      currentVersion: 'v2.0.1',
-      newVersion: 'v2.1.0',
-      size: '1.4 MB',
-      status: 'pending',
-    },
-    {
-      id: 'filesystem',
-      name: 'filesystem-mcp',
-      currentVersion: 'v0.8.2',
-      newVersion: 'v0.9.0',
-      size: '890 KB',
-      status: 'pending',
-    },
-  ]);
+  const activities: ActivityItem[] = [];
+  const [updates, setUpdates] = useState<UpdateItem[]>([]);
 
   const handleUpdate = (id: string) => {
     setUpdates((prev) =>
@@ -132,20 +73,28 @@ export const RightPanel: React.FC = () => {
         </div>
 
         <div className="activity-stream">
-          {activities.map((item) => (
-            <div key={item.id} className="stream-row">
-              <div className="stream-header-line">
-                <div className="stream-source-title">
-                  <span className={`stream-tag tag-${item.type.toLowerCase()} font-mono`}>
-                    {item.type}
-                  </span>
-                  <span className="stream-title font-mono">{item.title}</span>
+          {activities.length > 0 ? (
+            activities.map((item) => (
+              <div key={item.id} className="stream-row">
+                <div className="stream-header-line">
+                  <div className="stream-source-title">
+                    <span className={`stream-tag tag-${item.type.toLowerCase()} font-mono`}>
+                      {item.type}
+                    </span>
+                    <span className="stream-title font-mono">{item.title}</span>
+                  </div>
+                  <span className="stream-time font-mono">{item.time}</span>
                 </div>
-                <span className="stream-time font-mono">{item.time}</span>
+                <div className="stream-desc">{item.description}</div>
               </div>
-              <div className="stream-desc">{item.description}</div>
+            ))
+          ) : (
+            <div className="empty-panel-box">
+              <Clock size={20} className="empty-panel-icon" />
+              <div className="empty-panel-title">No events recorded</div>
+              <div className="empty-panel-desc">Real-time daemon and agent events will appear here</div>
             </div>
-          ))}
+          )}
         </div>
       </div>
 
@@ -171,45 +120,53 @@ export const RightPanel: React.FC = () => {
                 <span>Update All</span>
               </button>
             ) : (
-              <span className="badge badge-green font-mono">ALL CURRENT</span>
+              <span className="badge badge-green font-mono">ALL UP TO DATE</span>
             )}
           </div>
         </div>
 
         <div className="updates-list">
-          {updates.map((item) => (
-            <div key={item.id} className="update-card">
-              <div className="update-info">
-                <div className="update-name font-mono">{item.name}</div>
-                <div className="update-version-row">
-                  <span className="version-from font-mono">{item.currentVersion}</span>
-                  <ArrowRight size={10} className="arrow-icon" />
-                  <span className="version-to font-mono">{item.newVersion}</span>
-                  <span className="update-size font-mono">• {item.size}</span>
+          {updates.length > 0 ? (
+            updates.map((item) => (
+              <div key={item.id} className="update-card">
+                <div className="update-info">
+                  <div className="update-name font-mono">{item.name}</div>
+                  <div className="update-version-row">
+                    <span className="version-from font-mono">{item.currentVersion}</span>
+                    <ArrowRight size={10} className="arrow-icon" />
+                    <span className="version-to font-mono">{item.newVersion}</span>
+                    <span className="update-size font-mono">• {item.size}</span>
+                  </div>
                 </div>
-              </div>
 
-              <button
-                className={`update-btn ${item.status}`}
-                disabled={item.status !== 'pending'}
-                onClick={() => handleUpdate(item.id)}
-              >
-                {item.status === 'pending' && <span>Update</span>}
-                {item.status === 'updating' && (
-                  <>
-                    <RefreshCw size={11} className="spin-icon" />
-                    <span>Updating</span>
-                  </>
-                )}
-                {item.status === 'updated' && (
-                  <>
-                    <Check size={12} />
-                    <span>Done</span>
-                  </>
-                )}
-              </button>
+                <button
+                  className={`update-btn ${item.status}`}
+                  disabled={item.status !== 'pending'}
+                  onClick={() => handleUpdate(item.id)}
+                >
+                  {item.status === 'pending' && <span>Update</span>}
+                  {item.status === 'updating' && (
+                    <>
+                      <RefreshCw size={11} className="spin-icon" />
+                      <span>Updating</span>
+                    </>
+                  )}
+                  {item.status === 'updated' && (
+                    <>
+                      <Check size={12} />
+                      <span>Done</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            ))
+          ) : (
+            <div className="empty-panel-box">
+              <CheckCircle2 size={20} className="empty-panel-icon text-emerald" />
+              <div className="empty-panel-title">All packages up to date</div>
+              <div className="empty-panel-desc">No updates available for installed packages</div>
             </div>
-          ))}
+          )}
         </div>
       </div>
 
@@ -545,6 +502,42 @@ export const RightPanel: React.FC = () => {
 
         .spin-icon {
           animation: spin 1s linear infinite;
+        }
+
+        .empty-panel-box {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          text-align: center;
+          padding: 24px 14px;
+          border: 1px dashed rgba(255, 255, 255, 0.08);
+          border-radius: 8px;
+          background: rgba(13, 18, 31, 0.35);
+          gap: 4px;
+          margin: 8px 0;
+        }
+
+        .empty-panel-icon {
+          color: #475569;
+          margin-bottom: 4px;
+        }
+
+        .empty-panel-icon.text-emerald {
+          color: #10b981;
+        }
+
+        .empty-panel-title {
+          font-size: 12px;
+          font-weight: 600;
+          color: #94a3b8;
+        }
+
+        .empty-panel-desc {
+          font-size: 11px;
+          color: #64748b;
+          line-height: 1.4;
+          max-width: 220px;
         }
       `}</style>
     </aside>

@@ -88,18 +88,18 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange }) => {
             <div className="status-label">ACTIVE PROJECT</div>
             <div className="project-name">
               <FolderGit2 size={13} className="project-icon" />
-              <span>fintrex-service</span>
+              <span>AgentForge</span>
             </div>
           </div>
 
           <div className="status-row">
             <div className="status-label">ENVIRONMENT</div>
-            <div className="env-status-name">Full-Stack Dev</div>
+            <div className="env-status-name">Default</div>
           </div>
 
           <div className="project-card-footer">
-            <span className="version-tag font-mono">v0.8.2 (C++/Qt)</span>
-            <span className="local-only-badge font-mono">LOCAL-ONLY</span>
+            <span className="version-tag font-mono">v0.0.1</span>
+            <span className="local-only-badge font-mono">READY</span>
           </div>
         </div>
       </div>

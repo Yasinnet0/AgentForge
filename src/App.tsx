@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { TopBar } from './components/TopBar';
 import { Sidebar, NavTab } from './components/Sidebar';
 import { StatCards } from './components/StatCards';
-import { EnvironmentSecurityCards } from './components/EnvironmentSecurityCards';
+import { QuickActionsBar } from './components/QuickActionsBar';
 import { RecentlyInstalledPackages } from './components/RecentlyInstalledPackages';
 import { RightPanel } from './components/RightPanel';
 import { 
@@ -35,8 +35,8 @@ export const App: React.FC = () => {
                 {/* 4 Metric Cards */}
                 <StatCards />
 
-                {/* Environment & Security Cards */}
-                <EnvironmentSecurityCards />
+                {/* Quick Actions Launchpad */}
+                <QuickActionsBar onNavigate={setActiveTab} />
 
                 {/* Installed Packages Table */}
                 <RecentlyInstalledPackages />

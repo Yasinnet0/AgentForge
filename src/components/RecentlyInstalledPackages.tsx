@@ -12,35 +12,7 @@ interface InstalledPackage {
 }
 
 export const RecentlyInstalledPackages: React.FC = () => {
-  const packages: InstalledPackage[] = [
-    {
-      id: 'sentry-mcp',
-      name: 'sentry-mcp',
-      version: 'v1.2.0',
-      type: 'MCP SERVER',
-      source: 'COMMUNITY',
-      installedDate: 'Today, 14:02',
-      status: 'Active',
-    },
-    {
-      id: 'security-review',
-      name: 'security-review',
-      version: 'v0.9.4',
-      type: 'SKILL BUNDLE',
-      source: 'OFFICIAL',
-      installedDate: 'Today, 11:30',
-      status: 'Active',
-    },
-    {
-      id: 'postgres-mcp',
-      name: 'postgres-mcp',
-      version: 'v2.0.1',
-      type: 'MCP SERVER',
-      source: 'OFFICIAL',
-      installedDate: 'Yesterday, 18:45',
-      status: 'Active',
-    },
-  ];
+  const packages: InstalledPackage[] = [];
 
   return (
     <div className="packages-container">
@@ -49,59 +21,71 @@ export const RecentlyInstalledPackages: React.FC = () => {
           <PackageCheck size={16} className="title-icon" />
           <span className="packages-title">Recently Installed Packages</span>
         </div>
-        <button className="view-all-btn">
-          <span>View all</span>
-          <ExternalLink size={12} />
-        </button>
+        {packages.length > 0 && (
+          <button className="view-all-btn">
+            <span>View all</span>
+            <ExternalLink size={12} />
+          </button>
+        )}
       </div>
 
-      <div className="packages-table-wrapper">
-        <table className="packages-table">
-          <thead>
-            <tr>
-              <th>PACKAGE NAME</th>
-              <th>TYPE</th>
-              <th>SOURCE</th>
-              <th>INSTALLED DATE</th>
-              <th>STATUS</th>
-              <th style={{ textAlign: 'right' }}>ACTIONS</th>
-            </tr>
-          </thead>
-          <tbody>
-            {packages.map((pkg) => (
-              <tr key={pkg.id}>
-                <td>
-                  <div className="package-name-cell">
-                    <span className="pkg-name font-mono">{pkg.name}</span>
-                    <span className="pkg-version font-mono">{pkg.version}</span>
-                  </div>
-                </td>
-                <td>
-                  <span className={`badge ${pkg.type === 'MCP SERVER' ? 'badge-blue' : 'badge-purple'}`}>
-                    {pkg.type}
-                  </span>
-                </td>
-                <td>
-                  <span className="pkg-source font-mono">{pkg.source}</span>
-                </td>
-                <td>
-                  <span className="pkg-date font-mono">{pkg.installedDate}</span>
-                </td>
-                <td>
-                  <div className="status-cell">
-                    <span className="status-label">{pkg.status}</span>
-                  </div>
-                </td>
-                <td style={{ textAlign: 'right' }}>
-                  <button className="row-action-btn" title="Options">
-                    <MoreVertical size={14} />
-                  </button>
-                </td>
+      {packages.length > 0 ? (
+        <div className="packages-table-wrapper">
+          <table className="packages-table">
+            <thead>
+              <tr>
+                <th>PACKAGE NAME</th>
+                <th>TYPE</th>
+                <th>SOURCE</th>
+                <th>INSTALLED DATE</th>
+                <th>STATUS</th>
+                <th style={{ textAlign: 'right' }}>ACTIONS</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {packages.map((pkg) => (
+                <tr key={pkg.id}>
+                  <td>
+                    <div className="package-name-cell">
+                      <span className="pkg-name font-mono">{pkg.name}</span>
+                      <span className="pkg-version font-mono">{pkg.version}</span>
+                    </div>
+                  </td>
+                  <td>
+                    <span className={`badge ${pkg.type === 'MCP SERVER' ? 'badge-blue' : 'badge-purple'}`}>
+                      {pkg.type}
+                    </span>
+                  </td>
+                  <td>
+                    <span className="pkg-source font-mono">{pkg.source}</span>
+                  </td>
+                  <td>
+                    <span className="pkg-date font-mono">{pkg.installedDate}</span>
+                  </td>
+                  <td>
+                    <div className="status-cell">
+                      <span className="status-label">{pkg.status}</span>
+                    </div>
+                  </td>
+                  <td style={{ textAlign: 'right' }}>
+                    <button className="row-action-btn" title="Options">
+                      <MoreVertical size={14} />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="packages-empty-state">
+          <div className="empty-pkg-icon-wrap">
+            <PackageCheck size={22} />
+          </div>
+          <div className="empty-pkg-title">No packages installed</div>
+          <div className="empty-pkg-desc">Installed skills, MCP servers, and context packages will appear here</div>
+        </div>
+      )}
 
       <style>{`
         .packages-container {
@@ -251,6 +235,44 @@ export const RecentlyInstalledPackages: React.FC = () => {
         .row-action-btn:hover {
           background: #1c263c;
           color: #f1f5f9;
+        }
+
+        .packages-empty-state {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          padding: 36px 20px;
+          border: 1px dashed #1e283d;
+          border-radius: 8px;
+          background: rgba(13, 18, 31, 0.5);
+          text-align: center;
+          gap: 6px;
+        }
+
+        .empty-pkg-icon-wrap {
+          width: 42px;
+          height: 42px;
+          border-radius: 10px;
+          background: rgba(129, 140, 248, 0.08);
+          border: 1px solid rgba(129, 140, 248, 0.15);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: #818cf8;
+          margin-bottom: 4px;
+        }
+
+        .empty-pkg-title {
+          font-size: 13.5px;
+          font-weight: 600;
+          color: #f1f5f9;
+        }
+
+        .empty-pkg-desc {
+          font-size: 12px;
+          color: #64748b;
+          max-width: 320px;
         }
       `}</style>
     </div>

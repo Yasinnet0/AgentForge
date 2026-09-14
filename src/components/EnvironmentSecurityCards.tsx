@@ -24,26 +24,26 @@ export const EnvironmentSecurityCards: React.FC = () => {
         </div>
 
         <div className="info-card-body">
-          <div className="env-primary-name">Web App Development</div>
+          <div className="env-primary-name">Default Environment</div>
 
           <div className="env-meta-rows">
             <div className="meta-row">
               <FolderTree size={14} className="meta-icon" />
               <span className="meta-label">Path:</span>
-              <span className="meta-value font-mono">~/projects/contra-labs/fintrex</span>
+              <span className="meta-value font-mono">AgentForge/</span>
             </div>
 
             <div className="meta-row">
               <Cpu size={14} className="meta-icon" />
               <span className="meta-label">Platform:</span>
-              <span className="meta-value font-mono">node-v20.11.0 / linux-x64</span>
+              <span className="meta-value font-mono">Electron v34 / Node v22</span>
             </div>
           </div>
 
           <div className="card-footer-tags">
             <span className="info-pill font-mono">Sandbox: Enforced</span>
             <span className="info-pill font-mono">Vite: v6.2.0</span>
-            <span className="info-pill font-mono">IPC: Channel 4</span>
+            <span className="info-pill font-mono">IPC: Ready</span>
           </div>
         </div>
       </div>
@@ -82,7 +82,7 @@ export const EnvironmentSecurityCards: React.FC = () => {
 
           <div className="card-footer-audit">
             <Clock size={12} className="audit-icon" />
-            <span className="audit-text font-mono">Last audited: 14 mins ago</span>
+            <span className="audit-text font-mono">Security Status: Active</span>
           </div>
         </div>
       </div>
