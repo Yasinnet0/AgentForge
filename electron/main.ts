@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain, screen } from 'electron';
 import path from 'path';
 import fs from 'fs';
+import os from 'os';
 
 const isDev = process.env.NODE_ENV === 'development';
 
@@ -209,6 +210,322 @@ ipcMain.handle('window:isMaximized', () => {
 
 ipcMain.handle('app:version', () => {
   return app.getVersion();
+});
+
+function resolveHome(filepath: string): string {
+  if (!filepath) return '';
+  if (filepath.startsWith('~/') || filepath.startsWith('~\\')) {
+    return path.join(os.homedir(), filepath.slice(2));
+  }
+  if (filepath === '~') {
+    return os.homedir();
+  }
+  return filepath;
+}
+
+ipcMain.handle('agents:detectAll', async (_event, agentConfigs: any[]) => {
+  const results: Record<string, { detected: boolean; installedCounts: { skills: number; mcps: number; rules: number } }> = {};
+
+  if (!Array.isArray(agentConfigs)) {
+    return results;
+  }
+
+  for (const agent of agentConfigs) {
+    const resolvedBase = resolveHome(agent.baseDir);
+    const resolvedSkills = resolveHome(agent.skillsDir);
+    const resolvedMcp = resolveHome(agent.mcpConfigPath);
+    const resolvedRules = resolveHome(agent.rulesPath);
+
+    const baseExists = resolvedBase ? fs.existsSync(resolvedBase) : false;
+    const skillsExists = resolvedSkills ? fs.existsSync(resolvedSkills) : false;
+    const mcpExists = resolvedMcp ? fs.existsSync(resolvedMcp) : false;
+    const rulesExists = resolvedRules ? fs.existsSync(resolvedRules) : false;
+
+    const detected = baseExists || skillsExists || mcpExists || rulesExists;
+
+    let skillsCount = 0;
+    if (skillsExists) {
+      try {
+        const entries = fs.readdirSync(resolvedSkills, { withFileTypes: true });
+        skillsCount = entries.filter((e) => e.isDirectory()).length;
+      } catch {}
+    }
+
+    let mcpsCount = 0;
+    if (mcpExists) {
+      try {
+        const content = JSON.parse(fs.readFileSync(resolvedMcp, 'utf-8'));
+        const mcpServers = content.mcpServers || content.servers || {};
+        mcpsCount = Object.keys(mcpServers).length;
+      } catch {}
+    }
+
+    let rulesCount = 0;
+    if (rulesExists) {
+      try {
+        if (fs.statSync(resolvedRules).isDirectory()) {
+          rulesCount = fs.readdirSync(resolvedRules).length;
+        } else {
+          rulesCount = 1;
+        }
+      } catch {
+        rulesCount = 1;
+      }
+    }
+
+    results[agent.id] = {
+      detected,
+      installedCounts: {
+        skills: skillsCount,
+        mcps: mcpsCount,
+        rules: rulesCount,
+      },
+    };
+  }
+
+  return results;
+});
+
+function parseSkillInfo(skillDirPath: string, folderName: string) {
+  let name = folderName;
+  let description = 'Workflow skill package';
+  let hasScripts = false;
+  let hasReferences = false;
+
+  try {
+    const skillMdPath = path.join(skillDirPath, 'SKILL.md');
+    if (fs.existsSync(skillMdPath)) {
+      const content = fs.readFileSync(skillMdPath, 'utf-8');
+      const fmMatch = content.match(/^---\s*[\r\n]+([\s\S]*?)[\r\n]+---/);
+      if (fmMatch) {
+        const fm = fmMatch[1];
+        const nameMatch = fm.match(/name:\s*([^\r\n]+)/);
+        if (nameMatch) {
+          name = nameMatch[1].trim().replace(/^['"]|['"]$/g, '');
+        }
+        const descMatch = fm.match(/description:\s*(?:>-\s*|\|-\s*)?([\s\S]*?)(?=\n[a-zA-Z0-9_-]+:|$)/);
+        if (descMatch) {
+          description = descMatch[1].trim().replace(/^['"]|['"]$/g, '').replace(/\s+/g, ' ');
+          if (description.length > 220) {
+            description = description.slice(0, 217) + '...';
+          }
+        }
+      }
+    }
+    hasScripts = fs.existsSync(path.join(skillDirPath, 'scripts'));
+    hasReferences = fs.existsSync(path.join(skillDirPath, 'references'));
+  } catch {}
+
+  return { name, description, hasScripts, hasReferences };
+}
+
+ipcMain.handle('agents:scanCapabilities', async (_event, agentConfigs: any[]) => {
+  const allSkills: any[] = [];
+  const allMcps: any[] = [];
+  const allPlugins: any[] = [];
+
+  if (!Array.isArray(agentConfigs)) {
+    return { skills: allSkills, mcpServers: allMcps, plugins: allPlugins };
+  }
+
+  for (const agent of agentConfigs) {
+    const resolvedSkills = resolveHome(agent.skillsDir);
+    const resolvedMcp = resolveHome(agent.mcpConfigPath);
+    const resolvedPlugins = resolveHome(agent.pluginsDir);
+
+    // 1. Scan direct skills
+    if (resolvedSkills && fs.existsSync(resolvedSkills)) {
+      try {
+        const entries = fs.readdirSync(resolvedSkills, { withFileTypes: true });
+        for (const entry of entries) {
+          if (entry.isDirectory()) {
+            const skillPath = path.join(resolvedSkills, entry.name);
+            const info = parseSkillInfo(skillPath, entry.name);
+            allSkills.push({
+              id: `${agent.id}-skill-${entry.name}`,
+              name: info.name,
+              description: info.description,
+              sourceAgentId: agent.id,
+              sourceAgentName: agent.name,
+              sourceAgentColor: agent.color || '#3b82f6',
+              sourceAgentIcon: agent.iconName || 'Sparkles',
+              sourcePath: skillPath,
+              hasScripts: info.hasScripts,
+              hasReferences: info.hasReferences,
+            });
+          }
+        }
+      } catch (err) {
+        console.warn(`Failed scanning skills for ${agent.name}:`, err);
+      }
+    }
+
+    // 2. Scan plugins & plugin-nested skills/MCPs
+    if (resolvedPlugins && fs.existsSync(resolvedPlugins)) {
+      try {
+        const pluginEntries = fs.readdirSync(resolvedPlugins, { withFileTypes: true });
+        for (const pluginDir of pluginEntries) {
+          if (pluginDir.isDirectory()) {
+            const pluginPath = path.join(resolvedPlugins, pluginDir.name);
+            let pluginName = pluginDir.name;
+            let pluginVersion = '1.0.0';
+            let pluginDesc = 'Custom agent extension plugin bundle';
+            let pluginAuthor = 'Local';
+            let bundledSkillsCount = 0;
+            let bundledMcpsCount = 0;
+            let bundledRulesCount = 0;
+
+            const manifestPath = path.join(pluginPath, 'plugin.json');
+            if (fs.existsSync(manifestPath)) {
+              try {
+                const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
+                if (manifest.name) pluginName = manifest.name;
+                if (manifest.version) pluginVersion = manifest.version;
+                if (manifest.description) pluginDesc = manifest.description;
+                if (manifest.author) {
+                  pluginAuthor = typeof manifest.author === 'string' ? manifest.author : (manifest.author.name || 'Local');
+                }
+              } catch {}
+            }
+
+            // Plugin bundled skills
+            const pluginSkillsDir = path.join(pluginPath, 'skills');
+            if (fs.existsSync(pluginSkillsDir)) {
+              try {
+                const rootSkillMd = path.join(pluginSkillsDir, 'SKILL.md');
+                if (fs.existsSync(rootSkillMd)) {
+                  bundledSkillsCount++;
+                  const info = parseSkillInfo(pluginSkillsDir, pluginDir.name);
+                  allSkills.push({
+                    id: `${agent.id}-plugin-${pluginDir.name}-root`,
+                    name: info.name,
+                    description: info.description,
+                    sourceAgentId: agent.id,
+                    sourceAgentName: agent.name,
+                    sourceAgentColor: agent.color || '#3b82f6',
+                    sourceAgentIcon: agent.iconName || 'Sparkles',
+                    sourcePath: pluginSkillsDir,
+                    pluginName: pluginName,
+                    hasScripts: info.hasScripts,
+                    hasReferences: info.hasReferences,
+                  });
+                } else {
+                  const pSkillEntries = fs.readdirSync(pluginSkillsDir, { withFileTypes: true });
+                  for (const pSkill of pSkillEntries) {
+                    if (pSkill.isDirectory() && !pSkill.name.startsWith('.')) {
+                      const skillPath = path.join(pluginSkillsDir, pSkill.name);
+                      if (fs.existsSync(path.join(skillPath, 'SKILL.md'))) {
+                        bundledSkillsCount++;
+                        const info = parseSkillInfo(skillPath, pSkill.name);
+                        allSkills.push({
+                          id: `${agent.id}-plugin-${pluginDir.name}-${pSkill.name}`,
+                          name: info.name,
+                          description: info.description,
+                          sourceAgentId: agent.id,
+                          sourceAgentName: agent.name,
+                          sourceAgentColor: agent.color || '#3b82f6',
+                          sourceAgentIcon: agent.iconName || 'Sparkles',
+                          sourcePath: skillPath,
+                          pluginName: pluginName,
+                          hasScripts: info.hasScripts,
+                          hasReferences: info.hasReferences,
+                        });
+                      }
+                    }
+                  }
+                }
+              } catch {}
+            }
+
+            // Plugin bundled MCPs
+            const pluginMcpPath = path.join(pluginPath, 'mcp_config.json');
+            if (fs.existsSync(pluginMcpPath)) {
+              try {
+                const mcpContent = JSON.parse(fs.readFileSync(pluginMcpPath, 'utf-8'));
+                const servers = mcpContent.mcpServers || mcpContent.servers || {};
+                for (const [sKey, sVal] of Object.entries<any>(servers)) {
+                  bundledMcpsCount++;
+                  allMcps.push({
+                    id: `${agent.id}-plugin-${pluginDir.name}-${sKey}`,
+                    name: sKey,
+                    command: sVal?.command,
+                    args: sVal?.args || [],
+                    url: sVal?.url,
+                    transport: sVal?.url ? 'sse' : 'stdio',
+                    envKeys: Object.keys(sVal?.env || {}),
+                    sourceAgentId: agent.id,
+                    sourceAgentName: agent.name,
+                    sourceAgentColor: agent.color || '#818cf8',
+                    sourceAgentIcon: agent.iconName || 'Server',
+                    sourcePath: pluginMcpPath,
+                    pluginName: pluginName,
+                  });
+                }
+              } catch {}
+            }
+
+            // Plugin rules
+            const pluginRulesDir = path.join(pluginPath, 'rules');
+            if (fs.existsSync(pluginRulesDir)) {
+              try {
+                bundledRulesCount = fs.readdirSync(pluginRulesDir).length;
+              } catch {}
+            }
+
+            allPlugins.push({
+              id: `${agent.id}-plugin-${pluginDir.name}`,
+              name: pluginName,
+              version: pluginVersion,
+              description: pluginDesc,
+              author: pluginAuthor,
+              sourceAgentId: agent.id,
+              sourceAgentName: agent.name,
+              sourceAgentColor: agent.color || '#38bdf8',
+              sourceAgentIcon: agent.iconName || 'Boxes',
+              sourcePath: pluginPath,
+              skillsCount: bundledSkillsCount,
+              mcpsCount: bundledMcpsCount,
+              rulesCount: bundledRulesCount,
+            });
+          }
+        }
+      } catch (err) {
+        console.warn(`Failed scanning plugins for ${agent.name}:`, err);
+      }
+    }
+
+    // 3. Scan primary MCP config file
+    if (resolvedMcp && fs.existsSync(resolvedMcp)) {
+      try {
+        const mcpContent = JSON.parse(fs.readFileSync(resolvedMcp, 'utf-8'));
+        const servers = mcpContent.mcpServers || mcpContent.servers || {};
+        for (const [sKey, sVal] of Object.entries<any>(servers)) {
+          allMcps.push({
+            id: `${agent.id}-mcp-${sKey}`,
+            name: sKey,
+            command: sVal?.command,
+            args: sVal?.args || [],
+            url: sVal?.url,
+            transport: sVal?.url ? 'sse' : 'stdio',
+            envKeys: Object.keys(sVal?.env || {}),
+            sourceAgentId: agent.id,
+            sourceAgentName: agent.name,
+            sourceAgentColor: agent.color || '#818cf8',
+            sourceAgentIcon: agent.iconName || 'Server',
+            sourcePath: resolvedMcp,
+          });
+        }
+      } catch (err) {
+        console.warn(`Failed scanning MCP config for ${agent.name}:`, err);
+      }
+    }
+  }
+
+  return {
+    skills: allSkills,
+    mcpServers: allMcps,
+    plugins: allPlugins,
+  };
 });
 
 app.whenReady().then(() => {

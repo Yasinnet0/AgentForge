@@ -11,13 +11,27 @@ interface StatCardItem {
   borderColor: string;
 }
 
-export const StatCards: React.FC = () => {
+interface StatCardsProps {
+  stats?: {
+    agentsCount: number;
+    mcpCount: number;
+    skillsCount: number;
+    rulesCount: number;
+  };
+}
+
+export const StatCards: React.FC<StatCardsProps> = ({ stats }) => {
+  const agentsCount = stats?.agentsCount ?? 0;
+  const mcpCount = stats?.mcpCount ?? 0;
+  const skillsCount = stats?.skillsCount ?? 0;
+  const rulesCount = stats?.rulesCount ?? 0;
+
   const cards: StatCardItem[] = [
     {
       id: 'agents',
       title: 'INSTALLED AGENTS',
-      count: '0',
-      subtitle: 'None configured',
+      count: agentsCount,
+      subtitle: agentsCount > 0 ? `${agentsCount} selected active` : 'None active',
       icon: Bot,
       accentColor: '#38bdf8',
       borderColor: 'rgba(56, 189, 248, 0.25)',
@@ -25,8 +39,8 @@ export const StatCards: React.FC = () => {
     {
       id: 'mcp',
       title: 'MCP SERVERS',
-      count: '0',
-      subtitle: 'None installed',
+      count: mcpCount,
+      subtitle: mcpCount > 0 ? `${mcpCount} servers connected` : 'None connected',
       icon: Server,
       accentColor: '#818cf8',
       borderColor: 'rgba(129, 140, 248, 0.25)',
@@ -34,8 +48,8 @@ export const StatCards: React.FC = () => {
     {
       id: 'skills',
       title: 'ACTIVE SKILLS',
-      count: '0',
-      subtitle: 'None discovered',
+      count: skillsCount,
+      subtitle: skillsCount > 0 ? `${skillsCount} skills indexed` : 'None discovered',
       icon: Sparkles,
       accentColor: '#c084fc',
       borderColor: 'rgba(192, 132, 252, 0.25)',
@@ -43,8 +57,8 @@ export const StatCards: React.FC = () => {
     {
       id: 'rules',
       title: 'ACTIVE RULES',
-      count: '0',
-      subtitle: 'None configured',
+      count: rulesCount,
+      subtitle: rulesCount > 0 ? `${rulesCount} rules loaded` : 'None configured',
       icon: ShieldAlert,
       accentColor: '#34d399',
       borderColor: 'rgba(52, 211, 153, 0.25)',

@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { MoreVertical, ExternalLink, PackageCheck } from 'lucide-react';
 
-interface InstalledPackage {
+export interface InstalledPackage {
   id: string;
   name: string;
   version: string;
@@ -11,25 +11,46 @@ interface InstalledPackage {
   status: 'Active' | 'Idle' | 'Updating';
 }
 
-export const RecentlyInstalledPackages: React.FC = () => {
-  const packages: InstalledPackage[] = [];
+interface RecentlyInstalledPackagesProps {
+  packages?: InstalledPackage[];
+  searchQuery?: string;
+  onNavigate?: (tab: any) => void;
+}
+
+export const RecentlyInstalledPackages: React.FC<RecentlyInstalledPackagesProps> = ({
+  packages = [],
+  searchQuery = '',
+  onNavigate,
+}) => {
+  const filteredPackages = useMemo(() => {
+    if (!searchQuery.trim()) return packages;
+    const q = searchQuery.toLowerCase().trim();
+    return packages.filter(
+      (pkg) =>
+        pkg.name.toLowerCase().includes(q) ||
+        pkg.type.toLowerCase().includes(q) ||
+        pkg.source.toLowerCase().includes(q)
+    );
+  }, [packages, searchQuery]);
 
   return (
     <div className="packages-container">
       <div className="packages-header">
         <div className="packages-title-row">
           <PackageCheck size={16} className="title-icon" />
-          <span className="packages-title">Recently Installed Packages</span>
+          <span className="packages-title">
+            {searchQuery ? `Matching Packages (${filteredPackages.length})` : 'Recently Installed Packages'}
+          </span>
         </div>
-        {packages.length > 0 && (
-          <button className="view-all-btn">
+        {filteredPackages.length > 0 && (
+          <button className="view-all-btn" onClick={() => onNavigate?.('mcp')}>
             <span>View all</span>
             <ExternalLink size={12} />
           </button>
         )}
       </div>
 
-      {packages.length > 0 ? (
+      {filteredPackages.length > 0 ? (
         <div className="packages-table-wrapper">
           <table className="packages-table">
             <thead>
@@ -43,7 +64,7 @@ export const RecentlyInstalledPackages: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {packages.map((pkg) => (
+              {filteredPackages.map((pkg) => (
                 <tr key={pkg.id}>
                   <td>
                     <div className="package-name-cell">
@@ -82,8 +103,14 @@ export const RecentlyInstalledPackages: React.FC = () => {
           <div className="empty-pkg-icon-wrap">
             <PackageCheck size={22} />
           </div>
-          <div className="empty-pkg-title">No packages installed</div>
-          <div className="empty-pkg-desc">Installed skills, MCP servers, and context packages will appear here</div>
+          <div className="empty-pkg-title">
+            {searchQuery ? 'No matching packages found' : 'No packages installed'}
+          </div>
+          <div className="empty-pkg-desc">
+            {searchQuery
+              ? `No packages match "${searchQuery}". Try a different search term.`
+              : 'Installed skills, MCP servers, and context packages will appear here'}
+          </div>
         </div>
       )}
 

@@ -11,7 +11,8 @@ import {
   ShoppingBag,
   Lock,
   Settings,
-  FolderGit2
+  FolderGit2,
+  Boxes
 } from 'lucide-react';
 
 export type NavTab = 
@@ -19,6 +20,7 @@ export type NavTab =
   | 'agents' 
   | 'mcp' 
   | 'skills' 
+  | 'plugins'
   | 'rules' 
   | 'hooks' 
   | 'environments' 
@@ -37,14 +39,21 @@ interface NavItem {
 interface SidebarProps {
   activeTab: NavTab;
   onTabChange: (tab: NavTab) => void;
+  badgeCounts?: {
+    agents?: number;
+    mcp?: number;
+    skills?: number;
+    plugins?: number;
+  };
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange, badgeCounts }) => {
   const navItems: NavItem[] = [
     { id: 'overview' as NavTab, label: 'Overview', icon: LayoutDashboard },
-    { id: 'agents' as NavTab, label: 'Agents', icon: Bot },
-    { id: 'mcp' as NavTab, label: 'MCP Servers', icon: Server },
-    { id: 'skills' as NavTab, label: 'Skills', icon: Sparkles },
+    { id: 'agents' as NavTab, label: 'Agents', icon: Bot, badge: badgeCounts?.agents !== undefined ? String(badgeCounts.agents) : undefined },
+    { id: 'mcp' as NavTab, label: 'MCP Servers', icon: Server, badge: badgeCounts?.mcp !== undefined ? String(badgeCounts.mcp) : undefined },
+    { id: 'skills' as NavTab, label: 'Skills', icon: Sparkles, badge: badgeCounts?.skills !== undefined ? String(badgeCounts.skills) : undefined },
+    { id: 'plugins' as NavTab, label: 'Plugins', icon: Boxes, badge: badgeCounts?.plugins !== undefined ? String(badgeCounts.plugins) : undefined },
     { id: 'rules' as NavTab, label: 'Rules', icon: Shield },
     { id: 'hooks' as NavTab, label: 'Hooks', icon: Webhook },
     { id: 'environments' as NavTab, label: 'Environments', icon: Layers },

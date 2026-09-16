@@ -1,127 +1,289 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { TopBar } from './components/TopBar';
 import { Sidebar, NavTab } from './components/Sidebar';
 import { StatCards } from './components/StatCards';
 import { QuickActionsBar } from './components/QuickActionsBar';
-import { RecentlyInstalledPackages } from './components/RecentlyInstalledPackages';
+import { RecentlyInstalledPackages, InstalledPackage } from './components/RecentlyInstalledPackages';
 import { RightPanel } from './components/RightPanel';
+import { INITIAL_SUPPORTED_AGENTS } from './config/supportedAgents';
 import { 
-  Bot, 
-  Server, 
-  Sparkles,
+  SupportedAgent, 
+  AgentCapabilitiesPayload 
+} from './types/agent';
+import { AgentsManagerView } from './components/AgentsManagerView';
+import { SkillsView } from './components/SkillsView';
+import { McpServersView } from './components/McpServersView';
+import { PluginsView } from './components/PluginsView';
+import {
   Shield,
-  Layers, 
-  Plus 
+  Layers,
+  Plus
 } from 'lucide-react';
 
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<NavTab>('overview');
   const [currentEnv, setCurrentEnv] = useState('Default');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [highlightTarget, setHighlightTarget] = useState<{ tab: NavTab; id: string } | null>(null);
+  const [agents, setAgents] = useState<SupportedAgent[]>(INITIAL_SUPPORTED_AGENTS);
+  const [capabilities, setCapabilities] = useState<AgentCapabilitiesPayload>({
+    skills: [],
+    mcpServers: [],
+    plugins: [],
+  });
+
+  // Auto-clear transient card highlight after 1.4s
+  useEffect(() => {
+    if (highlightTarget) {
+      const timer = setTimeout(() => {
+        setHighlightTarget(null);
+      }, 1400);
+      return () => clearTimeout(timer);
+    }
+  }, [highlightTarget]);
+
+  const handleSelectSearchResult = (tab: NavTab, itemId: string) => {
+    setActiveTab(tab);
+    setHighlightTarget({ tab, id: itemId });
+  };
+
+  // Auto-detect installed agents on host filesystem & restore persisted user choices
+  useEffect(() => {
+    const detectAndLoadAgents = async () => {
+      let detectionMap: Record<string, { detected: boolean; installedCounts: { skills: number; mcps: number; rules: number } }> = {};
+
+      if (window.electronAPI?.detectAgents) {
+        try {
+          const payloads = INITIAL_SUPPORTED_AGENTS.map((a) => ({
+            id: a.id,
+            baseDir: a.paths.baseDir,
+            skillsDir: a.paths.skillsDir,
+            mcpConfigPath: a.paths.mcpConfigPath,
+            rulesPath: a.paths.rulesPath,
+            pluginsDir: a.paths.pluginsDir,
+          }));
+          detectionMap = await window.electronAPI.detectAgents(payloads);
+        } catch (err) {
+          console.warn('Failed to auto-detect agents via electronAPI:', err);
+        }
+      }
+
+      // Check for user-saved selection in localStorage
+      let savedSelectedIds: string[] | null = null;
+      try {
+        const raw = localStorage.getItem('agentforge_selected_agents');
+        if (raw) {
+          savedSelectedIds = JSON.parse(raw);
+        }
+      } catch (err) {
+        console.warn('Failed to parse saved agent selection:', err);
+      }
+
+      setAgents((prev) => {
+        return prev.map((agent) => {
+          const info = detectionMap[agent.id];
+          const isDetected = info ? info.detected : agent.detected;
+          const counts = info ? info.installedCounts : agent.installedCounts;
+
+          // If user previously saved choices, respect them.
+          // Otherwise (first run), auto-select by default if detected!
+          const isSelected = savedSelectedIds !== null
+            ? savedSelectedIds.includes(agent.id)
+            : isDetected;
+
+          return {
+            ...agent,
+            detected: isDetected,
+            selected: isSelected,
+            installedCounts: counts,
+          };
+        });
+      });
+
+      // Ingest real agent capabilities (skills, MCP servers, plugins)
+      if (window.electronAPI?.scanCapabilities) {
+        try {
+          const scanPayloads = INITIAL_SUPPORTED_AGENTS.map((a) => ({
+            id: a.id,
+            name: a.name,
+            color: a.color,
+            iconName: a.iconName,
+            baseDir: a.paths.baseDir,
+            skillsDir: a.paths.skillsDir,
+            mcpConfigPath: a.paths.mcpConfigPath,
+            rulesPath: a.paths.rulesPath,
+            pluginsDir: a.paths.pluginsDir,
+          }));
+          const scanned = await window.electronAPI.scanCapabilities(scanPayloads);
+          setCapabilities(scanned);
+        } catch (err) {
+          console.warn('Failed to scan capabilities via electronAPI:', err);
+        }
+      }
+    };
+
+    detectAndLoadAgents();
+  }, []);
+
+  const handleToggleAgent = (id: string) => {
+    setAgents((prev) => {
+      const updated = prev.map((agent) =>
+        agent.id === id ? { ...agent, selected: !agent.selected } : agent
+      );
+      const selectedIds = updated.filter((a) => a.selected).map((a) => a.id);
+      localStorage.setItem('agentforge_selected_agents', JSON.stringify(selectedIds));
+      return updated;
+    });
+  };
+
+  const handleSelectOnly = (id: string) => {
+    setAgents((prev) => {
+      const updated = prev.map((agent) => ({
+        ...agent,
+        selected: agent.id === id,
+      }));
+      const selectedIds = [id];
+      localStorage.setItem('agentforge_selected_agents', JSON.stringify(selectedIds));
+      return updated;
+    });
+  };
+
+  // Derive selected agents and filter capabilities by user selection
+  const selectedAgentIds = useMemo(() => agents.filter((a) => a.selected).map((a) => a.id), [agents]);
+  const selectedAgents = useMemo(() => agents.filter((a) => a.selected), [agents]);
+
+  const filteredSkills = useMemo(
+    () => capabilities.skills.filter((s) => selectedAgentIds.includes(s.sourceAgentId)),
+    [capabilities.skills, selectedAgentIds]
+  );
+  const filteredMcps = useMemo(
+    () => capabilities.mcpServers.filter((m) => selectedAgentIds.includes(m.sourceAgentId)),
+    [capabilities.mcpServers, selectedAgentIds]
+  );
+  const filteredPlugins = useMemo(
+    () => capabilities.plugins.filter((p) => selectedAgentIds.includes(p.sourceAgentId)),
+    [capabilities.plugins, selectedAgentIds]
+  );
+
+  const overviewPackages = useMemo<InstalledPackage[]>(() => {
+    const list: InstalledPackage[] = [];
+    filteredMcps.slice(0, 5).forEach((m) => {
+      list.push({
+        id: m.id,
+        name: m.name,
+        version: '1.0.0',
+        type: 'MCP SERVER',
+        source: 'COMMUNITY',
+        installedDate: 'Installed',
+        status: 'Active',
+      });
+    });
+    filteredPlugins.slice(0, 5).forEach((p) => {
+      list.push({
+        id: p.id,
+        name: p.name,
+        version: p.version || '1.0.0',
+        type: 'SKILL BUNDLE',
+        source: 'OFFICIAL',
+        installedDate: 'Installed',
+        status: 'Active',
+      });
+    });
+    return list;
+  }, [filteredMcps, filteredPlugins]);
 
   return (
     <div className="app-container">
-      {/* Top Bar with window controls & search */}
-      <TopBar currentEnv={currentEnv} onEnvChange={setCurrentEnv} />
+      {/* Top Bar with window controls, search & agent selector */}
+      <TopBar
+        agents={agents}
+        onToggleAgent={handleToggleAgent}
+        onSelectOnly={handleSelectOnly}
+        currentEnv={currentEnv}
+        onEnvChange={setCurrentEnv}
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        activeTab={activeTab}
+        onNavigateTab={setActiveTab}
+        capabilities={capabilities}
+        onSelectSearchResult={handleSelectSearchResult}
+      />
 
       <div className="app-body">
-        {/* Left Navigation Sidebar */}
-        <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
+        {/* Left Navigation Sidebar with dynamic capability counts */}
+        <Sidebar 
+          activeTab={activeTab} 
+          onTabChange={setActiveTab}
+          badgeCounts={{
+            agents: selectedAgents.length,
+            mcp: filteredMcps.length,
+            skills: filteredSkills.length,
+            plugins: filteredPlugins.length,
+          }}
+        />
 
         {/* Center Main Content Area */}
         <main className="main-content">
           <div key={activeTab} className="tab-pane-animated">
             {activeTab === 'overview' && (
               <div className="overview-view">
-                {/* 4 Metric Cards */}
-                <StatCards />
+                {/* 4 Metric Cards showing live dynamic counts */}
+                <StatCards 
+                  stats={{
+                    agentsCount: selectedAgents.length,
+                    mcpCount: filteredMcps.length,
+                    skillsCount: filteredSkills.length,
+                    rulesCount: 0,
+                  }}
+                />
 
                 {/* Quick Actions Launchpad */}
                 <QuickActionsBar onNavigate={setActiveTab} />
 
                 {/* Installed Packages Table */}
-                <RecentlyInstalledPackages />
+                <RecentlyInstalledPackages
+                  packages={overviewPackages}
+                  searchQuery={searchQuery}
+                  onNavigate={setActiveTab}
+                />
               </div>
             )}
 
             {activeTab === 'agents' && (
-              <div className="secondary-view">
-                <div className="view-header">
-                  <div>
-                    <h2 className="view-title">Configured Agents</h2>
-                    <p className="view-desc">0 agents configured in local workspace</p>
-                  </div>
-                  <button className="primary-action-btn">
-                    <Plus size={14} />
-                    <span>Create Agent</span>
-                  </button>
-                </div>
-
-                <div className="empty-state-card">
-                  <div className="empty-icon-wrap">
-                    <Bot size={26} />
-                  </div>
-                  <div className="empty-title">No agents configured</div>
-                  <div className="empty-desc">Create your first agent persona or connect an existing orchestrator trigger</div>
-                  <button className="empty-action-btn">
-                    <Plus size={13} />
-                    <span>Create Agent</span>
-                  </button>
-                </div>
-              </div>
+              <AgentsManagerView
+                agents={agents}
+                onToggleAgent={handleToggleAgent}
+                onSelectOnly={handleSelectOnly}
+                searchQuery={searchQuery}
+                highlightedId={highlightTarget?.tab === 'agents' ? highlightTarget.id : null}
+              />
             )}
 
             {activeTab === 'mcp' && (
-              <div className="secondary-view">
-                <div className="view-header">
-                  <div>
-                    <h2 className="view-title">Model Context Protocol (MCP) Servers</h2>
-                    <p className="view-desc">0 MCP servers installed across local and remote transports</p>
-                  </div>
-                  <button className="primary-action-btn">
-                    <Plus size={14} />
-                    <span>Add MCP Server</span>
-                  </button>
-                </div>
-
-                <div className="empty-state-card">
-                  <div className="empty-icon-wrap">
-                    <Server size={26} />
-                  </div>
-                  <div className="empty-title">No MCP servers installed</div>
-                  <div className="empty-desc">Connect a Model Context Protocol server via stdio or SSE transport</div>
-                  <button className="empty-action-btn">
-                    <Plus size={13} />
-                    <span>Add MCP Server</span>
-                  </button>
-                </div>
-              </div>
+              <McpServersView
+                mcpServers={filteredMcps}
+                selectedAgents={selectedAgents}
+                searchQuery={searchQuery}
+                highlightedId={highlightTarget?.tab === 'mcp' ? highlightTarget.id : null}
+              />
             )}
 
             {activeTab === 'skills' && (
-              <div className="secondary-view">
-                <div className="view-header">
-                  <div>
-                    <h2 className="view-title">Active Agent Skills</h2>
-                    <p className="view-desc">0 workflow skills discovered in local skills directories</p>
-                  </div>
-                  <button className="primary-action-btn">
-                    <Plus size={14} />
-                    <span>Import Skill</span>
-                  </button>
-                </div>
+              <SkillsView
+                skills={filteredSkills}
+                selectedAgents={selectedAgents}
+                searchQuery={searchQuery}
+                highlightedId={highlightTarget?.tab === 'skills' ? highlightTarget.id : null}
+              />
+            )}
 
-                <div className="empty-state-card">
-                  <div className="empty-icon-wrap">
-                    <Sparkles size={26} />
-                  </div>
-                  <div className="empty-title">No skills installed</div>
-                  <div className="empty-desc">Import reusable workflow skills from your repository or plugins folder</div>
-                  <button className="empty-action-btn">
-                    <Plus size={13} />
-                    <span>Import Skill</span>
-                  </button>
-                </div>
-              </div>
+            {activeTab === 'plugins' && (
+              <PluginsView
+                plugins={filteredPlugins}
+                selectedAgents={selectedAgents}
+                searchQuery={searchQuery}
+                highlightedId={highlightTarget?.tab === 'plugins' ? highlightTarget.id : null}
+              />
             )}
 
             {activeTab === 'rules' && (
