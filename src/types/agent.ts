@@ -25,6 +25,7 @@ export interface SupportedAgent {
 export interface ScannedSkill {
   id: string;
   name: string;
+  folderName?: string;
   description: string;
   sourceAgentId: string;
   sourceAgentName: string;
@@ -55,6 +56,7 @@ export interface ScannedMcpServer {
 export interface ScannedPlugin {
   id: string;
   name: string;
+  folderName?: string;
   version: string;
   description: string;
   author?: string;
@@ -73,3 +75,33 @@ export interface AgentCapabilitiesPayload {
   mcpServers: ScannedMcpServer[];
   plugins: ScannedPlugin[];
 }
+
+export interface CreateSkillParams {
+  folderName: string;
+  skillContent: string;
+  targets: Array<{ agentId: string; skillsDir: string }>;
+}
+
+export interface ProvisionResult {
+  success: boolean;
+  count?: number;
+  installedAgents?: string[];
+  error?: string;
+}
+
+export interface TransferSkillsParams {
+  sourceAgentId: string;
+  sourceSkillsDir: string;
+  targetAgents: Array<{ agentId: string; skillsDir: string }>;
+  skillSlugs: string[];
+  mode: 'copy' | 'move';
+}
+
+export interface TransferSkillsResult {
+  success: boolean;
+  count?: number;
+  transferredSlugs?: string[];
+  errors?: string[];
+  error?: string;
+}
+

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, screen } from 'electron';
+import { app, BrowserWindow, ipcMain, screen, shell } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
@@ -124,6 +124,25 @@ function createWindow() {
     mainWindow.maximize();
   }
 
+  // Intercept new window requests (e.g. target="_blank" links) to open in system browser
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith('http:') || url.startsWith('https:')) {
+      shell.openExternal(url);
+    }
+    return { action: 'deny' };
+  });
+
+  // Intercept in-window navigation for external URLs
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (url.startsWith('http:') || url.startsWith('https:')) {
+      if (isDev && (url.includes('localhost:5173') || url.includes('127.0.0.1:5173'))) {
+        return;
+      }
+      event.preventDefault();
+      shell.openExternal(url);
+    }
+  });
+
   mainWindow.once('ready-to-show', () => {
     mainWindow?.show();
   });
@@ -210,6 +229,45 @@ ipcMain.handle('window:isMaximized', () => {
 
 ipcMain.handle('app:version', () => {
   return app.getVersion();
+});
+
+ipcMain.handle('app:openExternal', async (_event, url: string) => {
+  if (url && (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('mailto:'))) {
+    try {
+      await shell.openExternal(url);
+      return true;
+    } catch (err) {
+      console.warn('Failed to open external URL:', err);
+      return false;
+    }
+  }
+  return false;
+});
+
+ipcMain.handle('app:openPath', async (_event, targetPath: string) => {
+  if (!targetPath) return false;
+  try {
+    const resolved = resolveHome(targetPath);
+    if (!fs.existsSync(resolved)) {
+      const parent = path.dirname(resolved);
+      if (fs.existsSync(parent)) {
+        await shell.openPath(parent);
+        return true;
+      }
+      return false;
+    }
+    const stat = fs.statSync(resolved);
+    if (stat.isDirectory()) {
+      const err = await shell.openPath(resolved);
+      return !err;
+    } else {
+      shell.showItemInFolder(resolved);
+      return true;
+    }
+  } catch (err) {
+    console.warn('Failed to open path in file explorer:', targetPath, err);
+    return false;
+  }
 });
 
 function resolveHome(filepath: string): string {
@@ -343,6 +401,7 @@ ipcMain.handle('agents:scanCapabilities', async (_event, agentConfigs: any[]) =>
             const info = parseSkillInfo(skillPath, entry.name);
             allSkills.push({
               id: `${agent.id}-skill-${entry.name}`,
+              folderName: entry.name,
               name: info.name,
               description: info.description,
               sourceAgentId: agent.id,
@@ -388,27 +447,13 @@ ipcMain.handle('agents:scanCapabilities', async (_event, agentConfigs: any[]) =>
               } catch {}
             }
 
-            // Plugin bundled skills
+            // Plugin bundled skills count
             const pluginSkillsDir = path.join(pluginPath, 'skills');
             if (fs.existsSync(pluginSkillsDir)) {
               try {
                 const rootSkillMd = path.join(pluginSkillsDir, 'SKILL.md');
                 if (fs.existsSync(rootSkillMd)) {
                   bundledSkillsCount++;
-                  const info = parseSkillInfo(pluginSkillsDir, pluginDir.name);
-                  allSkills.push({
-                    id: `${agent.id}-plugin-${pluginDir.name}-root`,
-                    name: info.name,
-                    description: info.description,
-                    sourceAgentId: agent.id,
-                    sourceAgentName: agent.name,
-                    sourceAgentColor: agent.color || '#3b82f6',
-                    sourceAgentIcon: agent.iconName || 'Sparkles',
-                    sourcePath: pluginSkillsDir,
-                    pluginName: pluginName,
-                    hasScripts: info.hasScripts,
-                    hasReferences: info.hasReferences,
-                  });
                 } else {
                   const pSkillEntries = fs.readdirSync(pluginSkillsDir, { withFileTypes: true });
                   for (const pSkill of pSkillEntries) {
@@ -416,20 +461,6 @@ ipcMain.handle('agents:scanCapabilities', async (_event, agentConfigs: any[]) =>
                       const skillPath = path.join(pluginSkillsDir, pSkill.name);
                       if (fs.existsSync(path.join(skillPath, 'SKILL.md'))) {
                         bundledSkillsCount++;
-                        const info = parseSkillInfo(skillPath, pSkill.name);
-                        allSkills.push({
-                          id: `${agent.id}-plugin-${pluginDir.name}-${pSkill.name}`,
-                          name: info.name,
-                          description: info.description,
-                          sourceAgentId: agent.id,
-                          sourceAgentName: agent.name,
-                          sourceAgentColor: agent.color || '#3b82f6',
-                          sourceAgentIcon: agent.iconName || 'Sparkles',
-                          sourcePath: skillPath,
-                          pluginName: pluginName,
-                          hasScripts: info.hasScripts,
-                          hasReferences: info.hasReferences,
-                        });
                       }
                     }
                   }
@@ -437,30 +468,13 @@ ipcMain.handle('agents:scanCapabilities', async (_event, agentConfigs: any[]) =>
               } catch {}
             }
 
-            // Plugin bundled MCPs
+            // Plugin bundled MCPs count
             const pluginMcpPath = path.join(pluginPath, 'mcp_config.json');
             if (fs.existsSync(pluginMcpPath)) {
               try {
                 const mcpContent = JSON.parse(fs.readFileSync(pluginMcpPath, 'utf-8'));
                 const servers = mcpContent.mcpServers || mcpContent.servers || {};
-                for (const [sKey, sVal] of Object.entries<any>(servers)) {
-                  bundledMcpsCount++;
-                  allMcps.push({
-                    id: `${agent.id}-plugin-${pluginDir.name}-${sKey}`,
-                    name: sKey,
-                    command: sVal?.command,
-                    args: sVal?.args || [],
-                    url: sVal?.url,
-                    transport: sVal?.url ? 'sse' : 'stdio',
-                    envKeys: Object.keys(sVal?.env || {}),
-                    sourceAgentId: agent.id,
-                    sourceAgentName: agent.name,
-                    sourceAgentColor: agent.color || '#818cf8',
-                    sourceAgentIcon: agent.iconName || 'Server',
-                    sourcePath: pluginMcpPath,
-                    pluginName: pluginName,
-                  });
-                }
+                bundledMcpsCount += Object.keys(servers).length;
               } catch {}
             }
 
@@ -474,6 +488,7 @@ ipcMain.handle('agents:scanCapabilities', async (_event, agentConfigs: any[]) =>
 
             allPlugins.push({
               id: `${agent.id}-plugin-${pluginDir.name}`,
+              folderName: pluginDir.name,
               name: pluginName,
               version: pluginVersion,
               description: pluginDesc,
@@ -526,6 +541,330 @@ ipcMain.handle('agents:scanCapabilities', async (_event, agentConfigs: any[]) =>
     mcpServers: allMcps,
     plugins: allPlugins,
   };
+});
+
+// ==========================================
+// Catalog Provisioning Handlers (Multi-Agent)
+// ==========================================
+
+// 1-Click Skill Install: Fetches once over HTTPS from GitHub, distributes to all selected agents
+ipcMain.handle('catalog:installSkill', async (_event, params: {
+  skillId: string;
+  rawUrl: string;
+  targets: Array<{ agentId: string; skillsDir: string }>;
+}) => {
+  const { skillId, rawUrl, targets } = params;
+  if (!skillId || !rawUrl || !Array.isArray(targets) || targets.length === 0) {
+    return { success: false, error: 'Invalid install parameters or empty target list' };
+  }
+
+  try {
+    // Download content ONCE over HTTPS into memory
+    const response = await fetch(rawUrl, {
+      headers: { 'User-Agent': 'AgentForge-Desktop' },
+    });
+    if (!response.ok) {
+      return {
+        success: false,
+        error: `Failed to download skill from GitHub: HTTP ${response.status} ${response.statusText}`,
+      };
+    }
+    const skillContent = await response.text();
+
+    const installedAgents: string[] = [];
+
+    // Write to each selected agent target
+    for (const target of targets) {
+      const resolvedSkillsDir = resolveHome(target.skillsDir);
+      if (!resolvedSkillsDir) continue;
+
+      const destFolder = path.join(resolvedSkillsDir, skillId);
+      fs.mkdirSync(destFolder, { recursive: true });
+      fs.writeFileSync(path.join(destFolder, 'SKILL.md'), skillContent, 'utf-8');
+      installedAgents.push(target.agentId);
+    }
+
+    return {
+      success: true,
+      count: installedAgents.length,
+      installedAgents,
+    };
+  } catch (err: any) {
+    console.error(`Error installing skill ${skillId}:`, err);
+    return { success: false, error: err.message || 'Unknown installation error' };
+  }
+});
+
+// 1-Click Skill Uninstall: Removes from selected agents
+ipcMain.handle('catalog:uninstallSkill', async (_event, params: {
+  skillId: string;
+  targets: Array<{ agentId: string; skillsDir: string }>;
+}) => {
+  const { skillId, targets } = params;
+  if (!skillId || !Array.isArray(targets) || targets.length === 0) {
+    return { success: false, error: 'Invalid uninstall parameters' };
+  }
+
+  try {
+    let uninstalledCount = 0;
+    for (const target of targets) {
+      const resolvedSkillsDir = resolveHome(target.skillsDir);
+      if (!resolvedSkillsDir) continue;
+
+      const destFolder = path.join(resolvedSkillsDir, skillId);
+      if (fs.existsSync(destFolder)) {
+        fs.rmSync(destFolder, { recursive: true, force: true });
+        uninstalledCount++;
+      }
+    }
+    return { success: true, count: uninstalledCount };
+  } catch (err: any) {
+    console.error(`Error uninstalling skill ${skillId}:`, err);
+    return { success: false, error: err.message || 'Unknown uninstallation error' };
+  }
+});
+
+// Create Custom Skill ("Forge Skill"): Writes a custom authored skill directly to selected agents
+ipcMain.handle('skills:createCustomSkill', async (_event, params: {
+  folderName: string;
+  skillContent: string;
+  targets: Array<{ agentId: string; skillsDir: string }>;
+}) => {
+  const { folderName, skillContent, targets } = params;
+  if (!folderName || !skillContent || !Array.isArray(targets) || targets.length === 0) {
+    return { success: false, error: 'Folder name, content, and at least one target agent are required' };
+  }
+
+  // Sanitize folder name to prevent directory traversal
+  const sanitizedFolder = folderName.trim().replace(/[^a-zA-Z0-9_-]/g, '-').toLowerCase();
+  if (!sanitizedFolder) {
+    return { success: false, error: 'Invalid skill folder name' };
+  }
+
+  try {
+    const installedAgents: string[] = [];
+    for (const target of targets) {
+      const resolvedSkillsDir = resolveHome(target.skillsDir);
+      if (!resolvedSkillsDir) continue;
+
+      const destFolder = path.join(resolvedSkillsDir, sanitizedFolder);
+      fs.mkdirSync(destFolder, { recursive: true });
+      fs.writeFileSync(path.join(destFolder, 'SKILL.md'), skillContent, 'utf-8');
+      installedAgents.push(target.agentId);
+    }
+
+    return {
+      success: true,
+      count: installedAgents.length,
+      installedAgents,
+    };
+  } catch (err: any) {
+    console.error(`Error creating custom skill ${sanitizedFolder}:`, err);
+    return { success: false, error: err.message || 'Failed to create skill' };
+  }
+});
+
+// Transfer Skills: Copy or Move skills across local AI agents
+ipcMain.handle('skills:transferSkills', async (_event, params: {
+  sourceAgentId: string;
+  sourceSkillsDir: string;
+  targetAgents: Array<{ agentId: string; skillsDir: string }>;
+  skillSlugs: string[];
+  mode: 'copy' | 'move';
+}) => {
+  const { sourceSkillsDir, targetAgents, skillSlugs, mode } = params;
+  if (!sourceSkillsDir || !Array.isArray(targetAgents) || targetAgents.length === 0 || !Array.isArray(skillSlugs) || skillSlugs.length === 0) {
+    return { success: false, error: 'Source directory, target agents, and skill list are required' };
+  }
+
+  const resolvedSourceDir = resolveHome(sourceSkillsDir);
+  if (!resolvedSourceDir || !fs.existsSync(resolvedSourceDir)) {
+    return { success: false, error: 'Source skills directory not found on disk' };
+  }
+
+  const transferredSlugs: string[] = [];
+  const errors: string[] = [];
+
+  for (const slug of skillSlugs) {
+    const cleanSlug = slug.trim().replace(/[^a-zA-Z0-9_-]/g, '-');
+    if (!cleanSlug) continue;
+
+    const sourceSkillPath = path.join(resolvedSourceDir, cleanSlug);
+    if (!fs.existsSync(sourceSkillPath)) {
+      errors.push(`Skill "${cleanSlug}" not found in source directory`);
+      continue;
+    }
+
+    let copiedToAny = false;
+    for (const target of targetAgents) {
+      const resolvedTargetSkillsDir = resolveHome(target.skillsDir);
+      if (!resolvedTargetSkillsDir) continue;
+
+      // Avoid copying back to the same directory
+      if (path.resolve(resolvedSourceDir) === path.resolve(resolvedTargetSkillsDir)) {
+        continue;
+      }
+
+      try {
+        fs.mkdirSync(resolvedTargetSkillsDir, { recursive: true });
+        const destSkillPath = path.join(resolvedTargetSkillsDir, cleanSlug);
+        fs.cpSync(sourceSkillPath, destSkillPath, { recursive: true, force: true });
+        copiedToAny = true;
+      } catch (err: any) {
+        errors.push(`Failed copying "${cleanSlug}" to ${target.agentId}: ${err.message}`);
+      }
+    }
+
+    if (copiedToAny) {
+      transferredSlugs.push(cleanSlug);
+      if (mode === 'move') {
+        try {
+          fs.rmSync(sourceSkillPath, { recursive: true, force: true });
+        } catch (err: any) {
+          errors.push(`Failed removing "${cleanSlug}" from source after move: ${err.message}`);
+        }
+      }
+    }
+  }
+
+  return {
+    success: transferredSlugs.length > 0,
+    count: transferredSlugs.length,
+    transferredSlugs,
+    errors: errors.length > 0 ? errors : undefined,
+  };
+});
+
+// 1-Click MCP Install: Injects server definition into selected agents' mcp_config.json
+ipcMain.handle('catalog:installMcp', async (_event, params: {
+  serverKey: string;
+  serverConfig: any;
+  targets: Array<{ agentId: string; mcpConfigPath: string }>;
+}) => {
+  const { serverKey, serverConfig, targets } = params;
+  if (!serverKey || !serverConfig || !Array.isArray(targets) || targets.length === 0) {
+    return { success: false, error: 'Invalid MCP install parameters' };
+  }
+
+  try {
+    let installedCount = 0;
+    for (const target of targets) {
+      const resolvedMcp = resolveHome(target.mcpConfigPath);
+      if (!resolvedMcp) continue;
+
+      fs.mkdirSync(path.dirname(resolvedMcp), { recursive: true });
+
+      let configObj: any = { mcpServers: {} };
+      if (fs.existsSync(resolvedMcp)) {
+        try {
+          configObj = JSON.parse(fs.readFileSync(resolvedMcp, 'utf-8'));
+        } catch {
+          configObj = { mcpServers: {} };
+        }
+      }
+
+      if (!configObj.mcpServers && !configObj.servers) {
+        configObj.mcpServers = {};
+      }
+      const targetKey = configObj.mcpServers !== undefined ? 'mcpServers' : 'servers';
+      configObj[targetKey][serverKey] = serverConfig;
+
+      fs.writeFileSync(resolvedMcp, JSON.stringify(configObj, null, 2), 'utf-8');
+      installedCount++;
+    }
+    return { success: true, count: installedCount };
+  } catch (err: any) {
+    console.error(`Error configuring MCP ${serverKey}:`, err);
+    return { success: false, error: err.message || 'Unknown MCP error' };
+  }
+});
+
+// 1-Click MCP Uninstall: Removes server definition from selected agents' mcp_config.json
+ipcMain.handle('catalog:uninstallMcp', async (_event, params: {
+  serverKey: string;
+  targets: Array<{ agentId: string; mcpConfigPath: string }>;
+}) => {
+  const { serverKey, targets } = params;
+  if (!serverKey || !Array.isArray(targets) || targets.length === 0) {
+    return { success: false, error: 'Invalid MCP uninstall parameters' };
+  }
+
+  try {
+    let uninstalledCount = 0;
+    for (const target of targets) {
+      const resolvedMcp = resolveHome(target.mcpConfigPath);
+      if (!resolvedMcp || !fs.existsSync(resolvedMcp)) continue;
+
+      try {
+        const configObj = JSON.parse(fs.readFileSync(resolvedMcp, 'utf-8'));
+        let modified = false;
+        if (configObj.mcpServers && configObj.mcpServers[serverKey]) {
+          delete configObj.mcpServers[serverKey];
+          modified = true;
+        }
+        if (configObj.servers && configObj.servers[serverKey]) {
+          delete configObj.servers[serverKey];
+          modified = true;
+        }
+        if (modified) {
+          fs.writeFileSync(resolvedMcp, JSON.stringify(configObj, null, 2), 'utf-8');
+          uninstalledCount++;
+        }
+      } catch {}
+    }
+    return { success: true, count: uninstalledCount };
+  } catch (err: any) {
+    console.error(`Error removing MCP ${serverKey}:`, err);
+    return { success: false, error: err.message || 'Unknown MCP error' };
+  }
+});
+
+// 1-Click Plugin Kit Install: Downloads each skill ONCE and equips all selected agents
+ipcMain.handle('catalog:installPlugin', async (_event, params: {
+  pluginId: string;
+  skills: Array<{ skillId: string; rawUrl: string }>;
+  targets: Array<{ agentId: string; skillsDir: string; pluginsDir?: string }>;
+}) => {
+  const { skills, targets } = params;
+  if (!Array.isArray(skills) || !Array.isArray(targets) || targets.length === 0) {
+    return { success: false, error: 'Invalid plugin kit parameters' };
+  }
+
+  try {
+    // Download all skills once into memory
+    const skillContents = new Map<string, string>();
+    for (const item of skills) {
+      try {
+        const res = await fetch(item.rawUrl, {
+          headers: { 'User-Agent': 'AgentForge-Desktop' },
+        });
+        if (res.ok) {
+          skillContents.set(item.skillId, await res.text());
+        }
+      } catch (err) {
+        console.warn(`Failed to fetch bundled skill ${item.skillId}:`, err);
+      }
+    }
+
+    // Write to each selected agent target
+    let writeCount = 0;
+    for (const target of targets) {
+      const resolvedSkillsDir = resolveHome(target.skillsDir);
+      if (!resolvedSkillsDir) continue;
+
+      for (const [skillId, content] of skillContents.entries()) {
+        const destFolder = path.join(resolvedSkillsDir, skillId);
+        fs.mkdirSync(destFolder, { recursive: true });
+        fs.writeFileSync(path.join(destFolder, 'SKILL.md'), content, 'utf-8');
+        writeCount++;
+      }
+    }
+
+    return { success: true, count: writeCount };
+  } catch (err: any) {
+    console.error('Error installing plugin kit:', err);
+    return { success: false, error: err.message || 'Failed installing plugin kit' };
+  }
 });
 
 app.whenReady().then(() => {
