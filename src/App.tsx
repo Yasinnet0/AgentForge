@@ -10,6 +10,11 @@ import {
   SupportedAgent, 
   AgentCapabilitiesPayload 
 } from './types/agent';
+import { CatalogSkill, CatalogPlugin, CatalogMcpServer } from './types/catalog';
+import { SKILLS_CATALOG } from './data/skillsCatalog';
+import { PLUGINS_CATALOG } from './data/pluginsCatalog';
+import { MCP_CATALOG } from './data/mcpCatalog';
+import { loadCatalogData, AAS_MCP_SERVER } from './services/catalogSync';
 import { AgentsManagerView } from './components/AgentsManagerView';
 import { SkillsView } from './components/SkillsView';
 import { McpServersView } from './components/McpServersView';
@@ -26,11 +31,67 @@ export const App: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [highlightTarget, setHighlightTarget] = useState<{ tab: NavTab; id: string } | null>(null);
   const [agents, setAgents] = useState<SupportedAgent[]>(INITIAL_SUPPORTED_AGENTS);
+  const [visitedTabs, setVisitedTabs] = useState<Set<NavTab>>(() => new Set([activeTab]));
+
+  useEffect(() => {
+    setVisitedTabs((prev) => {
+      if (prev.has(activeTab)) return prev;
+      const next = new Set(prev);
+      next.add(activeTab);
+      return next;
+    });
+  }, [activeTab]);
   const [capabilities, setCapabilities] = useState<AgentCapabilitiesPayload>({
     skills: [],
     mcpServers: [],
     plugins: [],
   });
+
+  // Dynamic cloud catalog state (synced with sickn33/agentic-awesome-skills)
+  const [skillsCatalog, setSkillsCatalog] = useState<CatalogSkill[]>(SKILLS_CATALOG);
+  const [pluginsCatalog, setPluginsCatalog] = useState<CatalogPlugin[]>(PLUGINS_CATALOG);
+  const [mcpCatalog, setMcpCatalog] = useState<CatalogMcpServer[]>([
+    AAS_MCP_SERVER,
+    ...MCP_CATALOG.filter((m) => m.id !== 'aas-mcp'),
+  ]);
+  const [isSyncingCatalog, setIsSyncingCatalog] = useState(false);
+  const [catalogSyncedAt, setCatalogSyncedAt] = useState<string | null>(null);
+
+  // Manual & automated catalog sync handler
+  const handleSyncCloudCatalog = async () => {
+    setIsSyncingCatalog(true);
+    try {
+      const res = await loadCatalogData(true);
+      setSkillsCatalog(res.skills);
+      setPluginsCatalog(res.plugins);
+      setMcpCatalog(res.mcpServers);
+      if (res.syncedAt) {
+        setCatalogSyncedAt(res.syncedAt);
+      }
+    } catch (err) {
+      console.warn('Failed to sync cloud catalog:', err);
+    } finally {
+      setIsSyncingCatalog(false);
+    }
+  };
+
+  // Load cached or fresh cloud catalogs on startup
+  useEffect(() => {
+    const initCatalog = async () => {
+      try {
+        const res = await loadCatalogData(false);
+        setSkillsCatalog(res.skills);
+        setPluginsCatalog(res.plugins);
+        setMcpCatalog(res.mcpServers);
+        if (res.syncedAt) {
+          setCatalogSyncedAt(res.syncedAt);
+        }
+      } catch (err) {
+        console.warn('Initial catalog load failed:', err);
+      }
+    };
+    initCatalog();
+  }, []);
 
   // Auto-clear transient card highlight after 1.4s
   useEffect(() => {
@@ -45,6 +106,57 @@ export const App: React.FC = () => {
   const handleSelectSearchResult = (tab: NavTab, itemId: string) => {
     setActiveTab(tab);
     setHighlightTarget({ tab, id: itemId });
+  };
+
+  const refreshCapabilities = async () => {
+    // Ingest real agent capabilities (skills, MCP servers, plugins)
+    if (window.electronAPI?.scanCapabilities) {
+      try {
+        const scanPayloads = INITIAL_SUPPORTED_AGENTS.map((a) => ({
+          id: a.id,
+          name: a.name,
+          color: a.color,
+          iconName: a.iconName,
+          baseDir: a.paths.baseDir,
+          skillsDir: a.paths.skillsDir,
+          mcpConfigPath: a.paths.mcpConfigPath,
+          rulesPath: a.paths.rulesPath,
+          pluginsDir: a.paths.pluginsDir,
+        }));
+        const scanned = await window.electronAPI.scanCapabilities(scanPayloads);
+        setCapabilities(scanned);
+      } catch (err) {
+        console.warn('Failed to scan capabilities via electronAPI:', err);
+      }
+    }
+
+    // Re-detect agent counts
+    if (window.electronAPI?.detectAgents) {
+      try {
+        const payloads = INITIAL_SUPPORTED_AGENTS.map((a) => ({
+          id: a.id,
+          baseDir: a.paths.baseDir,
+          skillsDir: a.paths.skillsDir,
+          mcpConfigPath: a.paths.mcpConfigPath,
+          rulesPath: a.paths.rulesPath,
+          pluginsDir: a.paths.pluginsDir,
+        }));
+        const detectionMap = await window.electronAPI.detectAgents(payloads);
+        setAgents((prev) =>
+          prev.map((agent) => {
+            const info = detectionMap[agent.id];
+            if (!info) return agent;
+            return {
+              ...agent,
+              detected: info.detected,
+              installedCounts: info.installedCounts,
+            };
+          })
+        );
+      } catch (err) {
+        console.warn('Failed to re-detect agents:', err);
+      }
+    }
   };
 
   // Auto-detect installed agents on host filesystem & restore persisted user choices
@@ -100,26 +212,8 @@ export const App: React.FC = () => {
         });
       });
 
-      // Ingest real agent capabilities (skills, MCP servers, plugins)
-      if (window.electronAPI?.scanCapabilities) {
-        try {
-          const scanPayloads = INITIAL_SUPPORTED_AGENTS.map((a) => ({
-            id: a.id,
-            name: a.name,
-            color: a.color,
-            iconName: a.iconName,
-            baseDir: a.paths.baseDir,
-            skillsDir: a.paths.skillsDir,
-            mcpConfigPath: a.paths.mcpConfigPath,
-            rulesPath: a.paths.rulesPath,
-            pluginsDir: a.paths.pluginsDir,
-          }));
-          const scanned = await window.electronAPI.scanCapabilities(scanPayloads);
-          setCapabilities(scanned);
-        } catch (err) {
-          console.warn('Failed to scan capabilities via electronAPI:', err);
-        }
-      }
+      // Ingest real agent capabilities
+      await refreshCapabilities();
     };
 
     detectAndLoadAgents();
@@ -146,6 +240,10 @@ export const App: React.FC = () => {
       localStorage.setItem('agentforge_selected_agents', JSON.stringify(selectedIds));
       return updated;
     });
+  };
+
+  const handleEnvChange = (newEnv: string) => {
+    setCurrentEnv(newEnv);
   };
 
   // Derive selected agents and filter capabilities by user selection
@@ -200,7 +298,7 @@ export const App: React.FC = () => {
         onToggleAgent={handleToggleAgent}
         onSelectOnly={handleSelectOnly}
         currentEnv={currentEnv}
-        onEnvChange={setCurrentEnv}
+        onEnvChange={handleEnvChange}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         activeTab={activeTab}
@@ -222,10 +320,13 @@ export const App: React.FC = () => {
           }}
         />
 
-        {/* Center Main Content Area */}
+        {/* Center Main Content Area with Keep-Alive for Visited Tabs */}
         <main className="main-content">
-          <div key={activeTab} className="tab-pane-animated">
-            {activeTab === 'overview' && (
+          {visitedTabs.has('overview') && (
+            <div
+              className={`tab-pane-container ${activeTab === 'overview' ? 'active tab-pane-animated' : ''}`}
+              style={{ display: activeTab === 'overview' ? 'block' : 'none' }}
+            >
               <div className="overview-view">
                 {/* 4 Metric Cards showing live dynamic counts */}
                 <StatCards 
@@ -247,9 +348,14 @@ export const App: React.FC = () => {
                   onNavigate={setActiveTab}
                 />
               </div>
-            )}
+            </div>
+          )}
 
-            {activeTab === 'agents' && (
+          {visitedTabs.has('agents') && (
+            <div
+              className={`tab-pane-container ${activeTab === 'agents' ? 'active tab-pane-animated' : ''}`}
+              style={{ display: activeTab === 'agents' ? 'block' : 'none' }}
+            >
               <AgentsManagerView
                 agents={agents}
                 onToggleAgent={handleToggleAgent}
@@ -257,36 +363,71 @@ export const App: React.FC = () => {
                 searchQuery={searchQuery}
                 highlightedId={highlightTarget?.tab === 'agents' ? highlightTarget.id : null}
               />
-            )}
+            </div>
+          )}
 
-            {activeTab === 'mcp' && (
+          {visitedTabs.has('mcp') && (
+            <div
+              className={`tab-pane-container ${activeTab === 'mcp' ? 'active tab-pane-animated' : ''}`}
+              style={{ display: activeTab === 'mcp' ? 'block' : 'none' }}
+            >
               <McpServersView
                 mcpServers={filteredMcps}
                 selectedAgents={selectedAgents}
+                mcpCatalog={mcpCatalog}
+                catalogSyncedAt={catalogSyncedAt}
+                onRefreshCapabilities={refreshCapabilities}
                 searchQuery={searchQuery}
                 highlightedId={highlightTarget?.tab === 'mcp' ? highlightTarget.id : null}
               />
-            )}
+            </div>
+          )}
 
-            {activeTab === 'skills' && (
+          {visitedTabs.has('skills') && (
+            <div
+              className={`tab-pane-container ${activeTab === 'skills' ? 'active tab-pane-animated' : ''}`}
+              style={{ display: activeTab === 'skills' ? 'block' : 'none' }}
+            >
               <SkillsView
                 skills={filteredSkills}
                 selectedAgents={selectedAgents}
+                allAgents={agents}
+                skillsCatalog={skillsCatalog}
+                isSyncingCatalog={isSyncingCatalog}
+                onSyncCatalog={handleSyncCloudCatalog}
+                catalogSyncedAt={catalogSyncedAt}
+                onRefreshCapabilities={refreshCapabilities}
                 searchQuery={searchQuery}
                 highlightedId={highlightTarget?.tab === 'skills' ? highlightTarget.id : null}
               />
-            )}
+            </div>
+          )}
 
-            {activeTab === 'plugins' && (
+          {visitedTabs.has('plugins') && (
+            <div
+              className={`tab-pane-container ${activeTab === 'plugins' ? 'active tab-pane-animated' : ''}`}
+              style={{ display: activeTab === 'plugins' ? 'block' : 'none' }}
+            >
               <PluginsView
                 plugins={filteredPlugins}
                 selectedAgents={selectedAgents}
+                pluginsCatalog={pluginsCatalog}
+                skillsCatalog={skillsCatalog}
+                isSyncingCatalog={isSyncingCatalog}
+                onSyncCatalog={handleSyncCloudCatalog}
+                catalogSyncedAt={catalogSyncedAt}
+                onRefreshCapabilities={refreshCapabilities}
                 searchQuery={searchQuery}
                 highlightedId={highlightTarget?.tab === 'plugins' ? highlightTarget.id : null}
               />
-            )}
+            </div>
+          )}
 
-            {activeTab === 'rules' && (
+          {visitedTabs.has('rules') && (
+            <div
+              className={`tab-pane-container ${activeTab === 'rules' ? 'active tab-pane-animated' : ''}`}
+              style={{ display: activeTab === 'rules' ? 'block' : 'none' }}
+            >
               <div className="secondary-view">
                 <div className="view-header">
                   <div>
@@ -311,9 +452,11 @@ export const App: React.FC = () => {
                   </button>
                 </div>
               </div>
-            )}
+            </div>
+          )}
 
-            {['hooks', 'environments', 'snapshots', 'marketplace', 'security', 'settings'].includes(activeTab) && (
+          {['hooks', 'environments', 'snapshots', 'marketplace', 'security', 'settings'].includes(activeTab) && (
+            <div className="tab-pane-container active tab-pane-animated">
               <div className="secondary-view placeholder-tab">
                 <div className="placeholder-box">
                   <div className="placeholder-icon-wrap">
@@ -326,8 +469,8 @@ export const App: React.FC = () => {
                   </button>
                 </div>
               </div>
-            )}
-          </div>
+            </div>
+          )}
         </main>
 
         {/* Right Activity & Updates Panel */}
@@ -359,19 +502,23 @@ export const App: React.FC = () => {
           background: #090d16;
         }
 
+        .tab-pane-container {
+          width: 100%;
+        }
+
         .tab-pane-animated {
-          animation: tabShiftIn 0.26s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+          animation: tabShiftIn 0.16s cubic-bezier(0.16, 1, 0.3, 1) forwards;
           will-change: opacity, transform;
         }
 
         @keyframes tabShiftIn {
           0% {
             opacity: 0;
-            transform: translateX(12px);
+            transform: translate3d(8px, 0, 0);
           }
           100% {
             opacity: 1;
-            transform: translateX(0);
+            transform: translate3d(0, 0, 0);
           }
         }
 

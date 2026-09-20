@@ -165,16 +165,16 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange, badgeC
         }
 
         .nav-button.active {
-          background: #172033;
+          background: rgba(124, 58, 237, 0.14);
           color: #f8fafc;
           font-weight: 600;
-          border: 1px solid #28354f;
+          border: 1px solid rgba(147, 51, 234, 0.35);
         }
 
         .nav-button.active:hover {
-          background: #192338;
+          background: rgba(124, 58, 237, 0.22);
           color: #f8fafc;
-          border-color: #334466;
+          border-color: rgba(168, 85, 247, 0.5);
         }
 
         .nav-icon-label {
@@ -196,7 +196,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange, badgeC
         .nav-button.active .nav-icon,
         .nav-button.active:hover .nav-icon,
         .nav-icon.active-icon {
-          color: #818cf8;
+          color: #c084fc;
         }
 
         .nav-label {

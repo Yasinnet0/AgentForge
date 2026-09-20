@@ -53,6 +53,12 @@ html, body, #root {
   user-select: none;
 }
 
+input, textarea, select, [contenteditable="true"] {
+  user-select: text;
+  -webkit-user-select: text;
+  -webkit-app-region: no-drag;
+}
+
 /* Custom scrollbars */
 ::-webkit-scrollbar {
   width: 6px;

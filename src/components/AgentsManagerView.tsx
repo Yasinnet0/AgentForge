@@ -8,7 +8,8 @@ import {
   Boxes, 
   Compass, 
   Server, 
-  CheckCircle2
+  CheckCircle2,
+  FolderOpen
 } from 'lucide-react';
 
 interface AgentsManagerViewProps {
@@ -146,30 +147,70 @@ export const AgentsManagerView: React.FC<AgentsManagerViewProps> = ({
                   <span className="path-value font-mono" title={agent.paths.baseDir}>
                     {agent.paths.baseDir}
                   </span>
+                  <button
+                    type="button"
+                    className="path-open-btn"
+                    onClick={() => window.electronAPI?.openPath(agent.paths.baseDir)}
+                    title={`Open ${agent.paths.baseDir} in File Explorer`}
+                  >
+                    <FolderOpen size={11} />
+                  </button>
                 </div>
                 <div className="path-row">
                   <span className="path-label font-mono">SKILLS DIR:</span>
                   <span className="path-value font-mono" title={agent.paths.skillsDir}>
                     {agent.paths.skillsDir}
                   </span>
+                  <button
+                    type="button"
+                    className="path-open-btn"
+                    onClick={() => window.electronAPI?.openPath(agent.paths.skillsDir)}
+                    title={`Open ${agent.paths.skillsDir} in File Explorer`}
+                  >
+                    <FolderOpen size={11} />
+                  </button>
                 </div>
                 <div className="path-row">
                   <span className="path-label font-mono">MCP CONFIG:</span>
                   <span className="path-value font-mono" title={agent.paths.mcpConfigPath}>
                     {agent.paths.mcpConfigPath}
                   </span>
+                  <button
+                    type="button"
+                    className="path-open-btn"
+                    onClick={() => window.electronAPI?.openPath(agent.paths.mcpConfigPath)}
+                    title={`Open ${agent.paths.mcpConfigPath} in File Explorer`}
+                  >
+                    <FolderOpen size={11} />
+                  </button>
                 </div>
                 <div className="path-row">
                   <span className="path-label font-mono">RULES PATH:</span>
                   <span className="path-value font-mono" title={agent.paths.rulesPath}>
                     {agent.paths.rulesPath}
                   </span>
+                  <button
+                    type="button"
+                    className="path-open-btn"
+                    onClick={() => window.electronAPI?.openPath(agent.paths.rulesPath)}
+                    title={`Open ${agent.paths.rulesPath} in File Explorer`}
+                  >
+                    <FolderOpen size={11} />
+                  </button>
                 </div>
                 <div className="path-row">
                   <span className="path-label font-mono">PLUGINS:</span>
                   <span className="path-value font-mono" title={agent.paths.pluginsDir}>
                     {agent.paths.pluginsDir}
                   </span>
+                  <button
+                    type="button"
+                    className="path-open-btn"
+                    onClick={() => window.electronAPI?.openPath(agent.paths.pluginsDir)}
+                    title={`Open ${agent.paths.pluginsDir} in File Explorer`}
+                  >
+                    <FolderOpen size={11} />
+                  </button>
                 </div>
               </div>
 
@@ -184,6 +225,15 @@ export const AgentsManagerView: React.FC<AgentsManagerViewProps> = ({
                 </div>
 
                 <div className="card-actions">
+                  <button
+                    type="button"
+                    className="open-folder-btn font-mono"
+                    onClick={() => window.electronAPI?.openPath(agent.paths.baseDir)}
+                    title={`Open ${agent.name} folder in File Explorer`}
+                  >
+                    <FolderOpen size={12} />
+                    <span>Open Folder</span>
+                  </button>
                   <button
                     className="select-only-btn font-mono"
                     onClick={() => onSelectOnly(agent.id)}
@@ -434,6 +484,30 @@ export const AgentsManagerView: React.FC<AgentsManagerViewProps> = ({
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
+          flex: 1;
+        }
+
+        .path-open-btn {
+          background: transparent;
+          border: none;
+          color: #475569;
+          cursor: pointer;
+          padding: 2px 4px;
+          border-radius: 4px;
+          display: inline-flex;
+          align-items: center;
+          opacity: 0.6;
+          transition: all 0.15s ease;
+        }
+
+        .path-row:hover .path-open-btn {
+          opacity: 1;
+          color: #818cf8;
+        }
+
+        .path-open-btn:hover {
+          background: rgba(129, 140, 248, 0.15);
+          color: #a5b4fc;
         }
 
         /* Footer */
@@ -441,7 +515,9 @@ export const AgentsManagerView: React.FC<AgentsManagerViewProps> = ({
           display: flex;
           align-items: center;
           justify-content: space-between;
-          padding-top: 4px;
+          padding-top: 6px;
+          border-top: 1px solid #182236;
+          margin-top: auto;
         }
 
         .agent-stats {
@@ -454,6 +530,32 @@ export const AgentsManagerView: React.FC<AgentsManagerViewProps> = ({
 
         .divider {
           color: #334155;
+        }
+
+        .card-actions {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }
+
+        .open-folder-btn {
+          background: #141b2a;
+          border: 1px solid #1f2b42;
+          color: #818cf8;
+          font-size: 10.5px;
+          padding: 3px 8px;
+          border-radius: 4px;
+          cursor: pointer;
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          transition: all 0.15s ease;
+        }
+
+        .open-folder-btn:hover {
+          background: rgba(129, 140, 248, 0.12);
+          border-color: rgba(129, 140, 248, 0.35);
+          color: #a5b4fc;
         }
 
         .select-only-btn {

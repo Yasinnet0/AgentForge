@@ -73,10 +73,9 @@ export const ClaudeStatusBanner: React.FC = () => {
 
       <style>{`
         .claude-banner {
-          background: linear-gradient(90deg, #101927 0%, #121f33 100%);
-          border: 1px solid #1c2b42;
-          border-left: 4px solid #10b981;
-          border-radius: 10px;
+          background: #101927;
+          border: 1px solid rgba(16, 185, 129, 0.22);
+          border-radius: 9px;
           padding: 14px 18px;
           display: flex;
           align-items: center;

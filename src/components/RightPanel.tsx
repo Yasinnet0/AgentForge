@@ -6,16 +6,10 @@ import {
   RefreshCw, 
   ArrowRight,
   Clock,
-  CheckCircle2
+  CheckCircle2,
+  Trash2
 } from 'lucide-react';
-
-interface ActivityItem {
-  id: string;
-  time: string;
-  title: string;
-  description: string;
-  type: 'MCP' | 'AGENT' | 'SKILL' | 'RULE' | 'ENV' | 'DAEMON';
-}
+import { useActivityStream } from '../services/activityLogger';
 
 interface UpdateItem {
   id: string;
@@ -27,18 +21,27 @@ interface UpdateItem {
 }
 
 export const RightPanel: React.FC = () => {
-  const activities: ActivityItem[] = [];
+  const { activities, clearActivities, logActivity } = useActivityStream();
   const [updates, setUpdates] = useState<UpdateItem[]>([]);
 
   const handleUpdate = (id: string) => {
+    const item = updates.find((u) => u.id === id);
     setUpdates((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, status: 'updating' } : item))
+      prev.map((it) => (it.id === id ? { ...it, status: 'updating' } : it))
     );
 
     setTimeout(() => {
       setUpdates((prev) =>
-        prev.map((item) => (item.id === id ? { ...item, status: 'updated' } : item))
+        prev.map((it) => (it.id === id ? { ...it, status: 'updated' } : it))
       );
+      if (item) {
+        logActivity({
+          type: 'SYSTEM',
+          title: 'Package Upgraded',
+          description: `Upgraded ${item.name} to v${item.newVersion}`,
+          status: 'success',
+        });
+      }
     }, 1500);
   };
 
@@ -51,6 +54,12 @@ export const RightPanel: React.FC = () => {
       setUpdates((prev) =>
         prev.map((item) => ({ ...item, status: 'updated' }))
       );
+      logActivity({
+        type: 'SYSTEM',
+        title: 'All Packages Upgraded',
+        description: 'Successfully updated all pending packages to their latest versions',
+        status: 'success',
+      });
     }, 1500);
   };
 
@@ -69,7 +78,19 @@ export const RightPanel: React.FC = () => {
               <div className="card-subtitle">Real-time daemon events</div>
             </div>
           </div>
-          <span className="event-count-badge font-mono">{activities.length} EVENTS</span>
+          <div className="activity-header-actions">
+            <span className="event-count-badge font-mono">{activities.length} EVENTS</span>
+            {activities.length > 0 && (
+              <button
+                type="button"
+                className="activity-clear-btn"
+                onClick={clearActivities}
+                title="Clear activity log history"
+              >
+                <Trash2 size={11} />
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="activity-stream">
@@ -83,7 +104,9 @@ export const RightPanel: React.FC = () => {
                     </span>
                     <span className="stream-title font-mono">{item.title}</span>
                   </div>
-                  <span className="stream-time font-mono">{item.time}</span>
+                  <span className="stream-time font-mono" title={new Date(item.timestamp).toLocaleString()}>
+                    {item.time}
+                  </span>
                 </div>
                 <div className="stream-desc">{item.description}</div>
               </div>
@@ -92,7 +115,7 @@ export const RightPanel: React.FC = () => {
             <div className="empty-panel-box">
               <Clock size={20} className="empty-panel-icon" />
               <div className="empty-panel-title">No events recorded</div>
-              <div className="empty-panel-desc">Real-time daemon and agent events will appear here</div>
+              <div className="empty-panel-desc">Real-time actions, installs, and environment changes will appear here</div>
             </div>
           )}
         </div>
@@ -259,6 +282,12 @@ export const RightPanel: React.FC = () => {
           color: #818cf8;
         }
 
+        .activity-header-actions {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }
+
         .event-count-badge {
           font-size: 10px;
           color: #718298;
@@ -267,6 +296,27 @@ export const RightPanel: React.FC = () => {
           padding: 2px 7px;
           border-radius: 4px;
           letter-spacing: 0.04em;
+        }
+
+        .activity-clear-btn {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 22px;
+          height: 22px;
+          border-radius: 4px;
+          background: rgba(255, 255, 255, 0.04);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          color: #64748b;
+          cursor: pointer;
+          transition: all 0.15s ease;
+          padding: 0;
+        }
+
+        .activity-clear-btn:hover {
+          background: rgba(239, 68, 68, 0.15);
+          color: #f87171;
+          border-color: rgba(239, 68, 68, 0.35);
         }
 
         /* Scrollable activity stream */
@@ -283,6 +333,12 @@ export const RightPanel: React.FC = () => {
           border-bottom: 1px solid rgba(255, 255, 255, 0.04);
           transition: background-color 0.12s ease;
           border-radius: 5px;
+          animation: streamFadeIn 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        @keyframes streamFadeIn {
+          from { opacity: 0; transform: translateY(-4px); }
+          to { opacity: 1; transform: translateY(0); }
         }
 
         .stream-row:last-child {
@@ -336,6 +392,12 @@ export const RightPanel: React.FC = () => {
           border: 1px solid rgba(52, 211, 153, 0.25);
         }
 
+        .tag-plugin {
+          background: rgba(96, 165, 250, 0.12);
+          color: #60a5fa;
+          border: 1px solid rgba(96, 165, 250, 0.25);
+        }
+
         .tag-rule {
           background: rgba(251, 191, 36, 0.12);
           color: #fbbf24;
@@ -346,6 +408,12 @@ export const RightPanel: React.FC = () => {
           background: rgba(129, 140, 248, 0.12);
           color: #818cf8;
           border: 1px solid rgba(129, 140, 248, 0.25);
+        }
+
+        .tag-system {
+          background: rgba(251, 191, 36, 0.12);
+          color: #fbbf24;
+          border: 1px solid rgba(251, 191, 36, 0.25);
         }
 
         .tag-daemon {
