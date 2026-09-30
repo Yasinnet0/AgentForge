@@ -48,7 +48,7 @@ const AGENT_ICON_MAP: Record<string, React.ElementType> = {
 type SegmentTab = 'all' | 'installed' | 'available';
 
 interface UnifiedMcpCard {
-  id: string; // server key, e.g. "postgres"
+  id: string;
   name: string;
   description?: string;
   category?: string;
@@ -91,12 +91,11 @@ export const McpServersView: React.FC<McpServersViewProps> = ({
     }
   }, [actionMessage]);
 
-  // Unified list of all MCP servers (scanned local + catalog)
+  // Data Processing
   const unifiedServers = useMemo<UnifiedMcpCard[]>(() => {
     const list: UnifiedMcpCard[] = [];
     const processedKeys = new Set<string>();
 
-    // 1. Process catalog MCP servers
     for (const cat of activeMcpCatalog) {
       processedKeys.add(cat.id.toLowerCase());
       const installedOn = selectedAgents.filter((agent) =>
@@ -134,7 +133,6 @@ export const McpServersView: React.FC<McpServersViewProps> = ({
       });
     }
 
-    // 2. Add local scanned servers not in catalog
     for (const s of mcpServers) {
       const key = s.name.toLowerCase();
       if (!processedKeys.has(key)) {
@@ -214,7 +212,7 @@ export const McpServersView: React.FC<McpServersViewProps> = ({
     return result.map((s) => s.item);
   }, [indexedServers, activeSegment, selectedCategory, searchQuery, selectedAgents.length]);
 
-  // Scroll into view on highlight
+  // Effects
   useEffect(() => {
     if (highlightedId) {
       const timer = setTimeout(() => {
@@ -227,7 +225,7 @@ export const McpServersView: React.FC<McpServersViewProps> = ({
     }
   }, [highlightedId]);
 
-  // 1-Click Multi-Agent MCP Install Handler
+  // Handlers
   const handleInstallMcp = async (server: UnifiedMcpCard) => {
     if (!window.electronAPI?.installMcp) return;
 
@@ -292,7 +290,7 @@ export const McpServersView: React.FC<McpServersViewProps> = ({
     }
   };
 
-  // 1-Click Multi-Agent MCP Uninstall Handler
+  // Uninstall
   const handleUninstallMcp = async (server: UnifiedMcpCard) => {
     if (!window.electronAPI?.uninstallMcp) return;
 
@@ -345,7 +343,7 @@ export const McpServersView: React.FC<McpServersViewProps> = ({
     }
   };
 
-  // Open MCP config directory or file in system File Explorer
+  // Open folder
   const handleOpenMcpFolder = (server: UnifiedMcpCard) => {
     if (!window.electronAPI?.openPath) return;
     if (server.sourcePath) {
@@ -787,14 +785,15 @@ export const McpServersView: React.FC<McpServersViewProps> = ({
         .import-action-btn {
           display: inline-flex;
           align-items: center;
+          justify-content: center;
           gap: 6px;
           background: linear-gradient(135deg, #7c3aed, #6366f1);
           border: 1px solid rgba(124, 58, 237, 0.35);
           color: #ffffff;
           font-size: 11px;
           font-weight: 600;
-          padding: 0 10px;
-          height: 26px;
+          padding: 0 12px;
+          height: 28px;
           border-radius: 5px;
           cursor: pointer;
           transition: all 0.15s ease;
@@ -810,6 +809,7 @@ export const McpServersView: React.FC<McpServersViewProps> = ({
         .segmented-controls {
           display: flex;
           align-items: center;
+          height: 28px;
           background: #0b0f19;
           border: 1px solid #223048;
           border-radius: 6px;
@@ -825,11 +825,12 @@ export const McpServersView: React.FC<McpServersViewProps> = ({
           font-size: 11px;
           font-weight: 600;
           padding: 0 9px;
-          height: 25px;
+          height: 22px;
           border-radius: 4px;
           cursor: pointer;
-          display: flex;
+          display: inline-flex;
           align-items: center;
+          justify-content: center;
           gap: 5px;
           transition: all 0.15s ease;
           white-space: nowrap;
@@ -904,8 +905,8 @@ export const McpServersView: React.FC<McpServersViewProps> = ({
         }
 
         .cat-pill.active {
-          background: #6366f1;
-          border-color: #818cf8;
+          background: #1e2a42;
+          border-color: #334155;
           color: #ffffff;
           font-weight: 600;
         }
@@ -1231,6 +1232,7 @@ export const McpServersView: React.FC<McpServersViewProps> = ({
           cursor: pointer;
           transition: all 0.15s ease;
           padding: 0;
+          box-sizing: border-box;
         }
 
         .card-action-icon-btn:hover:not(:disabled) {
@@ -1256,26 +1258,33 @@ export const McpServersView: React.FC<McpServersViewProps> = ({
           cursor: not-allowed;
         }
 
+        .mcp-view-container .card-primary-action-btn,
         .card-primary-action-btn {
           display: inline-flex;
           align-items: center;
+          justify-content: center;
           gap: 5px;
           height: 28px;
           padding: 0 11px;
-          background: linear-gradient(135deg, #6366f1, #4f46e5);
-          border: 1px solid rgba(99, 102, 241, 0.35);
-          color: #ffffff;
+          background: #141c2c;
+          border: 1px solid #223048;
+          color: #e2e8f0;
           font-size: 11px;
           font-weight: 600;
           border-radius: 6px;
           cursor: pointer;
           transition: all 0.15s ease;
           white-space: nowrap;
+          box-sizing: border-box;
+          box-shadow: none;
         }
 
-        .card-primary-action-btn:hover:not(:disabled) {
-          filter: brightness(1.08);
-          box-shadow: 0 2px 10px rgba(99, 102, 241, 0.35);
+        .mcp-view-container .card-primary-action-btn:hover:not(:disabled) {
+          background: linear-gradient(135deg, #5b21b6, #4c1d95);
+          border-color: rgba(124, 58, 237, 0.35);
+          color: #ffffff;
+          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3), 0 0 6px rgba(109, 40, 217, 0.2);
+          transform: translateY(-0.5px);
         }
 
         .card-primary-action-btn:disabled {

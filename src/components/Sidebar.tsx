@@ -11,7 +11,6 @@ import {
   ShoppingBag,
   Lock,
   Settings,
-  FolderGit2,
   Boxes
 } from 'lucide-react';
 
@@ -65,7 +64,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange, badgeC
 
   return (
     <aside className="sidebar-container">
-      {/* Navigation Links */}
+      {/* Navigation */}
       <div className="sidebar-nav">
         {navItems.map((item) => {
           const Icon = item.icon;
@@ -90,27 +89,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange, badgeC
         })}
       </div>
 
-      {/* Bottom Status Card */}
+      {/* Version */}
       <div className="sidebar-footer">
-        <div className="project-status-card">
-          <div className="status-row">
-            <div className="status-label">ACTIVE PROJECT</div>
-            <div className="project-name">
-              <FolderGit2 size={13} className="project-icon" />
-              <span>AgentForge</span>
-            </div>
-          </div>
-
-          <div className="status-row">
-            <div className="status-label">ENVIRONMENT</div>
-            <div className="env-status-name">Default</div>
-          </div>
-
-          <div className="project-card-footer">
-            <span className="version-tag font-mono">v0.0.1</span>
-            <span className="local-only-badge font-mono">READY</span>
-          </div>
-        </div>
+        <span className="version-tag font-mono">v0.0.1</span>
       </div>
 
       <style>{`
@@ -222,74 +203,17 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange, badgeC
         }
 
         .sidebar-footer {
-          margin-top: 12px;
-        }
-
-        .project-status-card {
-          background: #121826;
-          border: 1px solid #1f2b40;
-          border-radius: 9px;
-          padding: 12px;
-          display: flex;
-          flex-direction: column;
-          gap: 9px;
-        }
-
-        .status-row {
-          display: flex;
-          flex-direction: column;
-          gap: 2px;
-        }
-
-        .status-label {
-          font-size: 9.5px;
-          font-weight: 700;
-          letter-spacing: 0.05em;
-          color: #55677d;
-          font-family: var(--font-mono);
-        }
-
-        .project-name {
+          padding: 10px 12px 2px 12px;
+          border-top: 1px solid #1c2538;
           display: flex;
           align-items: center;
-          gap: 6px;
-          color: #f1f5f9;
-          font-size: 13px;
-          font-weight: 700;
-        }
-
-        .project-icon {
-          color: #60a5fa;
-        }
-
-        .env-status-name {
-          color: #38bdf8;
-          font-size: 12.5px;
-          font-weight: 600;
-        }
-
-        .project-card-footer {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          padding-top: 8px;
-          border-top: 1px solid #1c2638;
-          margin-top: 2px;
         }
 
         .version-tag {
-          font-size: 10px;
-          color: #718298;
-        }
-
-        .local-only-badge {
-          background: #090c14;
-          color: #627288;
-          font-size: 8.5px;
-          font-weight: 700;
-          padding: 2px 5px;
-          border-radius: 4px;
-          border: 1px solid #1c2536;
+          font-size: 11px;
+          color: #64748b;
+          font-weight: 500;
+          letter-spacing: 0.02em;
         }
       `}</style>
     </aside>

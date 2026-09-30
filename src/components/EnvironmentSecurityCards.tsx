@@ -12,7 +12,7 @@ import {
 export const EnvironmentSecurityCards: React.FC = () => {
   return (
     <div className="env-security-grid">
-      {/* Active Environment Card */}
+      {/* Active Environment */}
       <div className="info-card">
         <div className="info-card-header">
           <div className="header-left">
@@ -48,7 +48,7 @@ export const EnvironmentSecurityCards: React.FC = () => {
         </div>
       </div>
 
-      {/* Security & Permissions Card */}
+      {/* Security & Permissions */}
       <div className="info-card">
         <div className="info-card-header">
           <div className="header-left">

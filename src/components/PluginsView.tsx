@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { ScannedPlugin, SupportedAgent } from '../types/agent';
+import { ScannedPlugin, ScannedSkill, ScannedMcpServer, SupportedAgent } from '../types/agent';
 import { CatalogPlugin, CatalogSkill } from '../types/catalog';
 import { PLUGINS_CATALOG } from '../data/pluginsCatalog';
 import { SKILLS_CATALOG } from '../data/skillsCatalog';
@@ -17,13 +17,18 @@ import {
   Loader2,
   Filter,
   FolderOpen,
-  RefreshCw
+  RefreshCw,
+  Archive
 } from 'lucide-react';
 import { logActivity } from '../services/activityLogger';
+import { ForgePluginModal } from './ForgePluginModal';
 
 interface PluginsViewProps {
   plugins: ScannedPlugin[];
   selectedAgents: SupportedAgent[];
+  allAgents?: SupportedAgent[];
+  skills?: ScannedSkill[];
+  mcpServers?: ScannedMcpServer[];
   pluginsCatalog?: CatalogPlugin[];
   skillsCatalog?: CatalogSkill[];
   isSyncingCatalog?: boolean;
@@ -67,6 +72,9 @@ interface UnifiedPluginCard {
 export const PluginsView: React.FC<PluginsViewProps> = ({
   plugins,
   selectedAgents,
+  allAgents,
+  skills,
+  mcpServers,
   pluginsCatalog,
   skillsCatalog,
   isSyncingCatalog = false,
@@ -81,6 +89,7 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [loadingPluginId, setLoadingPluginId] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [isForgeModalOpen, setIsForgeModalOpen] = useState(false);
 
   const activePluginsCatalog = pluginsCatalog || PLUGINS_CATALOG;
   const activeSkillsCatalog = skillsCatalog || SKILLS_CATALOG;
@@ -92,12 +101,11 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
     }
   }, [actionMessage]);
 
-  // Unified list of plugins & kits
+  // Data Processing
   const unifiedPlugins = useMemo<UnifiedPluginCard[]>(() => {
     const list: UnifiedPluginCard[] = [];
     const processedIds = new Set<string>();
 
-    // 1. Process catalog plugin kits
     for (const cat of activePluginsCatalog) {
       processedIds.add(cat.id.toLowerCase());
       const installedOn = selectedAgents.filter((agent) =>
@@ -124,7 +132,6 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
       });
     }
 
-    // 2. Add local scanned plugins not in catalog
     for (const p of plugins) {
       const folder = (p.folderName || p.name).toLowerCase();
       if (!processedIds.has(folder)) {
@@ -203,7 +210,7 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
     return result.map((p) => p.item);
   }, [indexedPlugins, activeSegment, selectedCategory, searchQuery, selectedAgents.length]);
 
-  // Scroll into view on highlight
+  // Effects
   useEffect(() => {
     if (highlightedId) {
       const timer = setTimeout(() => {
@@ -216,7 +223,7 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
     }
   }, [highlightedId]);
 
-  // 1-Click Multi-Agent Plugin Kit Install Handler
+  // Handlers
   const handleInstallPluginKit = async (plugin: UnifiedPluginCard) => {
     if (!window.electronAPI?.installPlugin) return;
 
@@ -226,7 +233,7 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
 
     if (targetAgents.length === 0) return;
 
-    // Collect skills with raw URLs
+    // Skills payload
     const skillsToDownload = plugin.bundledSkills.map((sId) => {
       const cat = activeSkillsCatalog.find((c) => c.id === sId);
       const rawUrl = cat?.rawUrl || `https://raw.githubusercontent.com/sickn33/agentic-awesome-skills/main/skills/${sId}/SKILL.md`;
@@ -278,7 +285,7 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
     }
   };
 
-  // Open plugin directory in system File Explorer
+  // Open folder
   const handleOpenPluginFolder = (plugin: UnifiedPluginCard) => {
     if (!window.electronAPI?.openPath) return;
     if (plugin.sourcePath) {
@@ -290,6 +297,29 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
       window.electronAPI.openPath(agent.paths.pluginsDir);
     } else if (agent?.paths?.skillsDir) {
       window.electronAPI.openPath(agent.paths.skillsDir);
+    }
+  };
+
+  // Export ZIP
+  const handleExportPluginZip = async (plugin: UnifiedPluginCard) => {
+    if (!plugin.sourcePath || !window.electronAPI?.exportInstalledPluginZip) return;
+    try {
+      const cleanSlug = plugin.name.toLowerCase().replace(/[^a-z0-9_-]/g, '-');
+      const res = await window.electronAPI.exportInstalledPluginZip({
+        pluginPath: plugin.sourcePath,
+        defaultZipName: `${cleanSlug}-v${plugin.version || '1.0.0'}.zip`,
+      });
+      if (res.success && res.exportPath) {
+        setActionMessage(`Exported "${plugin.name}" to .ZIP archive!`);
+        logActivity({
+          type: 'PLUGIN',
+          title: `Exported "${plugin.name}" as .ZIP`,
+          description: `Generated archive at ${res.exportPath}`,
+          status: 'success',
+        });
+      }
+    } catch (err: any) {
+      setActionMessage(`Failed to export ZIP: ${err.message}`);
     }
   };
 
@@ -359,14 +389,22 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
             )}
           </div>
 
-          {onCreatePlugin && (
-            <div className="header-buttons-row">
-              <button className="import-action-btn" onClick={onCreatePlugin}>
-                <Boxes size={12} />
-                <span>Create Plugin</span>
-              </button>
-            </div>
-          )}
+          <div className="header-buttons-row">
+            <button
+              className="import-action-btn"
+              onClick={() => {
+                if (onCreatePlugin) {
+                  onCreatePlugin();
+                } else {
+                  setIsForgeModalOpen(true);
+                }
+              }}
+              title="Forge and bundle custom capabilities into a shareable plugin kit"
+            >
+              <Sparkles size={12} />
+              <span>Forge Plugin</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -541,6 +579,18 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
                       </button>
                     )}
 
+                    {/* Export as ZIP for Installed Plugins */}
+                    {plugin.installedAgents.length > 0 && plugin.sourcePath && (
+                      <button
+                        type="button"
+                        className="card-action-icon-btn"
+                        onClick={() => handleExportPluginZip(plugin)}
+                        title="Export this installed plugin as a shareable .ZIP archive"
+                      >
+                        <Archive size={13} />
+                      </button>
+                    )}
+
                     {/* Install Button */}
                     {(!isInstalledOnAll && plugin.isCatalog) && (
                       <button
@@ -575,6 +625,25 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
           })}
         </div>
       )}
+
+      {/* Forge Skill Kit & Plugin Bundler Modal */}
+      <ForgePluginModal
+        isOpen={isForgeModalOpen}
+        onClose={() => setIsForgeModalOpen(false)}
+        agents={allAgents && allAgents.length > 0 ? allAgents : selectedAgents}
+        skills={skills || []}
+        mcpServers={mcpServers || []}
+        onPluginForged={async (pluginName, action, countOrPath) => {
+          if (action === 'install') {
+            setActionMessage(`Successfully forged and equipped "${pluginName}" to ${countOrPath} agent(s)!`);
+            if (onRefreshCapabilities) {
+              await onRefreshCapabilities();
+            }
+          } else {
+            setActionMessage(`Successfully forged "${pluginName}" bundle!`);
+          }
+        }}
+      />
 
       <style>{`
         .plugins-view-container {
@@ -691,11 +760,11 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
         }
 
         .segment-sync-btn {
-          display: flex;
+          display: inline-flex;
           align-items: center;
           justify-content: center;
-          width: 25px;
-          height: 25px;
+          width: 22px;
+          height: 22px;
           padding: 0;
           background: transparent;
           border: none;
@@ -724,29 +793,32 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
         .import-action-btn {
           display: inline-flex;
           align-items: center;
+          justify-content: center;
           gap: 6px;
           background: linear-gradient(135deg, #7c3aed, #6366f1);
           border: 1px solid rgba(124, 58, 237, 0.35);
           color: #ffffff;
           font-size: 11px;
           font-weight: 600;
-          padding: 0 10px;
-          height: 26px;
+          padding: 0 12px;
+          height: 28px;
           border-radius: 5px;
           cursor: pointer;
           transition: all 0.15s ease;
           white-space: nowrap;
           box-sizing: border-box;
+          box-shadow: 0 2px 8px rgba(124, 58, 237, 0.25);
         }
 
         .import-action-btn:hover {
-          filter: brightness(1.08);
-          box-shadow: 0 2px 8px rgba(124, 58, 237, 0.28);
+          filter: brightness(1.1);
+          box-shadow: 0 3px 12px rgba(124, 58, 237, 0.4);
         }
 
         .segmented-controls {
           display: flex;
           align-items: center;
+          height: 28px;
           background: #0b0f19;
           border: 1px solid #223048;
           border-radius: 6px;
@@ -762,11 +834,12 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
           font-size: 11px;
           font-weight: 600;
           padding: 0 9px;
-          height: 25px;
+          height: 22px;
           border-radius: 4px;
           cursor: pointer;
-          display: flex;
+          display: inline-flex;
           align-items: center;
+          justify-content: center;
           gap: 5px;
           transition: all 0.15s ease;
           white-space: nowrap;
@@ -841,8 +914,8 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
         }
 
         .cat-pill.active {
-          background: #0284c7;
-          border-color: #38bdf8;
+          background: #1e2a42;
+          border-color: #334155;
           color: #ffffff;
           font-weight: 600;
         }
@@ -866,7 +939,7 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
         }
 
         .plugin-card:hover {
-          border-color: rgba(56, 189, 248, 0.35);
+          border-color: rgba(99, 102, 241, 0.35);
           background: #131b2c;
           box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.45);
           transform: translateY(-1px);
@@ -1148,6 +1221,7 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
           cursor: pointer;
           transition: all 0.15s ease;
           padding: 0;
+          box-sizing: border-box;
         }
 
         .card-action-icon-btn:hover:not(:disabled) {
@@ -1161,26 +1235,33 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
           cursor: not-allowed;
         }
 
+        .plugins-view-container .card-primary-action-btn,
         .card-primary-action-btn {
           display: inline-flex;
           align-items: center;
+          justify-content: center;
           gap: 5px;
           height: 28px;
           padding: 0 11px;
-          background: linear-gradient(135deg, #0284c7, #2563eb);
-          border: 1px solid rgba(2, 132, 199, 0.35);
-          color: #ffffff;
+          background: #141c2c;
+          border: 1px solid #223048;
+          color: #e2e8f0;
           font-size: 11px;
           font-weight: 600;
           border-radius: 6px;
           cursor: pointer;
           transition: all 0.15s ease;
           white-space: nowrap;
+          box-sizing: border-box;
+          box-shadow: none;
         }
 
-        .card-primary-action-btn:hover:not(:disabled) {
-          filter: brightness(1.08);
-          box-shadow: 0 2px 10px rgba(2, 132, 199, 0.35);
+        .plugins-view-container .card-primary-action-btn:hover:not(:disabled) {
+          background: linear-gradient(135deg, #5b21b6, #4c1d95);
+          border-color: rgba(124, 58, 237, 0.35);
+          color: #ffffff;
+          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3), 0 0 6px rgba(109, 40, 217, 0.2);
+          transform: translateY(-0.5px);
         }
 
         .card-primary-action-btn:disabled {

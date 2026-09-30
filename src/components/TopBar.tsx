@@ -69,7 +69,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   const topBarCenterRef = useRef<HTMLDivElement>(null);
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Sync external search query changes (e.g. cleared elsewhere)
+  // Sync external search
   useEffect(() => {
     setLocalInput(searchQuery);
   }, [searchQuery]);
@@ -125,7 +125,7 @@ export const TopBar: React.FC<TopBarProps> = ({
     setIsDropdownOpen(true);
     setSelectedIndex(0);
 
-    // Debounce background tab reconciliation to eliminate FPS drops while typing
+    // Debounce reconciliation
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
     }
@@ -157,7 +157,7 @@ export const TopBar: React.FC<TopBarProps> = ({
     searchInputRef.current?.focus();
   };
 
-  // Pre-index collections with lowercased search strings to eliminate FPS drops
+  // Index collections
   const indexedAgents = useMemo(() => {
     return agents.map((a) => ({
       item: a,
@@ -186,7 +186,7 @@ export const TopBar: React.FC<TopBarProps> = ({
     }));
   }, [capabilities?.plugins]);
 
-  // Fast counts for footer category buttons
+  // Category counts
   const categoryCounts = useMemo(() => {
     if (!localInput.trim()) return { skills: 0, mcps: 0, plugins: 0, agents: 0 };
     const q = localInput.toLowerCase().trim();
@@ -201,14 +201,14 @@ export const TopBar: React.FC<TopBarProps> = ({
     return { skills: sCount, mcps: mCount, plugins: pCount, agents: aCount };
   }, [localInput, indexedSkills, indexedMcps, indexedPlugins, indexedAgents]);
 
-  // Compute live search matches across filtered categories with early break limits
+  // Search matches
   const searchResults = useMemo(() => {
     if (!localInput.trim()) {
       return { agents: [], mcps: [], skills: [], plugins: [], flatItems: [], totalCount: 0 };
     }
     const q = localInput.toLowerCase().trim();
 
-    // 1. Skills
+    // Skills
     const shouldSearchSkills = categoryFilter === 'all' || categoryFilter === 'skills';
     const matchingSkills: ScannedSkill[] = [];
     if (shouldSearchSkills) {
@@ -221,7 +221,7 @@ export const TopBar: React.FC<TopBarProps> = ({
       }
     }
 
-    // 2. MCP Servers
+    // MCP Servers
     const shouldSearchMcps = categoryFilter === 'all' || categoryFilter === 'mcp';
     const matchingMcps: ScannedMcpServer[] = [];
     if (shouldSearchMcps) {
@@ -234,7 +234,7 @@ export const TopBar: React.FC<TopBarProps> = ({
       }
     }
 
-    // 3. Plugins
+    // Plugins
     const shouldSearchPlugins = categoryFilter === 'all' || categoryFilter === 'plugins';
     const matchingPlugins: ScannedPlugin[] = [];
     if (shouldSearchPlugins) {
@@ -247,7 +247,7 @@ export const TopBar: React.FC<TopBarProps> = ({
       }
     }
 
-    // 4. Agents
+    // Agents
     const shouldSearchAgents = categoryFilter === 'all' || categoryFilter === 'agents';
     const matchingAgents: SupportedAgent[] = [];
     if (shouldSearchAgents) {

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Bot, RefreshCw, Terminal } from 'lucide-react';
 
 export const ClaudeStatusBanner: React.FC = () => {
-  // Start with 4 hours, 12 minutes, 45 seconds (as in the PDF design)
+  // Initial uptime
   const [secondsElapsed, setSecondsElapsed] = useState(4 * 3600 + 12 * 60 + 45);
   const [isRestarting, setIsRestarting] = useState(false);
 

@@ -10,19 +10,19 @@ import {
   Server, 
   Cpu, 
   Compass, 
-  FileCode2, 
-  BookOpen, 
-  Package,
   Layers,
   Download,
   Trash2,
   CheckCircle2,
-  Globe,
   Loader2,
-  Filter,
   FolderOpen,
   RefreshCw,
-  ArrowRightLeft
+  ArrowRightLeft,
+  Filter,
+  FileCode2,
+  BookOpen,
+  Package,
+  Globe
 } from 'lucide-react';
 import { logActivity } from '../services/activityLogger';
 import { ForgeSkillModal } from './ForgeSkillModal';
@@ -56,7 +56,7 @@ const AGENT_ICON_MAP: Record<string, React.ElementType> = {
 type SegmentTab = 'all' | 'installed' | 'available';
 
 interface UnifiedSkillCard {
-  id: string; // folderName or slug
+  id: string;
   name: string;
   description: string;
   category?: string;
@@ -74,7 +74,7 @@ interface UnifiedSkillCard {
 
 const EMPTY_AGENTS: SupportedAgent[] = [];
 
-// Static WeakMap cache for catalog search strings so they are computed once across entire session
+// Catalog search cache
 const catalogSearchCache = new WeakMap<CatalogSkill, string>();
 
 function getCatalogSearchString(cat: CatalogSkill): string {
@@ -112,7 +112,7 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
 
   const activeSkillsCatalog = skillsCatalog || SKILLS_CATALOG;
 
-  // Clear action message after 3 seconds
+  // Clear action message
   useEffect(() => {
     if (actionMessage) {
       const timer = setTimeout(() => setActionMessage(null), 3200);
@@ -120,10 +120,8 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
     }
   }, [actionMessage]);
 
-  // Unified list of all skills (scanned local skills + remote catalog skills) in a single high-speed pass
+  // Data Processing
   const { unifiedSkills, indexedSkills, categories, counts } = useMemo(() => {
-    // 1. Build an O(1) lookup Map from local standalone skills for selected agents
-    // Key: lowercased folderName / skill slug
     const installedMap = new Map<string, {
       installedAgents: SupportedAgent[];
       localMatch?: ScannedSkill;
@@ -131,7 +129,7 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
 
     for (let i = 0; i < skills.length; i++) {
       const s = skills[i];
-      // Exclude plugin-bundled skills from being falsely marked as installed standalone agent skills
+      // Skip plugin-bundled skills
       if (s.pluginName) continue;
 
       const agent = selectedAgents.find((a) => a.id === s.sourceAgentId);
@@ -159,13 +157,11 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
     let availableCount = 0;
     const selectedCount = selectedAgents.length;
 
-    // 2. Process all catalog skills with O(1) Map lookups & cached search strings
     for (let i = 0; i < activeSkillsCatalog.length; i++) {
       const cat = activeSkillsCatalog[i];
       const catIdLower = cat.id.toLowerCase();
       processedFolderNames.add(catIdLower);
 
-      // Strict lookup by catalog slug ID only (prevent loose name false positives)
       const entry = installedMap.get(catIdLower);
       const installedAgents = entry ? entry.installedAgents : EMPTY_AGENTS;
       const localMatch = entry?.localMatch;
@@ -205,7 +201,6 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
       }
     }
 
-    // 3. Process local scanned skills that aren't in catalog
     for (let i = 0; i < skills.length; i++) {
       const s = skills[i];
       if (s.pluginName) continue;
@@ -253,7 +248,7 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
     };
   }, [skills, selectedAgents, activeSkillsCatalog]);
 
-  // Filtered skills by segment, category, and search query (single pass, zero multi-array churn)
+  // Search & Filtering
   const filteredSkills = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     const isInstalledOnly = activeSegment === 'installed';
@@ -281,12 +276,11 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
     return matched;
   }, [unifiedSkills, indexedSkills, activeSegment, selectedCategory, searchQuery, selectedAgents.length]);
 
-  // Reset pagination on query or segment change
+  // Effects
   useEffect(() => {
     setVisibleCount(48);
   }, [searchQuery, activeSegment, selectedCategory]);
 
-  // Scroll into view if an item is highlighted
   useEffect(() => {
     if (highlightedId) {
       const timer = setTimeout(() => {
@@ -299,11 +293,11 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
     }
   }, [highlightedId]);
 
-  // Multi-Agent 1-Click Install Handler: Downloads once, installs to all target agents
+  // Handlers
   const handleInstallSkill = async (skill: UnifiedSkillCard) => {
     if (!skill.rawUrl || !window.electronAPI?.installSkill) return;
 
-    // Determine target agents: install on all selected agents that do not have it yet
+    // Target agents
     const targetAgents = selectedAgents.filter(
       (agent) => !skill.installedAgents.some((inst) => inst.id === agent.id)
     );
@@ -354,7 +348,7 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
     }
   };
 
-  // 1-Click Uninstall Handler: Removes skill from selected agents
+  // Uninstall
   const handleUninstallSkill = async (skill: UnifiedSkillCard) => {
     if (!window.electronAPI?.uninstallSkill) return;
 
@@ -407,7 +401,7 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
     }
   };
 
-  // Open skill folder in system File Explorer
+  // Open folder
   const handleOpenSkillFolder = (skill: UnifiedSkillCard) => {
     if (!window.electronAPI?.openPath) return;
     if (skill.localPath) {
@@ -421,7 +415,7 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
     }
   };
 
-  // Precompute highlighted skill match to avoid array scanning inside the card render loop
+  // Highlighted match
   const highlightedSkillMatch = useMemo(() => {
     if (!highlightedId) return null;
     return skills.find((s) => s.id === highlightedId) || null;
@@ -962,11 +956,11 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
         }
 
         .segment-sync-btn {
-          display: flex;
+          display: inline-flex;
           align-items: center;
           justify-content: center;
-          width: 25px;
-          height: 25px;
+          width: 22px;
+          height: 22px;
           padding: 0;
           background: transparent;
           border: none;
@@ -995,14 +989,15 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
         .transfer-action-btn {
           display: inline-flex;
           align-items: center;
+          justify-content: center;
           gap: 6px;
-          background: rgba(139, 92, 246, 0.1);
-          border: 1px solid rgba(168, 85, 247, 0.28);
-          color: #c084fc;
+          background: #141c2c;
+          border: 1px solid #223048;
+          color: #cbd5e1;
           font-size: 11px;
           font-weight: 600;
-          padding: 0 10px;
-          height: 26px;
+          padding: 0 12px;
+          height: 28px;
           border-radius: 5px;
           cursor: pointer;
           transition: all 0.15s ease;
@@ -1011,23 +1006,23 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
         }
 
         .transfer-action-btn:hover {
-          background: rgba(139, 92, 246, 0.18);
-          border-color: rgba(168, 85, 247, 0.45);
-          color: #ffffff;
-          box-shadow: 0 2px 8px rgba(139, 92, 246, 0.25);
+          background: #1c263c;
+          border-color: rgba(124, 58, 237, 0.3);
+          color: #f1f5f9;
         }
 
         .import-action-btn {
           display: inline-flex;
           align-items: center;
+          justify-content: center;
           gap: 6px;
           background: linear-gradient(135deg, #8b5cf6, #6d28d9);
           border: 1px solid rgba(168, 85, 247, 0.45);
           color: #ffffff;
           font-size: 11px;
           font-weight: 600;
-          padding: 0 10px;
-          height: 26px;
+          padding: 0 12px;
+          height: 28px;
           border-radius: 5px;
           cursor: pointer;
           transition: all 0.15s ease;
@@ -1044,6 +1039,7 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
         .segmented-controls {
           display: flex;
           align-items: center;
+          height: 28px;
           background: #0b0f19;
           border: 1px solid #223048;
           border-radius: 6px;
@@ -1059,11 +1055,12 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
           font-size: 11px;
           font-weight: 600;
           padding: 0 9px;
-          height: 25px;
+          height: 22px;
           border-radius: 4px;
           cursor: pointer;
-          display: flex;
+          display: inline-flex;
           align-items: center;
+          justify-content: center;
           gap: 5px;
           transition: all 0.15s ease;
           white-space: nowrap;
@@ -1075,15 +1072,15 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
         }
 
         .segment-btn.active {
-          background: rgba(139, 92, 246, 0.16);
-          color: #f8fafc;
-          border-color: rgba(168, 85, 247, 0.38);
-          box-shadow: 0 1px 4px rgba(124, 58, 237, 0.15);
+          background: #1e2a42;
+          color: #ffffff;
+          border-color: rgba(255, 255, 255, 0.09);
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
         }
 
         .segment-btn.active .segment-count {
-          background: rgba(168, 85, 247, 0.22);
-          color: #e9d5ff;
+          background: rgba(255, 255, 255, 0.12);
+          color: #ffffff;
         }
 
         .segment-count {
@@ -1143,9 +1140,9 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
         }
 
         .cat-pill.active {
-          background: rgba(139, 92, 246, 0.15);
-          border-color: rgba(168, 85, 247, 0.45);
-          color: #f3e8ff;
+          background: #1e2a42;
+          border-color: #334155;
+          color: #ffffff;
           font-weight: 600;
         }
 
@@ -1168,7 +1165,7 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
         }
 
         .skill-card:hover {
-          border-color: rgba(124, 58, 237, 0.35);
+          border-color: rgba(99, 102, 241, 0.35);
           background: #131b2c;
           box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.45);
           transform: translateY(-1px);
@@ -1190,6 +1187,7 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
           min-width: 0;
         }
 
+        .skills-view-container .card-icon-avatar,
         .card-icon-avatar {
           width: 34px;
           height: 34px;
@@ -1410,6 +1408,7 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
           cursor: pointer;
           transition: all 0.15s ease;
           padding: 0;
+          box-sizing: border-box;
         }
 
         .card-action-icon-btn:hover:not(:disabled) {
@@ -1435,27 +1434,32 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
           cursor: not-allowed;
         }
 
+        .skills-view-container .card-primary-action-btn,
         .card-primary-action-btn {
           display: inline-flex;
           align-items: center;
+          justify-content: center;
           gap: 5px;
           height: 28px;
           padding: 0 11px;
-          background: linear-gradient(135deg, #8b5cf6, #6d28d9);
-          border: 1px solid rgba(168, 85, 247, 0.45);
-          color: #ffffff;
+          background: #141c2c;
+          border: 1px solid #223048;
+          color: #e2e8f0;
           font-size: 11px;
           font-weight: 600;
           border-radius: 6px;
           cursor: pointer;
           transition: all 0.15s ease;
           white-space: nowrap;
-          box-shadow: 0 2px 8px rgba(139, 92, 246, 0.25);
+          box-sizing: border-box;
+          box-shadow: none;
         }
 
-        .card-primary-action-btn:hover:not(:disabled) {
-          filter: brightness(1.1);
-          box-shadow: 0 3px 12px rgba(139, 92, 246, 0.4);
+        .skills-view-container .card-primary-action-btn:hover:not(:disabled) {
+          background: linear-gradient(135deg, #5b21b6, #4c1d95);
+          border-color: rgba(124, 58, 237, 0.35);
+          color: #ffffff;
+          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3), 0 0 6px rgba(109, 40, 217, 0.2);
           transform: translateY(-0.5px);
         }
 

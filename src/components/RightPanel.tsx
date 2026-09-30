@@ -68,7 +68,7 @@ export const RightPanel: React.FC = () => {
 
   return (
     <aside className="right-panel-wrapper">
-      {/* Floating Card 1: Activity Stream */}
+      {/* Activity Stream */}
       <div className="floating-card activity-floating-card">
         <div className="floating-card-header">
           <div className="card-title-group">
@@ -121,7 +121,7 @@ export const RightPanel: React.FC = () => {
         </div>
       </div>
 
-      {/* Floating Card 2: Available Updates */}
+      {/* Available Updates */}
       <div className="floating-card updates-floating-card">
         <div className="floating-card-header">
           <div className="card-title-group">
@@ -207,7 +207,7 @@ export const RightPanel: React.FC = () => {
           border-left: 1px solid rgba(28, 37, 56, 0.5);
         }
 
-        /* Floating Card Glass Container */
+        /* Floating Card */
         .floating-card {
           background: rgba(17, 23, 37, 0.82);
           backdrop-filter: blur(20px);
@@ -230,7 +230,7 @@ export const RightPanel: React.FC = () => {
             inset 0 1px 0 rgba(255, 255, 255, 0.1);
         }
 
-        /* Specific sizing behavior */
+        /* Sizing */
         .activity-floating-card {
           flex: 1;
           min-height: 280px;
@@ -319,7 +319,7 @@ export const RightPanel: React.FC = () => {
           border-color: rgba(239, 68, 68, 0.35);
         }
 
-        /* Scrollable activity stream */
+        /* Activity Stream */
         .activity-stream {
           flex: 1;
           overflow-y: auto;
@@ -444,7 +444,7 @@ export const RightPanel: React.FC = () => {
           padding-left: 1px;
         }
 
-        /* Updates cards inside floating pod */
+        /* Updates Cards */
         .updates-list {
           display: flex;
           flex-direction: column;
