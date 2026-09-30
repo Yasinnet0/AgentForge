@@ -57,9 +57,7 @@ function formatCategory(category?: string): string {
   return category.charAt(0).toUpperCase() + category.slice(1);
 }
 
-/**
- * Fetches all 2,126+ skills from sickn33/agentic-awesome-skills skills_index.json
- */
+// Upstream skills fetch
 export async function fetchUpstreamSkills(): Promise<CatalogSkill[]> {
   const res = await fetch(SKILLS_INDEX_URL, {
     headers: { 'User-Agent': 'AgentForge-Desktop' },
@@ -94,9 +92,7 @@ export async function fetchUpstreamSkills(): Promise<CatalogSkill[]> {
   });
 }
 
-/**
- * Fetches all 58+ editorial plugin bundles from sickn33/agentic-awesome-skills
- */
+// Upstream bundles fetch
 export async function fetchUpstreamBundles(): Promise<CatalogPlugin[]> {
   const res = await fetch(BUNDLES_URL, {
     headers: { 'User-Agent': 'AgentForge-Desktop' },
@@ -127,7 +123,7 @@ export async function fetchUpstreamBundles(): Promise<CatalogPlugin[]> {
     };
   });
 
-  // Merge with initial starter plugins to ensure complete coverage
+  // Merge starter plugins
   const existingIds = new Set(fetchedBundles.map((p) => p.id));
   for (const starter of PLUGINS_CATALOG) {
     if (!existingIds.has(starter.id)) {
@@ -138,16 +134,14 @@ export async function fetchUpstreamBundles(): Promise<CatalogPlugin[]> {
   return fetchedBundles;
 }
 
-/**
- * Loads catalog data: checks localStorage cache first, falls back to seed data or fetches live.
- */
+// Load catalog
 export async function loadCatalogData(forceRefresh = false): Promise<CatalogSyncResult> {
   const mcpServers: CatalogMcpServer[] = [
     AAS_MCP_SERVER,
     ...MCP_CATALOG.filter((m) => m.id !== 'aas-mcp'),
   ];
 
-  // 1. If not forcing refresh, try reading from cache
+  // Check cache
   if (!forceRefresh) {
     try {
       const cachedSkills = localStorage.getItem(CACHE_KEY_SKILLS);
@@ -170,7 +164,7 @@ export async function loadCatalogData(forceRefresh = false): Promise<CatalogSync
     }
   }
 
-  // 2. Fetch fresh upstream catalog from GitHub
+  // Fetch upstream
   try {
     const [skills, plugins] = await Promise.all([
       fetchUpstreamSkills(),
@@ -179,7 +173,7 @@ export async function loadCatalogData(forceRefresh = false): Promise<CatalogSync
 
     const nowIso = new Date().toISOString();
 
-    // Cache to localStorage
+    // Persist cache
     try {
       localStorage.setItem(CACHE_KEY_SKILLS, JSON.stringify(skills));
       localStorage.setItem(CACHE_KEY_PLUGINS, JSON.stringify(plugins));
@@ -198,7 +192,7 @@ export async function loadCatalogData(forceRefresh = false): Promise<CatalogSync
   } catch (fetchErr: any) {
     console.error('Catalog fetch error:', fetchErr);
 
-    // Fallback to static seed data
+    // Fallback seed data
     return {
       skills: SKILLS_CATALOG,
       plugins: PLUGINS_CATALOG,

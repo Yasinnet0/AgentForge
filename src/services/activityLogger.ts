@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 
-export type ActivityType = 'SKILL' | 'MCP' | 'PLUGIN' | 'AGENT' | 'ENV' | 'SYSTEM' | 'DAEMON';
+export type ActivityType = 'SKILL' | 'MCP' | 'PLUGIN' | 'AGENT' | 'ENV' | 'SYSTEM' | 'DAEMON' | 'RULES' | 'RULE';
 export type ActivityStatus = 'success' | 'warning' | 'error' | 'info';
 
 export interface ActivityItem {
@@ -17,7 +17,7 @@ export interface ActivityItem {
 const STORAGE_KEY = 'agentforge_activity_stream';
 const MAX_ACTIVITIES = 60;
 
-// Format relative time helper
+// Format relative time
 export function formatRelativeTime(timestamp: number): string {
   const now = Date.now();
   const diffSec = Math.floor((now - timestamp) / 1000);
@@ -39,7 +39,7 @@ export function formatRelativeTime(timestamp: number): string {
   });
 }
 
-// In-memory cache synced with localStorage
+// Cache
 let activitiesCache: ActivityItem[] = [];
 let isInitialized = false;
 const listeners = new Set<(activities: ActivityItem[]) => void>();
@@ -53,7 +53,7 @@ function initCache(): void {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        // Filter out noisy legacy items (e.g. background scan events, seeds, folder opens, UI toggles)
+        // Filter legacy items
         activitiesCache = parsed
           .filter((item) => {
             if (!item || !item.title) return false;
@@ -134,7 +134,7 @@ export function getActivities(): ActivityItem[] {
   return [...activitiesCache];
 }
 
-// React Hook to subscribe to real-time activity updates
+// Hook
 export function useActivityStream(): {
   activities: ActivityItem[];
   logActivity: typeof logActivity;
@@ -155,7 +155,7 @@ export function useActivityStream(): {
 
     listeners.add(handleUpdate);
 
-    // Refresh relative times every 15s
+    // Refresh relative times
     const interval = setInterval(() => {
       setActivities((prev) =>
         prev.map((item) => ({

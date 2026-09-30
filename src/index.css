@@ -152,3 +152,182 @@ input, textarea, select, [contenteditable="true"] {
 .font-mono {
   font-family: var(--font-mono);
 }
+
+/* Global Modal Animations & Styles */
+@keyframes modalOverlayFadeIn {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes modalOverlayFadeOut {
+  0% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes modalCardScaleIn {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 22px, 0) scale(0.95);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes modalCardScaleOut {
+  0% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(0, 14px, 0) scale(0.96);
+  }
+}
+
+.forge-modal-overlay,
+.transfer-modal-overlay {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  background: rgba(3, 7, 18, 0.82) !important;
+  backdrop-filter: blur(8px) !important;
+  -webkit-backdrop-filter: blur(8px) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  z-index: 100000 !important;
+  padding: 24px !important;
+  animation: modalOverlayFadeIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+  box-sizing: border-box !important;
+  -webkit-app-region: no-drag !important;
+}
+
+.forge-modal-overlay.is-closing,
+.transfer-modal-overlay.is-closing,
+.preset-backdrop.is-closing {
+  animation: modalOverlayFadeOut 0.16s cubic-bezier(0.4, 0, 1, 1) forwards !important;
+  pointer-events: none !important;
+}
+
+.forge-modal-card,
+.transfer-modal-card {
+  background: #090d16;
+  border: 1px solid #1c273c;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 1040px;
+  height: 82vh;
+  max-height: 740px;
+  min-height: 520px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 48px -8px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(28, 39, 60, 0.6);
+  overflow: hidden;
+  will-change: transform, opacity;
+  transform: translate3d(0, 0, 0);
+  contain: layout;
+  animation: modalCardScaleIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+  position: relative;
+  z-index: 100001;
+  box-sizing: border-box;
+  -webkit-app-region: no-drag !important;
+}
+
+.forge-modal-card.is-closing,
+.transfer-modal-card.is-closing,
+.preset-dialog.is-closing {
+  animation: modalCardScaleOut 0.16s cubic-bezier(0.4, 0, 1, 1) forwards !important;
+  pointer-events: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .forge-modal-overlay,
+  .transfer-modal-overlay,
+  .preset-backdrop,
+  .forge-modal-card,
+  .transfer-modal-card,
+  .preset-dialog {
+    animation-duration: 0.01ms !important;
+  }
+}
+
+.forge-modal-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 20px;
+  border-bottom: 1px solid #172133;
+  background: #0d1320;
+  flex-shrink: 0;
+  -webkit-app-region: no-drag !important;
+}
+
+.header-icon-box {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, rgba(124, 58, 237, 0.2), rgba(99, 102, 241, 0.2));
+  border: 1px solid rgba(124, 58, 237, 0.4);
+  color: #c084fc;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.header-icon-box.plugin {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(168, 85, 247, 0.2));
+  border-color: rgba(99, 102, 241, 0.4);
+  color: #818cf8;
+}
+
+.header-title-box {
+  flex: 1;
+  min-width: 0;
+}
+
+.modal-title {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: #f1f5f9;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.modal-subtitle {
+  font-size: 11.5px;
+  color: #8899ac;
+  margin: 2px 0 0 0;
+}
+
+.forge-modal-close-btn {
+  background: transparent;
+  border: none;
+  color: #64748b;
+  padding: 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.forge-modal-close-btn:hover {
+  color: #f1f5f9;
+  background: #1e293b;
+}

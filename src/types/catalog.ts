@@ -1,5 +1,5 @@
 export interface CatalogSkill {
-  id: string; // Directory name / slug, e.g. "api-design-principles"
+  id: string;
   name: string;
   description: string;
   category: string;
@@ -12,7 +12,7 @@ export interface CatalogSkill {
 }
 
 export interface CatalogMcpServer {
-  id: string; // Server identifier / key, e.g. "postgres"
+  id: string;
   name: string;
   description: string;
   category: string;
@@ -34,7 +34,7 @@ export interface CatalogPlugin {
   description: string;
   category: string;
   author: string;
-  bundledSkills: string[]; // List of CatalogSkill ids
-  bundledMcps: string[]; // List of CatalogMcpServer ids
+  bundledSkills: string[];
+  bundledMcps: string[];
   tags: string[];
 }

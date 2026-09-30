@@ -105,3 +105,87 @@ export interface TransferSkillsResult {
   error?: string;
 }
 
+export interface RuleDirective {
+  id: string;
+  title: string;
+  description?: string;
+  category: 'communication' | 'engineering' | 'git' | 'debugging' | 'security' | 'custom';
+  enabled: boolean;
+  content: string;
+}
+
+export interface RuleSection {
+  id: string;
+  title: string;
+  description?: string;
+  directives: RuleDirective[];
+}
+
+export interface RulePreset {
+  id: string;
+  title: string;
+  summary: string;
+  category: 'communication' | 'engineering' | 'git' | 'debugging' | 'security';
+  directives: Array<{
+    title: string;
+    content: string;
+  }>;
+}
+
+export interface SaveRulesParams {
+  targets: Array<{ agentId: string; rulesPath: string }>;
+  content: string;
+  syncGeminiMd?: boolean;
+}
+
+export interface RulesFileResult {
+  content: string;
+  path: string;
+  exists: boolean;
+}
+
+export interface ForgePluginBundleParams {
+  folderName: string;
+  manifest: {
+    name: string;
+    displayName: string;
+    version: string;
+    description: string;
+    author: string;
+    category?: string;
+    tags?: string[];
+    skills?: string[];
+    mcpServers?: Record<string, any>;
+    rules?: string[];
+  };
+  selectedSkills: Array<{
+    folderName: string;
+    sourcePath: string;
+  }>;
+  selectedMcps: Array<{
+    name: string;
+    command?: string;
+    args?: string[];
+    env?: Record<string, string>;
+    url?: string;
+    transport?: 'stdio' | 'sse';
+  }>;
+  selectedRules: Array<{
+    filename: string;
+    title?: string;
+    content: string;
+  }>;
+  targetAction: 'install' | 'export-zip' | 'export-dir';
+  targetAgents?: Array<{ agentId: string; pluginsDir: string; name?: string }>;
+  exportDestinationPath?: string;
+}
+
+export interface ForgePluginResult {
+  success: boolean;
+  count?: number;
+  exportPath?: string;
+  installedAgents?: string[];
+  error?: string;
+  canceled?: boolean;
+}
+
