@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   CheckSquare, 
   Square, 
@@ -7,12 +7,13 @@ import {
   Code
 } from 'lucide-react';
 
-interface SkillMarkdownViewerProps {
+// Types
+export interface MarkdownViewerProps {
   content: string;
   className?: string;
 }
 
-interface MarkdownBlock {
+export interface MarkdownBlock {
   type: 'heading' | 'code' | 'blockquote' | 'tasks' | 'ul' | 'ol' | 'hr' | 'paragraph';
   level?: number;
   lang?: string;
@@ -20,9 +21,10 @@ interface MarkdownBlock {
   items?: Array<{ text: string; checked?: boolean }>;
 }
 
+// Frontmatter Parser
 function parseFrontmatter(rawYaml: string): Record<string, any> {
   const result: Record<string, any> = {};
-  const lines = rawYaml.split('\n');
+  const lines = rawYaml.split(/\r?\n/);
   let currentArrayKey: string | null = null;
 
   for (const line of lines) {
@@ -48,8 +50,7 @@ function parseFrontmatter(rawYaml: string): Record<string, any> {
         result[key] = [];
       } else {
         currentArrayKey = null;
-        const cleanVal = rawVal.replace(/^["']|["']$/g, '');
-        result[key] = cleanVal;
+        result[key] = rawVal.replace(/^["']|["']$/g, '');
       }
     }
   }
@@ -57,8 +58,10 @@ function parseFrontmatter(rawYaml: string): Record<string, any> {
   return result;
 }
 
-function renderInlineMarkdown(text: string): React.ReactNode[] {
-  const regex = /(`[^`]+`|\*\*\*[^*]+\*\*\*|\*\*[^*]+\*\*|\*[^*]+\*|~~[^~]+~~|\[[^\]]+\]\([^)]+\))/g;
+// Inline Formatter
+export function renderInlineMarkdown(text: string): React.ReactNode[] {
+  if (!text) return [];
+  const regex = /(`[^`]+`|\*\*\*[^*]+\*\*\*|___[^_]+___|\*\*[^*]+\*\*|__[^_]+__|~~[^~]+~~|\[[^\]]+\]\([^)]+\)|\*[^*]+\*|_[^_]+_)/g;
   const parts = text.split(regex);
 
   return parts.map((part, i) => {
@@ -70,21 +73,30 @@ function renderInlineMarkdown(text: string): React.ReactNode[] {
         </code>
       );
     }
-    if (part.startsWith('***') && part.endsWith('***')) {
+    if (
+      (part.startsWith('***') && part.endsWith('***')) ||
+      (part.startsWith('___') && part.endsWith('___'))
+    ) {
       return (
         <strong key={i} className="skill-bold-italic">
           <em>{part.slice(3, -3)}</em>
         </strong>
       );
     }
-    if (part.startsWith('**') && part.endsWith('**')) {
+    if (
+      (part.startsWith('**') && part.endsWith('**')) ||
+      (part.startsWith('__') && part.endsWith('__'))
+    ) {
       return (
         <strong key={i} className="skill-bold">
           {part.slice(2, -2)}
         </strong>
       );
     }
-    if (part.startsWith('*') && part.endsWith('*')) {
+    if (
+      (part.startsWith('*') && part.endsWith('*')) ||
+      (part.startsWith('_') && part.endsWith('_'))
+    ) {
       return (
         <em key={i} className="skill-italic">
           {part.slice(1, -1)}
@@ -112,8 +124,9 @@ function renderInlineMarkdown(text: string): React.ReactNode[] {
   });
 }
 
+// Block Parser
 function parseMarkdownBlocks(markdownText: string): MarkdownBlock[] {
-  const lines = markdownText.split('\n');
+  const lines = markdownText.split(/\r?\n/);
   const blocks: MarkdownBlock[] = [];
   let i = 0;
 
@@ -121,7 +134,6 @@ function parseMarkdownBlocks(markdownText: string): MarkdownBlock[] {
     const line = lines[i];
     const trimmed = line.trim();
 
-    // 1. Code block ```
     if (trimmed.startsWith('```')) {
       const lang = trimmed.slice(3).trim();
       const codeLines: string[] = [];
@@ -139,20 +151,17 @@ function parseMarkdownBlocks(markdownText: string): MarkdownBlock[] {
       continue;
     }
 
-    // 2. Empty line
     if (!trimmed) {
       i++;
       continue;
     }
 
-    // 3. Horizontal Rule
     if (/^(\-{3,}|\*{3,}|_{3,})$/.test(trimmed)) {
       blocks.push({ type: 'hr' });
       i++;
       continue;
     }
 
-    // 4. Headings
     const headingMatch = line.match(/^(#{1,6})\s+(.*)$/);
     if (headingMatch) {
       blocks.push({
@@ -164,7 +173,6 @@ function parseMarkdownBlocks(markdownText: string): MarkdownBlock[] {
       continue;
     }
 
-    // 5. Blockquote
     if (line.startsWith('>')) {
       const quoteLines: string[] = [];
       while (i < lines.length && (lines[i].startsWith('>') || (lines[i].trim() && !lines[i].startsWith('#')))) {
@@ -179,7 +187,6 @@ function parseMarkdownBlocks(markdownText: string): MarkdownBlock[] {
       continue;
     }
 
-    // 6. Task lists: - [ ] or - [x]
     const taskMatch = line.match(/^[-*]\s+\[([ xX])\]\s+(.*)$/);
     if (taskMatch) {
       const taskItems: Array<{ text: string; checked: boolean }> = [];
@@ -202,7 +209,6 @@ function parseMarkdownBlocks(markdownText: string): MarkdownBlock[] {
       continue;
     }
 
-    // 7. Unordered list (- or *)
     if (/^[-*]\s+/.test(line)) {
       const listItems: Array<{ text: string }> = [];
       while (i < lines.length && /^[-*]\s+/.test(lines[i])) {
@@ -216,7 +222,6 @@ function parseMarkdownBlocks(markdownText: string): MarkdownBlock[] {
       continue;
     }
 
-    // 8. Ordered list (1. )
     if (/^\d+\.\s+/.test(line)) {
       const listItems: Array<{ text: string }> = [];
       while (i < lines.length && /^\d+\.\s+/.test(lines[i])) {
@@ -230,7 +235,6 @@ function parseMarkdownBlocks(markdownText: string): MarkdownBlock[] {
       continue;
     }
 
-    // 9. Paragraph
     const paraLines: string[] = [];
     while (
       i < lines.length &&
@@ -254,6 +258,7 @@ function parseMarkdownBlocks(markdownText: string): MarkdownBlock[] {
   return blocks;
 }
 
+// Code Block Component
 const CodeBlockItem: React.FC<{ code: string; lang: string }> = ({ code, lang }) => {
   const [copied, setCopied] = useState(false);
 
@@ -287,28 +292,42 @@ const CodeBlockItem: React.FC<{ code: string; lang: string }> = ({ code, lang })
   );
 };
 
-export const SkillMarkdownViewer: React.FC<SkillMarkdownViewerProps> = ({
+// Main Markdown Viewer
+export const MarkdownViewer: React.FC<MarkdownViewerProps> = ({
   content,
   className = ''
 }) => {
-  // Separate YAML frontmatter from body
-  let frontmatter: Record<string, any> | null = null;
-  let markdownBody = content;
+  const parsedData = useMemo(() => {
+    if (!content || !content.trim()) return null;
 
-  if (content.startsWith('---')) {
-    const endIdx = content.indexOf('\n---', 3);
-    if (endIdx !== -1) {
-      const rawFm = content.slice(3, endIdx).trim();
-      markdownBody = content.slice(endIdx + 4).trim();
-      frontmatter = parseFrontmatter(rawFm);
+    let frontmatter: Record<string, any> | null = null;
+    let markdownBody = content;
+
+    if (content.startsWith('---')) {
+      const endIdx = content.indexOf('\n---', 3);
+      if (endIdx !== -1) {
+        const rawFm = content.slice(3, endIdx).trim();
+        markdownBody = content.slice(endIdx + 4).trim();
+        frontmatter = parseFrontmatter(rawFm);
+      }
     }
+
+    const blocks = parseMarkdownBlocks(markdownBody);
+    return { frontmatter, blocks };
+  }, [content]);
+
+  if (!parsedData) {
+    return (
+      <div className={`skill-viewer-container empty ${className}`}>
+        <p className="text-slate-500 italic text-xs">No content to preview.</p>
+      </div>
+    );
   }
 
-  const blocks = parseMarkdownBlocks(markdownBody);
+  const { frontmatter, blocks } = parsedData;
 
   return (
     <div className={`skill-viewer-container ${className}`}>
-      {/* Simple, Minimal Metadata Header */}
       {frontmatter && Object.keys(frontmatter).length > 0 && (
         <div className="skill-meta-strip">
           {frontmatter.name && (
@@ -333,38 +352,15 @@ export const SkillMarkdownViewer: React.FC<SkillMarkdownViewerProps> = ({
         </div>
       )}
 
-      {/* Rendered Markdown Body */}
       <div className="skill-reading-body">
         {blocks.map((block, idx) => {
           switch (block.type) {
             case 'heading': {
               const textNodes = renderInlineMarkdown(block.content || '');
-              if (block.level === 1) {
-                return (
-                  <h1 key={idx} className="skill-h1">
-                    {textNodes}
-                  </h1>
-                );
-              }
-              if (block.level === 2) {
-                return (
-                  <h2 key={idx} className="skill-h2">
-                    {textNodes}
-                  </h2>
-                );
-              }
-              if (block.level === 3) {
-                return (
-                  <h3 key={idx} className="skill-h3">
-                    {textNodes}
-                  </h3>
-                );
-              }
-              return (
-                <h4 key={idx} className="skill-h4">
-                  {textNodes}
-                </h4>
-              );
+              if (block.level === 1) return <h1 key={idx} className="skill-h1">{textNodes}</h1>;
+              if (block.level === 2) return <h2 key={idx} className="skill-h2">{textNodes}</h2>;
+              if (block.level === 3) return <h3 key={idx} className="skill-h3">{textNodes}</h3>;
+              return <h4 key={idx} className="skill-h4">{textNodes}</h4>;
             }
 
             case 'code':
@@ -400,7 +396,7 @@ export const SkillMarkdownViewer: React.FC<SkillMarkdownViewerProps> = ({
                 <ul key={idx} className="skill-ul">
                   {block.items?.map((item, itemIdx) => (
                     <li key={itemIdx} className="skill-li">
-                      <span className="bullet-dot">•</span>
+                      <span className="skill-bullet-dot" />
                       <span className="li-content">{renderInlineMarkdown(item.text)}</span>
                     </li>
                   ))}
@@ -446,7 +442,6 @@ export const SkillMarkdownViewer: React.FC<SkillMarkdownViewerProps> = ({
           -webkit-user-select: text !important;
         }
 
-        /* Minimal metadata strip */
         .skill-meta-strip {
           display: flex;
           align-items: center;
@@ -489,7 +484,6 @@ export const SkillMarkdownViewer: React.FC<SkillMarkdownViewerProps> = ({
           font-family: var(--font-mono, monospace);
         }
 
-        /* Body Typography */
         .skill-reading-body {
           display: flex;
           flex-direction: column;
@@ -537,7 +531,6 @@ export const SkillMarkdownViewer: React.FC<SkillMarkdownViewerProps> = ({
           color: #cbd5e1;
         }
 
-        /* Inline formatting */
         .skill-bold {
           font-weight: 700;
           color: #ffffff;
@@ -578,7 +571,6 @@ export const SkillMarkdownViewer: React.FC<SkillMarkdownViewerProps> = ({
           color: #93c5fd;
         }
 
-        /* Lists */
         .skill-ul, .skill-ol {
           display: flex;
           flex-direction: column;
@@ -594,10 +586,13 @@ export const SkillMarkdownViewer: React.FC<SkillMarkdownViewerProps> = ({
           gap: 8px;
         }
 
-        .bullet-dot {
-          color: #818cf8;
-          font-size: 14px;
-          line-height: 1.4;
+        .skill-bullet-dot {
+          width: 5px;
+          height: 5px;
+          background: #818cf8;
+          border-radius: 50%;
+          margin-top: 7px;
+          flex-shrink: 0;
         }
 
         .number-index {
@@ -612,7 +607,6 @@ export const SkillMarkdownViewer: React.FC<SkillMarkdownViewerProps> = ({
           flex: 1;
         }
 
-        /* Task list */
         .skill-task-list {
           display: flex;
           flex-direction: column;
@@ -638,7 +632,6 @@ export const SkillMarkdownViewer: React.FC<SkillMarkdownViewerProps> = ({
           flex-shrink: 0;
         }
 
-        /* Blockquote */
         .skill-blockquote {
           border-left: 3px solid #7c3aed;
           background: rgba(124, 58, 237, 0.06);
@@ -649,7 +642,6 @@ export const SkillMarkdownViewer: React.FC<SkillMarkdownViewerProps> = ({
           font-style: italic;
         }
 
-        /* Code block card */
         .skill-code-card {
           background: #060911;
           border: 1px solid #1a253a;
