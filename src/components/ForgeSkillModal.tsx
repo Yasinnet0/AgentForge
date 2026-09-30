@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { 
   X, 
@@ -14,7 +14,8 @@ import {
 } from 'lucide-react';
 import { SupportedAgent } from '../types/agent';
 import { logActivity } from '../services/activityLogger';
-import { SkillMarkdownViewer } from './SkillMarkdownViewer';
+import { MarkdownViewer } from './MarkdownViewer';
+import { useModalTransition } from '../hooks/useModalTransition';
 
 interface ForgeSkillModalProps {
   isOpen: boolean;
@@ -70,6 +71,8 @@ export const ForgeSkillModal: React.FC<ForgeSkillModalProps> = ({
   selectedAgents,
   onSkillCreated
 }) => {
+  const { isRendered, isClosing, handleClose } = useModalTransition(isOpen, onClose, 140);
+
   const [name, setName] = useState('');
   const [folderSlug, setFolderSlug] = useState('');
   const [isSlugManuallyEdited, setIsSlugManuallyEdited] = useState(false);
@@ -84,27 +87,33 @@ export const ForgeSkillModal: React.FC<ForgeSkillModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Initialize selected agents and escape listener when modal opens
+  const prevIsOpenRef = useRef(false);
+
+  // Effects
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && !prevIsOpenRef.current) {
       if (selectedAgents && selectedAgents.length > 0) {
         setSelectedAgentIds(selectedAgents.map((a) => a.id));
       } else {
         setSelectedAgentIds([]);
       }
       setErrorMsg(null);
-
-      const handleKeyDown = (e: KeyboardEvent) => {
-        if (e.key === 'Escape') {
-          onClose();
-        }
-      };
-      window.addEventListener('keydown', handleKeyDown);
-      return () => window.removeEventListener('keydown', handleKeyDown);
     }
-  }, [isOpen, selectedAgents, onClose]);
+    prevIsOpenRef.current = isOpen;
+  }, [isOpen, selectedAgents]);
 
-  // Auto-generate folder slug from name if not manually modified
+  useEffect(() => {
+    if (!isRendered) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        handleClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isRendered, handleClose]);
+
+  // Handlers
   const handleNameChange = (val: string) => {
     setName(val);
     if (!isSlugManuallyEdited) {
@@ -146,7 +155,7 @@ export const ForgeSkillModal: React.FC<ForgeSkillModalProps> = ({
     }
   };
 
-  // Compile SKILL.md content
+  // Compile SKILL.md
   const compiledSkillMd = useMemo(() => {
     const tagsList = tagsInput
       .split(',')
@@ -224,7 +233,7 @@ ${instructions.trim()}
         onSkillCreated(name || cleanSlug, res.count || targetAgents.length);
       }
 
-      onClose();
+      handleClose();
     } catch (err: any) {
       setErrorMsg(err.message || 'An error occurred while creating the skill.');
     } finally {
@@ -232,11 +241,11 @@ ${instructions.trim()}
     }
   };
 
-  if (!isOpen) return null;
+  if (!isRendered) return null;
 
   return createPortal(
-    <div className="forge-modal-overlay" onClick={onClose}>
-      <div className="forge-modal-card" onClick={(e) => e.stopPropagation()}>
+    <div className={`forge-modal-overlay ${isClosing ? 'is-closing' : ''}`} onClick={handleClose}>
+      <div className={`forge-modal-card ${isClosing ? 'is-closing' : ''}`} onClick={(e) => e.stopPropagation()}>
         {/* Modal Header */}
         <div className="forge-modal-header">
           <div className="header-icon-box">
@@ -248,7 +257,7 @@ ${instructions.trim()}
               Author an agent playbook and deploy directly to your local AI environments.
             </p>
           </div>
-          <button className="close-btn" onClick={onClose} aria-label="Close modal">
+          <button className="close-btn" onClick={handleClose} aria-label="Close modal">
             <X size={16} />
           </button>
         </div>
@@ -464,7 +473,7 @@ ${instructions.trim()}
               ) : (
                 <div className="preview-content-wrap">
                   {previewMode === 'formatted' ? (
-                    <SkillMarkdownViewer content={compiledSkillMd} />
+                    <MarkdownViewer content={compiledSkillMd} />
                   ) : (
                     <>
                       <div className="preview-readonly-badge">
@@ -499,7 +508,7 @@ ${instructions.trim()}
               <button
                 type="button"
                 className="cancel-action-btn"
-                onClick={onClose}
+                onClick={handleClose}
                 disabled={isSubmitting}
               >
                 Cancel
@@ -526,28 +535,59 @@ ${instructions.trim()}
         </form>
 
         <style>{`
+          @keyframes modalOverlayFadeIn {
+            0% { opacity: 0; }
+            100% { opacity: 1; }
+          }
+          @keyframes modalOverlayFadeOut {
+            0% { opacity: 1; }
+            100% { opacity: 0; }
+          }
+          @keyframes modalCardScaleIn {
+            0% {
+              opacity: 0;
+              transform: translate3d(0, 22px, 0) scale(0.95);
+            }
+            100% {
+              opacity: 1;
+              transform: translate3d(0, 0, 0) scale(1);
+            }
+          }
+          @keyframes modalCardScaleOut {
+            0% {
+              opacity: 1;
+              transform: translate3d(0, 0, 0) scale(1);
+            }
+            100% {
+              opacity: 0;
+              transform: translate3d(0, 14px, 0) scale(0.96);
+            }
+          }
+
           .forge-modal-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            width: 100vw;
-            height: 100vh;
-            background: rgba(3, 7, 18, 0.88);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 100000;
-            padding: 24px;
-            animation: fadeIn 0.12s ease-out;
-            box-sizing: border-box;
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            bottom: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            background: rgba(3, 7, 18, 0.82) !important;
+            backdrop-filter: blur(8px) !important;
+            -webkit-backdrop-filter: blur(8px) !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            z-index: 100000 !important;
+            padding: 24px !important;
+            animation: modalOverlayFadeIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+            box-sizing: border-box !important;
             -webkit-app-region: no-drag !important;
           }
 
-          @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
+          .forge-modal-overlay.is-closing {
+            animation: modalOverlayFadeOut 0.16s cubic-bezier(0.4, 0, 1, 1) forwards !important;
+            pointer-events: none !important;
           }
 
           .forge-modal-card {
@@ -566,22 +606,16 @@ ${instructions.trim()}
             will-change: transform, opacity;
             transform: translate3d(0, 0, 0);
             contain: layout;
-            animation: modalScale 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+            animation: modalCardScaleIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
             position: relative;
             z-index: 100001;
             box-sizing: border-box;
             -webkit-app-region: no-drag !important;
           }
 
-          @keyframes modalScale {
-            from {
-              opacity: 0;
-              transform: translate3d(0, 8px, 0) scale(0.985);
-            }
-            to {
-              opacity: 1;
-              transform: translate3d(0, 0, 0) scale(1);
-            }
+          .forge-modal-card.is-closing {
+            animation: modalCardScaleOut 0.16s cubic-bezier(0.4, 0, 1, 1) forwards !important;
+            pointer-events: none !important;
           }
 
           .forge-modal-header {
@@ -1097,9 +1131,14 @@ ${instructions.trim()}
             color: #94a3b8;
             font-size: 12px;
             font-weight: 500;
-            padding: 6px 14px;
+            padding: 0 14px;
+            height: 32px;
             border-radius: 6px;
             cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            box-sizing: border-box;
             transition: all 0.15s;
           }
 
@@ -1111,15 +1150,18 @@ ${instructions.trim()}
           .submit-forge-btn {
             display: inline-flex;
             align-items: center;
+            justify-content: center;
             gap: 7px;
             background: linear-gradient(135deg, #7c3aed, #6366f1);
             border: 1px solid rgba(124, 58, 237, 0.4);
             color: #ffffff;
             font-size: 12px;
             font-weight: 600;
-            padding: 6px 16px;
+            padding: 0 16px;
+            height: 32px;
             border-radius: 6px;
             cursor: pointer;
+            box-sizing: border-box;
             box-shadow: 0 2px 10px rgba(124, 58, 237, 0.35);
             transition: all 0.15s;
           }

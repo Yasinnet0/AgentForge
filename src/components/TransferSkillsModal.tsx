@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { 
   X, 
@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { ScannedSkill, SupportedAgent } from '../types/agent';
 import { logActivity } from '../services/activityLogger';
+import { useModalTransition } from '../hooks/useModalTransition';
 
 interface TransferSkillsModalProps {
   isOpen: boolean;
@@ -27,7 +28,7 @@ interface TransferSkillsModalProps {
   onSkillsTransferred?: (count: number, mode: 'copy' | 'move', targetAgentNames: string[]) => void;
 }
 
-// Memoized individual skill row to prevent re-rendering the entire list on every single toggle
+// Skill row
 interface SkillCheckRowProps {
   skill: ScannedSkill;
   slug: string;
@@ -92,37 +93,34 @@ export const TransferSkillsModal: React.FC<TransferSkillsModalProps> = ({
   initialSelectedSlugs,
   onSkillsTransferred
 }) => {
-  // Available detected agents
+  const { isRendered, isClosing, handleClose } = useModalTransition(isOpen, onClose, 140);
+
+  // State
   const availableAgents = useMemo(() => agents.filter((a) => a.detected || a.selected), [agents]);
 
-  // Source agent state
   const [sourceAgentId, setSourceAgentId] = useState<string>('');
-  // Target agent IDs state
   const [targetAgentIds, setTargetAgentIds] = useState<string[]>([]);
-  // Transfer mode: 'copy' | 'move'
   const [mode, setMode] = useState<'copy' | 'move'>('copy');
-  // Selected skill slugs to transfer
   const [selectedSlugs, setSelectedSlugs] = useState<string[]>([]);
-  // Search filter query
   const [searchQuery, setSearchQuery] = useState('');
-  // Submitting state
   const [isSubmitting, setIsSubmitting] = useState(false);
-  // Error message
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Initialize or reset on open
+  const prevIsOpenRef = useRef(false);
+
+  // Effects
   useEffect(() => {
-    if (isOpen && availableAgents.length > 0) {
+    if (isOpen && !prevIsOpenRef.current && availableAgents.length > 0) {
       setErrorMsg(null);
       setSearchQuery('');
 
-      // Pick source agent: initialSourceAgentId or first agent with standalone skills
+      // Default source
       const defaultSource = initialSourceAgentId && availableAgents.some((a) => a.id === initialSourceAgentId)
         ? initialSourceAgentId
         : availableAgents.find((a) => skills.some((s) => s.sourceAgentId === a.id && !s.pluginName))?.id || availableAgents[0]?.id || '';
       setSourceAgentId(defaultSource);
 
-      // Default target: the other agent(s)
+      // Default target
       const potentialTargets = availableAgents.filter((a) => a.id !== defaultSource);
       if (potentialTargets.length > 0) {
         setTargetAgentIds([potentialTargets[0].id]);
@@ -136,29 +134,31 @@ export const TransferSkillsModal: React.FC<TransferSkillsModalProps> = ({
       } else if (initialSelectedSlugs && initialSelectedSlugs.length > 0) {
         setSelectedSlugs(initialSelectedSlugs);
       } else {
-        // Pre-select all standalone skills from this source agent by default
         const sourceSkills = skills.filter((s) => s.sourceAgentId === defaultSource && !s.pluginName);
         setSelectedSlugs(sourceSkills.map((s) => s.folderName || s.name));
       }
-
-      // Escape listener
-      const handleKeyDown = (e: KeyboardEvent) => {
-        if (e.key === 'Escape') {
-          onClose();
-        }
-      };
-      window.addEventListener('keydown', handleKeyDown);
-      return () => window.removeEventListener('keydown', handleKeyDown);
     }
-  }, [isOpen, availableAgents, skills, initialSourceAgentId, initialSkillSlug, initialSelectedSlugs, onClose]);
+    prevIsOpenRef.current = isOpen;
+  }, [isOpen, availableAgents, skills, initialSourceAgentId, initialSkillSlug, initialSelectedSlugs]);
 
-  // Skills belonging to the currently selected source agent
+  // Keydown
+  useEffect(() => {
+    if (!isRendered) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        handleClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isRendered, handleClose]);
+
+  // Computed
   const sourceSkills = useMemo(() => {
     if (!sourceAgentId) return [];
     return skills.filter((s) => s.sourceAgentId === sourceAgentId && !s.pluginName);
   }, [skills, sourceAgentId]);
 
-  // Filtered source skills based on search query
   const filteredSourceSkills = useMemo(() => {
     if (!searchQuery.trim()) return sourceSkills;
     const q = searchQuery.toLowerCase().trim();
@@ -169,22 +169,18 @@ export const TransferSkillsModal: React.FC<TransferSkillsModalProps> = ({
     );
   }, [sourceSkills, searchQuery]);
 
-  // Current source agent object
   const currentSourceAgent = useMemo(
     () => availableAgents.find((a) => a.id === sourceAgentId),
     [availableAgents, sourceAgentId]
   );
 
-  // Target agent objects
   const currentTargetAgents = useMemo(
     () => availableAgents.filter((a) => targetAgentIds.includes(a.id)),
     [availableAgents, targetAgentIds]
   );
 
-  // Fast O(1) set lookup for selected slugs
   const selectedSlugsSet = useMemo(() => new Set(selectedSlugs), [selectedSlugs]);
 
-  // Precompute target agent installation map for instant O(1) row lookups instead of O(N * M * K)
   const installedTargetsMap = useMemo(() => {
     const map = new Map<string, string[]>();
     for (const t of currentTargetAgents) {
@@ -208,12 +204,9 @@ export const TransferSkillsModal: React.FC<TransferSkillsModalProps> = ({
     return map;
   }, [currentTargetAgents, skills]);
 
-  // When source agent changes, update target list and default selected skills
+  // Handlers
   const handleSourceAgentChange = (newSourceId: string) => {
-    setSourceAgentId(newSourceId);
-    // Exclude source from targets
     setTargetAgentIds((prev) => prev.filter((id) => id !== newSourceId));
-    // Default to all skills of new source
     const newSkills = skills.filter((s) => s.sourceAgentId === newSourceId);
     setSelectedSlugs(newSkills.map((s) => s.folderName || s.name));
   };
@@ -301,7 +294,7 @@ export const TransferSkillsModal: React.FC<TransferSkillsModalProps> = ({
         onSkillsTransferred(count, mode, targetNames);
       }
 
-      onClose();
+      handleClose();
     } catch (err: any) {
       setErrorMsg(err.message || 'An error occurred during skill transfer.');
     } finally {
@@ -309,11 +302,11 @@ export const TransferSkillsModal: React.FC<TransferSkillsModalProps> = ({
     }
   };
 
-  if (!isOpen) return null;
+  if (!isRendered) return null;
 
   return createPortal(
-    <div className="transfer-modal-overlay" onClick={onClose}>
-      <div className="transfer-modal-card" onClick={(e) => e.stopPropagation()}>
+    <div className={`transfer-modal-overlay ${isClosing ? 'is-closing' : ''}`} onClick={handleClose}>
+      <div className={`transfer-modal-card ${isClosing ? 'is-closing' : ''}`} onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="transfer-modal-header">
           <div className="header-icon-box">
@@ -325,7 +318,7 @@ export const TransferSkillsModal: React.FC<TransferSkillsModalProps> = ({
               Copy or move skills seamlessly between your local AI agent environments.
             </p>
           </div>
-          <button className="close-btn" onClick={onClose} aria-label="Close modal">
+          <button className="close-btn" onClick={handleClose} aria-label="Close modal">
             <X size={16} />
           </button>
         </div>
@@ -510,7 +503,7 @@ export const TransferSkillsModal: React.FC<TransferSkillsModalProps> = ({
               <button
                 type="button"
                 className="cancel-action-btn"
-                onClick={onClose}
+                onClick={handleClose}
                 disabled={isSubmitting}
               >
                 Cancel
@@ -540,28 +533,59 @@ export const TransferSkillsModal: React.FC<TransferSkillsModalProps> = ({
         </form>
 
         <style>{`
+          @keyframes modalOverlayFadeIn {
+            0% { opacity: 0; }
+            100% { opacity: 1; }
+          }
+          @keyframes modalOverlayFadeOut {
+            0% { opacity: 1; }
+            100% { opacity: 0; }
+          }
+          @keyframes modalCardScaleIn {
+            0% {
+              opacity: 0;
+              transform: translate3d(0, 22px, 0) scale(0.95);
+            }
+            100% {
+              opacity: 1;
+              transform: translate3d(0, 0, 0) scale(1);
+            }
+          }
+          @keyframes modalCardScaleOut {
+            0% {
+              opacity: 1;
+              transform: translate3d(0, 0, 0) scale(1);
+            }
+            100% {
+              opacity: 0;
+              transform: translate3d(0, 14px, 0) scale(0.96);
+            }
+          }
+
           .transfer-modal-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            width: 100vw;
-            height: 100vh;
-            background: rgba(3, 7, 18, 0.88);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 100000;
-            padding: 24px;
-            animation: fadeIn 0.12s ease-out;
-            box-sizing: border-box;
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            bottom: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            background: rgba(3, 7, 18, 0.82) !important;
+            backdrop-filter: blur(8px) !important;
+            -webkit-backdrop-filter: blur(8px) !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            z-index: 100000 !important;
+            padding: 24px !important;
+            animation: modalOverlayFadeIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+            box-sizing: border-box !important;
             -webkit-app-region: no-drag !important;
           }
 
-          @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
+          .transfer-modal-overlay.is-closing {
+            animation: modalOverlayFadeOut 0.16s cubic-bezier(0.4, 0, 1, 1) forwards !important;
+            pointer-events: none !important;
           }
 
           .transfer-modal-card {
@@ -580,7 +604,7 @@ export const TransferSkillsModal: React.FC<TransferSkillsModalProps> = ({
             will-change: transform, opacity;
             transform: translate3d(0, 0, 0);
             contain: layout;
-            animation: modalScale 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+            animation: modalCardScaleIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
             position: relative;
             z-index: 100001;
             box-sizing: border-box;
@@ -589,15 +613,9 @@ export const TransferSkillsModal: React.FC<TransferSkillsModalProps> = ({
             -webkit-user-select: text !important;
           }
 
-          @keyframes modalScale {
-            from {
-              opacity: 0;
-              transform: translate3d(0, 8px, 0) scale(0.985);
-            }
-            to {
-              opacity: 1;
-              transform: translate3d(0, 0, 0) scale(1);
-            }
+          .transfer-modal-card.is-closing {
+            animation: modalCardScaleOut 0.16s cubic-bezier(0.4, 0, 1, 1) forwards !important;
+            pointer-events: none !important;
           }
 
           .transfer-modal-header {
@@ -1047,9 +1065,14 @@ export const TransferSkillsModal: React.FC<TransferSkillsModalProps> = ({
             color: #94a3b8;
             font-size: 12px;
             font-weight: 500;
-            padding: 6px 14px;
+            padding: 0 14px;
+            height: 32px;
             border-radius: 6px;
             cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            box-sizing: border-box;
             transition: background-color 0.12s ease, color 0.12s ease;
           }
 
@@ -1061,22 +1084,25 @@ export const TransferSkillsModal: React.FC<TransferSkillsModalProps> = ({
           .submit-transfer-btn {
             display: inline-flex;
             align-items: center;
+            justify-content: center;
             gap: 7px;
             background: linear-gradient(135deg, #9333ea, #7c3aed);
             border: 1px solid rgba(147, 51, 234, 0.45);
             color: #ffffff;
             font-size: 12px;
             font-weight: 600;
-            padding: 6px 16px;
+            padding: 0 16px;
+            height: 32px;
             border-radius: 6px;
             cursor: pointer;
-            box-shadow: 0 2px 10px rgba(124, 58, 237, 0.35);
+            box-sizing: border-box;
+            box-shadow: 0 2px 10px rgba(147, 51, 234, 0.35);
             transition: filter 0.12s ease, box-shadow 0.12s ease;
           }
 
           .submit-transfer-btn:hover:not(:disabled) {
             filter: brightness(1.1);
-            box-shadow: 0 4px 14px rgba(124, 58, 237, 0.5);
+            box-shadow: 0 4px 14px rgba(147, 51, 234, 0.45);
           }
 
           .submit-transfer-btn:disabled {

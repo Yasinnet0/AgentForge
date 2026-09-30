@@ -1,7 +1,7 @@
 import { CatalogSkill } from '../types/catalog';
 
 export const SKILLS_CATALOG: CatalogSkill[] = [
-  // 1. Frontend & UI
+  // Frontend & UI
   {
     id: '3d-web-experience',
     name: '3D Web Experience',
@@ -43,7 +43,7 @@ export const SKILLS_CATALOG: CatalogSkill[] = [
     sourceRepo: 'sickn33/agentic-awesome-skills',
   },
 
-  // 2. Backend & API
+  // Backend & API
   {
     id: 'api-design-principles',
     name: 'API Design Principles',
@@ -85,7 +85,7 @@ export const SKILLS_CATALOG: CatalogSkill[] = [
     sourceRepo: 'sickn33/agentic-awesome-skills',
   },
 
-  // 3. Database
+  // Database
   {
     id: 'database-architect',
     name: 'Database Architect',
@@ -107,7 +107,7 @@ export const SKILLS_CATALOG: CatalogSkill[] = [
     sourceRepo: 'sickn33/agentic-awesome-skills',
   },
 
-  // 4. AI & Multi-Agent Systems
+  // AI & Multi-Agent
   {
     id: 'agent-orchestrator',
     name: 'Agent Orchestrator',
@@ -159,7 +159,7 @@ export const SKILLS_CATALOG: CatalogSkill[] = [
     sourceRepo: 'sickn33/agentic-awesome-skills',
   },
 
-  // 5. DevOps & Git
+  // DevOps & Git
   {
     id: 'git-advanced-workflows',
     name: 'Git Advanced Workflows',
@@ -191,7 +191,7 @@ export const SKILLS_CATALOG: CatalogSkill[] = [
     sourceRepo: 'sickn33/agentic-awesome-skills',
   },
 
-  // 6. Testing & Debugging
+  // Testing & Debugging
   {
     id: 'test-driven-development',
     name: 'Test-Driven Development (TDD)',
@@ -223,7 +223,7 @@ export const SKILLS_CATALOG: CatalogSkill[] = [
     sourceRepo: 'sickn33/agentic-awesome-skills',
   },
 
-  // 7. Security
+  // Security
   {
     id: 'api-security-best-practices',
     name: 'API Security Best Practices',
@@ -255,7 +255,7 @@ export const SKILLS_CATALOG: CatalogSkill[] = [
     sourceRepo: 'sickn33/agentic-awesome-skills',
   },
 
-  // 8. Desktop & Mobile
+  // Desktop & Mobile
   {
     id: 'electron-development',
     name: 'Electron Desktop Development',
