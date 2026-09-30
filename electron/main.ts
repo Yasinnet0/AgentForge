@@ -1,7 +1,8 @@
-import { app, BrowserWindow, ipcMain, screen, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, screen, shell, dialog } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
+import AdmZip from 'adm-zip';
 
 const isDev = process.env.NODE_ENV === 'development';
 
@@ -124,7 +125,7 @@ function createWindow() {
     mainWindow.maximize();
   }
 
-  // Intercept new window requests (e.g. target="_blank" links) to open in system browser
+  // Open external links in browser
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith('http:') || url.startsWith('https:')) {
       shell.openExternal(url);
@@ -132,7 +133,7 @@ function createWindow() {
     return { action: 'deny' };
   });
 
-  // Intercept in-window navigation for external URLs
+  // External navigation
   mainWindow.webContents.on('will-navigate', (event, url) => {
     if (url.startsWith('http:') || url.startsWith('https:')) {
       if (isDev && (url.includes('localhost:5173') || url.includes('127.0.0.1:5173'))) {
@@ -147,7 +148,7 @@ function createWindow() {
     mainWindow?.show();
   });
 
-  // Fallback to guarantee window visibility
+  // Window visibility
   setTimeout(() => {
     if (mainWindow && !mainWindow.isVisible()) {
       mainWindow.show();
@@ -206,7 +207,7 @@ function createWindow() {
   });
 }
 
-// Window IPC handlers
+// Window IPC
 ipcMain.on('window:minimize', () => {
   mainWindow?.minimize();
 });
@@ -391,7 +392,7 @@ ipcMain.handle('agents:scanCapabilities', async (_event, agentConfigs: any[]) =>
     const resolvedMcp = resolveHome(agent.mcpConfigPath);
     const resolvedPlugins = resolveHome(agent.pluginsDir);
 
-    // 1. Scan direct skills
+    // Scan direct skills
     if (resolvedSkills && fs.existsSync(resolvedSkills)) {
       try {
         const entries = fs.readdirSync(resolvedSkills, { withFileTypes: true });
@@ -419,7 +420,7 @@ ipcMain.handle('agents:scanCapabilities', async (_event, agentConfigs: any[]) =>
       }
     }
 
-    // 2. Scan plugins & plugin-nested skills/MCPs
+    // Scan plugins
     if (resolvedPlugins && fs.existsSync(resolvedPlugins)) {
       try {
         const pluginEntries = fs.readdirSync(resolvedPlugins, { withFileTypes: true });
@@ -447,7 +448,7 @@ ipcMain.handle('agents:scanCapabilities', async (_event, agentConfigs: any[]) =>
               } catch {}
             }
 
-            // Plugin bundled skills count
+            // Plugin skills count
             const pluginSkillsDir = path.join(pluginPath, 'skills');
             if (fs.existsSync(pluginSkillsDir)) {
               try {
@@ -468,7 +469,7 @@ ipcMain.handle('agents:scanCapabilities', async (_event, agentConfigs: any[]) =>
               } catch {}
             }
 
-            // Plugin bundled MCPs count
+            // Plugin MCPs count
             const pluginMcpPath = path.join(pluginPath, 'mcp_config.json');
             if (fs.existsSync(pluginMcpPath)) {
               try {
@@ -509,7 +510,7 @@ ipcMain.handle('agents:scanCapabilities', async (_event, agentConfigs: any[]) =>
       }
     }
 
-    // 3. Scan primary MCP config file
+    // Scan MCP configs
     if (resolvedMcp && fs.existsSync(resolvedMcp)) {
       try {
         const mcpContent = JSON.parse(fs.readFileSync(resolvedMcp, 'utf-8'));
@@ -543,11 +544,7 @@ ipcMain.handle('agents:scanCapabilities', async (_event, agentConfigs: any[]) =>
   };
 });
 
-// ==========================================
-// Catalog Provisioning Handlers (Multi-Agent)
-// ==========================================
-
-// 1-Click Skill Install: Fetches once over HTTPS from GitHub, distributes to all selected agents
+// Catalog Provisioning
 ipcMain.handle('catalog:installSkill', async (_event, params: {
   skillId: string;
   rawUrl: string;
@@ -559,7 +556,7 @@ ipcMain.handle('catalog:installSkill', async (_event, params: {
   }
 
   try {
-    // Download content ONCE over HTTPS into memory
+    // Download content
     const response = await fetch(rawUrl, {
       headers: { 'User-Agent': 'AgentForge-Desktop' },
     });
@@ -573,7 +570,7 @@ ipcMain.handle('catalog:installSkill', async (_event, params: {
 
     const installedAgents: string[] = [];
 
-    // Write to each selected agent target
+    // Write targets
     for (const target of targets) {
       const resolvedSkillsDir = resolveHome(target.skillsDir);
       if (!resolvedSkillsDir) continue;
@@ -595,7 +592,7 @@ ipcMain.handle('catalog:installSkill', async (_event, params: {
   }
 });
 
-// 1-Click Skill Uninstall: Removes from selected agents
+// Skill Removal
 ipcMain.handle('catalog:uninstallSkill', async (_event, params: {
   skillId: string;
   targets: Array<{ agentId: string; skillsDir: string }>;
@@ -624,7 +621,7 @@ ipcMain.handle('catalog:uninstallSkill', async (_event, params: {
   }
 });
 
-// Create Custom Skill ("Forge Skill"): Writes a custom authored skill directly to selected agents
+// Custom Skill Authoring
 ipcMain.handle('skills:createCustomSkill', async (_event, params: {
   folderName: string;
   skillContent: string;
@@ -635,7 +632,7 @@ ipcMain.handle('skills:createCustomSkill', async (_event, params: {
     return { success: false, error: 'Folder name, content, and at least one target agent are required' };
   }
 
-  // Sanitize folder name to prevent directory traversal
+  // Sanitize folder name
   const sanitizedFolder = folderName.trim().replace(/[^a-zA-Z0-9_-]/g, '-').toLowerCase();
   if (!sanitizedFolder) {
     return { success: false, error: 'Invalid skill folder name' };
@@ -664,7 +661,7 @@ ipcMain.handle('skills:createCustomSkill', async (_event, params: {
   }
 });
 
-// Transfer Skills: Copy or Move skills across local AI agents
+// Skill Transfer
 ipcMain.handle('skills:transferSkills', async (_event, params: {
   sourceAgentId: string;
   sourceSkillsDir: string;
@@ -700,7 +697,7 @@ ipcMain.handle('skills:transferSkills', async (_event, params: {
       const resolvedTargetSkillsDir = resolveHome(target.skillsDir);
       if (!resolvedTargetSkillsDir) continue;
 
-      // Avoid copying back to the same directory
+      // Skip identical directory
       if (path.resolve(resolvedSourceDir) === path.resolve(resolvedTargetSkillsDir)) {
         continue;
       }
@@ -735,7 +732,7 @@ ipcMain.handle('skills:transferSkills', async (_event, params: {
   };
 });
 
-// 1-Click MCP Install: Injects server definition into selected agents' mcp_config.json
+// MCP Configuration
 ipcMain.handle('catalog:installMcp', async (_event, params: {
   serverKey: string;
   serverConfig: any;
@@ -779,7 +776,6 @@ ipcMain.handle('catalog:installMcp', async (_event, params: {
   }
 });
 
-// 1-Click MCP Uninstall: Removes server definition from selected agents' mcp_config.json
 ipcMain.handle('catalog:uninstallMcp', async (_event, params: {
   serverKey: string;
   targets: Array<{ agentId: string; mcpConfigPath: string }>;
@@ -819,7 +815,7 @@ ipcMain.handle('catalog:uninstallMcp', async (_event, params: {
   }
 });
 
-// 1-Click Plugin Kit Install: Downloads each skill ONCE and equips all selected agents
+// Plugin Kit Installation
 ipcMain.handle('catalog:installPlugin', async (_event, params: {
   pluginId: string;
   skills: Array<{ skillId: string; rawUrl: string }>;
@@ -831,7 +827,7 @@ ipcMain.handle('catalog:installPlugin', async (_event, params: {
   }
 
   try {
-    // Download all skills once into memory
+    // Download bundled skills
     const skillContents = new Map<string, string>();
     for (const item of skills) {
       try {
@@ -846,7 +842,7 @@ ipcMain.handle('catalog:installPlugin', async (_event, params: {
       }
     }
 
-    // Write to each selected agent target
+    // Write targets
     let writeCount = 0;
     for (const target of targets) {
       const resolvedSkillsDir = resolveHome(target.skillsDir);
@@ -864,6 +860,349 @@ ipcMain.handle('catalog:installPlugin', async (_event, params: {
   } catch (err: any) {
     console.error('Error installing plugin kit:', err);
     return { success: false, error: err.message || 'Failed installing plugin kit' };
+  }
+});
+
+// Rules
+ipcMain.handle('rules:read', async (_event, targetPath: string) => {
+  if (!targetPath) {
+    return { content: '', path: '', exists: false };
+  }
+  const resolved = resolveHome(targetPath);
+  try {
+    if (fs.existsSync(resolved)) {
+      const stat = fs.statSync(resolved);
+      if (stat.isFile()) {
+        const content = fs.readFileSync(resolved, 'utf-8');
+        return { content, path: resolved, exists: true };
+      } else if (stat.isDirectory()) {
+        const files = fs.readdirSync(resolved).filter((f) => f.endsWith('.md') || f.endsWith('.mdc'));
+        let combined = '';
+        for (const file of files) {
+          combined += `\n# Rule: ${file}\n` + fs.readFileSync(path.join(resolved, file), 'utf-8') + '\n';
+        }
+        return { content: combined.trim(), path: resolved, exists: true };
+      }
+    }
+  } catch (err) {
+    console.warn(`Failed to read rules from ${resolved}:`, err);
+  }
+  return { content: '', path: resolved, exists: false };
+});
+
+ipcMain.handle('rules:save', async (_event, params: {
+  targets: Array<{ agentId: string; rulesPath: string }>;
+  content: string;
+  syncGeminiMd?: boolean;
+}) => {
+  const { targets, content, syncGeminiMd } = params;
+  if (!Array.isArray(targets) || targets.length === 0) {
+    return { success: false, error: 'At least one target agent is required' };
+  }
+
+  try {
+    let writeCount = 0;
+    const installedAgents: string[] = [];
+
+    for (const target of targets) {
+      const resolved = resolveHome(target.rulesPath);
+      if (!resolved) continue;
+
+      fs.mkdirSync(path.dirname(resolved), { recursive: true });
+      fs.writeFileSync(resolved, content, 'utf-8');
+      writeCount++;
+      installedAgents.push(target.agentId);
+
+      // Antigravity sync
+      if (target.agentId === 'antigravity' || syncGeminiMd) {
+        const dir = path.dirname(resolved);
+        const altFile = resolved.endsWith('AGENTS.md')
+          ? path.join(dir, 'GEMINI.md')
+          : path.join(dir, 'AGENTS.md');
+        try {
+          fs.writeFileSync(altFile, content, 'utf-8');
+        } catch {}
+      }
+    }
+
+    return { success: true, count: writeCount, installedAgents };
+  } catch (err: any) {
+    console.error('Error saving agent rules:', err);
+    return { success: false, error: err.message || 'Failed saving agent rules' };
+  }
+});
+
+// Read agent rules
+ipcMain.handle('rules:readAgentRules', async (_event, agentConfigs: Array<{ id: string; rulesPath: string }>) => {
+  const results: Record<string, { content: string; path: string; exists: boolean }> = {};
+  if (!Array.isArray(agentConfigs)) return results;
+
+  for (const agent of agentConfigs) {
+    const resolved = resolveHome(agent.rulesPath);
+    if (!resolved) {
+      results[agent.id] = { content: '', path: '', exists: false };
+      continue;
+    }
+
+    try {
+      if (fs.existsSync(resolved)) {
+        const stat = fs.statSync(resolved);
+        if (stat.isFile()) {
+          const content = fs.readFileSync(resolved, 'utf-8');
+          results[agent.id] = { content, path: resolved, exists: true };
+          continue;
+        } else if (stat.isDirectory()) {
+          const files = fs.readdirSync(resolved).filter((f) => f.endsWith('.md') || f.endsWith('.mdc'));
+          let combined = '';
+          for (const file of files) {
+            combined += `\n# Rule: ${file}\n` + fs.readFileSync(path.join(resolved, file), 'utf-8') + '\n';
+          }
+          results[agent.id] = { content: combined.trim(), path: resolved, exists: true };
+          continue;
+        }
+      }
+      // Fallback GEMINI.md
+      if (agent.id === 'antigravity') {
+        const alt = path.join(path.dirname(resolved), 'GEMINI.md');
+        if (fs.existsSync(alt)) {
+          const content = fs.readFileSync(alt, 'utf-8');
+          results[agent.id] = { content, path: alt, exists: true };
+          continue;
+        }
+      }
+    } catch {}
+
+    results[agent.id] = { content: '', path: resolved, exists: false };
+  }
+
+  return results;
+});
+
+// Dialogs
+ipcMain.handle('dialog:showSaveDialog', async (_event, options: { defaultPath?: string; filters?: Array<{ name: string; extensions: string[] }> }) => {
+  const win = BrowserWindow.getFocusedWindow() || mainWindow;
+  if (!win) return { canceled: true };
+  return await dialog.showSaveDialog(win, options);
+});
+
+ipcMain.handle('dialog:showOpenDirectory', async (_event, options?: { defaultPath?: string }) => {
+  const win = BrowserWindow.getFocusedWindow() || mainWindow;
+  if (!win) return { canceled: true, filePaths: [] };
+  return await dialog.showOpenDialog(win, {
+    properties: ['openDirectory', 'createDirectory'],
+    ...options,
+  });
+});
+
+// Export plugin ZIP
+ipcMain.handle('plugin:exportInstalledPluginZip', async (_event, params: { pluginPath: string; defaultZipName: string }) => {
+  const win = BrowserWindow.getFocusedWindow() || mainWindow;
+  if (!win) return { success: false, error: 'No active window' };
+
+  const saveRes = await dialog.showSaveDialog(win, {
+    defaultPath: params.defaultZipName || 'plugin-bundle.zip',
+    filters: [{ name: 'ZIP Archive', extensions: ['zip'] }]
+  });
+
+  if (saveRes.canceled || !saveRes.filePath) {
+    return { success: false, canceled: true };
+  }
+
+  try {
+    const resolved = resolveHome(params.pluginPath);
+    if (!resolved || !fs.existsSync(resolved)) {
+      return { success: false, error: 'Plugin directory not found on disk' };
+    }
+
+    const zip = new AdmZip();
+    zip.addLocalFolder(resolved);
+    zip.writeZip(saveRes.filePath);
+    return { success: true, exportPath: saveRes.filePath };
+  } catch (err: any) {
+    console.error('Error exporting installed plugin zip:', err);
+    return { success: false, error: err.message || 'Failed to export zip' };
+  }
+});
+
+// Forge Plugin Bundle
+ipcMain.handle('plugin:forgeBundle', async (_event, params: {
+  folderName: string;
+  manifest: {
+    name: string;
+    displayName: string;
+    version: string;
+    description: string;
+    author: string;
+    category?: string;
+    tags?: string[];
+    skills?: string[];
+    mcpServers?: Record<string, any>;
+    rules?: string[];
+  };
+  selectedSkills: Array<{
+    folderName: string;
+    sourcePath: string;
+  }>;
+  selectedMcps: Array<{
+    name: string;
+    command?: string;
+    args?: string[];
+    env?: Record<string, string>;
+    url?: string;
+    transport?: 'stdio' | 'sse';
+  }>;
+  selectedRules: Array<{
+    filename: string;
+    title?: string;
+    content: string;
+  }>;
+  targetAction: 'install' | 'export-zip' | 'export-dir';
+  targetAgents?: Array<{ agentId: string; pluginsDir: string; name?: string }>;
+  exportDestinationPath?: string;
+}) => {
+  const { folderName, manifest, selectedSkills, selectedMcps, selectedRules, targetAction, targetAgents, exportDestinationPath } = params;
+  const cleanFolderName = folderName.trim().replace(/[^a-zA-Z0-9_-]/g, '-').toLowerCase();
+
+  if (!cleanFolderName) {
+    return { success: false, error: 'Valid folder name is required' };
+  }
+
+  // Staging directory
+  const stagingRoot = path.join(os.tmpdir(), `agentforge-bundle-${Date.now()}`);
+  const bundleDir = path.join(stagingRoot, cleanFolderName);
+
+  try {
+    fs.mkdirSync(bundleDir, { recursive: true });
+
+    // Write plugin.json
+    const finalManifest = {
+      name: cleanFolderName,
+      displayName: manifest.displayName || cleanFolderName,
+      version: manifest.version || '1.0.0',
+      description: manifest.description || '',
+      author: manifest.author || 'Local',
+      category: manifest.category || 'Development',
+      tags: manifest.tags || [],
+      skills: selectedSkills.map((s) => s.folderName),
+      rules: selectedRules.map((r) => r.filename.endsWith('.md') ? r.filename : `${r.filename}.md`),
+      ...(manifest.mcpServers ? { mcpServers: manifest.mcpServers } : {}),
+    };
+
+    fs.writeFileSync(path.join(bundleDir, 'plugin.json'), JSON.stringify(finalManifest, null, 2), 'utf-8');
+
+    // Bundle skills
+    if (selectedSkills && selectedSkills.length > 0) {
+      const skillsDir = path.join(bundleDir, 'skills');
+      fs.mkdirSync(skillsDir, { recursive: true });
+
+      for (const skill of selectedSkills) {
+        const cleanSkillFolder = skill.folderName.trim().replace(/[^a-zA-Z0-9_-]/g, '-');
+        if (!cleanSkillFolder) continue;
+
+        const resolvedSource = resolveHome(skill.sourcePath);
+        const destSkillDir = path.join(skillsDir, cleanSkillFolder);
+
+        if (resolvedSource && fs.existsSync(resolvedSource)) {
+          const stat = fs.statSync(resolvedSource);
+          if (stat.isDirectory()) {
+            fs.mkdirSync(destSkillDir, { recursive: true });
+            fs.cpSync(resolvedSource, destSkillDir, { recursive: true, force: true });
+          } else if (stat.isFile()) {
+            fs.mkdirSync(destSkillDir, { recursive: true });
+            fs.copyFileSync(resolvedSource, path.join(destSkillDir, 'SKILL.md'));
+          }
+        }
+      }
+    }
+
+    // Bundle MCP servers
+    if (selectedMcps && selectedMcps.length > 0) {
+      const serversObj: Record<string, any> = {};
+      for (const mcp of selectedMcps) {
+        serversObj[mcp.name] = {
+          ...(mcp.command ? { command: mcp.command } : {}),
+          ...(mcp.args && mcp.args.length > 0 ? { args: mcp.args } : {}),
+          ...(mcp.env && Object.keys(mcp.env).length > 0 ? { env: mcp.env } : {}),
+          ...(mcp.url ? { url: mcp.url } : {}),
+          ...(mcp.transport ? { transport: mcp.transport } : {}),
+        };
+      }
+      fs.writeFileSync(
+        path.join(bundleDir, 'mcp_config.json'),
+        JSON.stringify({ mcpServers: serversObj }, null, 2),
+        'utf-8'
+      );
+    }
+
+    // Bundle rules
+    if (selectedRules && selectedRules.length > 0) {
+      const rulesDir = path.join(bundleDir, 'rules');
+      fs.mkdirSync(rulesDir, { recursive: true });
+
+      for (const rule of selectedRules) {
+        const cleanRuleName = rule.filename.trim().replace(/[^a-zA-Z0-9._-]/g, '-');
+        const filename = cleanRuleName.endsWith('.md') ? cleanRuleName : `${cleanRuleName}.md`;
+        fs.writeFileSync(path.join(rulesDir, filename), rule.content, 'utf-8');
+      }
+    }
+
+    // Target action
+    if (targetAction === 'install') {
+      if (!Array.isArray(targetAgents) || targetAgents.length === 0) {
+        return { success: false, error: 'At least one target agent is required for installation' };
+      }
+
+      let writeCount = 0;
+      const installedAgents: string[] = [];
+
+      for (const agent of targetAgents) {
+        const resolvedPluginsDir = resolveHome(agent.pluginsDir);
+        if (!resolvedPluginsDir) continue;
+
+        fs.mkdirSync(resolvedPluginsDir, { recursive: true });
+        const agentPluginDest = path.join(resolvedPluginsDir, cleanFolderName);
+        fs.cpSync(bundleDir, agentPluginDest, { recursive: true, force: true });
+        writeCount++;
+        installedAgents.push(agent.agentId);
+      }
+
+      return { success: true, count: writeCount, installedAgents };
+    } else if (targetAction === 'export-zip') {
+      if (!exportDestinationPath) {
+        return { success: false, error: 'Destination path for zip file is required' };
+      }
+
+      const resolvedDest = resolveHome(exportDestinationPath);
+      fs.mkdirSync(path.dirname(resolvedDest), { recursive: true });
+
+      const zip = new AdmZip();
+      zip.addLocalFolder(bundleDir);
+      zip.writeZip(resolvedDest);
+
+      return { success: true, exportPath: resolvedDest };
+    } else if (targetAction === 'export-dir') {
+      if (!exportDestinationPath) {
+        return { success: false, error: 'Destination folder path is required' };
+      }
+
+      const resolvedDest = resolveHome(exportDestinationPath);
+      const targetFolder = path.join(resolvedDest, cleanFolderName);
+      fs.mkdirSync(targetFolder, { recursive: true });
+      fs.cpSync(bundleDir, targetFolder, { recursive: true, force: true });
+
+      return { success: true, exportPath: targetFolder };
+    }
+
+    return { success: false, error: 'Unknown target action' };
+  } catch (err: any) {
+    console.error('Error in plugin:forgeBundle:', err);
+    return { success: false, error: err.message || 'Failed to forge plugin bundle' };
+  } finally {
+    try {
+      if (fs.existsSync(stagingRoot)) {
+        fs.rmSync(stagingRoot, { recursive: true, force: true });
+      }
+    } catch {}
   }
 });
 

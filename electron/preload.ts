@@ -145,6 +145,63 @@ export interface ProvisionResult {
   error?: string;
 }
 
+export interface SaveRulesParams {
+  targets: Array<{ agentId: string; rulesPath: string }>;
+  content: string;
+  syncGeminiMd?: boolean;
+}
+
+export interface RulesFileResult {
+  content: string;
+  path: string;
+  exists: boolean;
+}
+
+export interface ForgePluginBundleParams {
+  folderName: string;
+  manifest: {
+    name: string;
+    displayName: string;
+    version: string;
+    description: string;
+    author: string;
+    category?: string;
+    tags?: string[];
+    skills?: string[];
+    mcpServers?: Record<string, any>;
+    rules?: string[];
+  };
+  selectedSkills: Array<{
+    folderName: string;
+    sourcePath: string;
+  }>;
+  selectedMcps: Array<{
+    name: string;
+    command?: string;
+    args?: string[];
+    env?: Record<string, string>;
+    url?: string;
+    transport?: 'stdio' | 'sse';
+  }>;
+  selectedRules: Array<{
+    filename: string;
+    title?: string;
+    content: string;
+  }>;
+  targetAction: 'install' | 'export-zip' | 'export-dir';
+  targetAgents?: Array<{ agentId: string; pluginsDir: string; name?: string }>;
+  exportDestinationPath?: string;
+}
+
+export interface ForgePluginResult {
+  success: boolean;
+  count?: number;
+  exportPath?: string;
+  installedAgents?: string[];
+  error?: string;
+  canceled?: boolean;
+}
+
 export interface ElectronAPI {
   minimizeWindow: () => void;
   maximizeWindow: () => void;
@@ -163,6 +220,15 @@ export interface ElectronAPI {
   installPlugin: (params: InstallPluginParams) => Promise<ProvisionResult>;
   createCustomSkill: (params: CreateSkillParams) => Promise<ProvisionResult>;
   transferSkills: (params: TransferSkillsParams) => Promise<TransferSkillsResult>;
+  readRules: (targetPath: string) => Promise<RulesFileResult>;
+  saveRules: (params: SaveRulesParams) => Promise<ProvisionResult>;
+  readAgentRules: (
+    agentConfigs: Array<{ id: string; rulesPath: string }>
+  ) => Promise<Record<string, RulesFileResult>>;
+  forgePluginBundle: (params: ForgePluginBundleParams) => Promise<ForgePluginResult>;
+  exportInstalledPluginZip: (params: { pluginPath: string; defaultZipName: string }) => Promise<ForgePluginResult>;
+  showSaveDialog: (options: { defaultPath?: string; filters?: Array<{ name: string; extensions: string[] }> }) => Promise<{ canceled: boolean; filePath?: string }>;
+  showOpenDirectory: (options?: { defaultPath?: string }) => Promise<{ canceled: boolean; filePaths: string[] }>;
   openExternal: (url: string) => Promise<boolean>;
   openPath: (targetPath: string) => Promise<boolean>;
 }
@@ -189,6 +255,13 @@ const electronAPI: ElectronAPI = {
   installPlugin: (params: InstallPluginParams) => ipcRenderer.invoke('catalog:installPlugin', params),
   createCustomSkill: (params: CreateSkillParams) => ipcRenderer.invoke('skills:createCustomSkill', params),
   transferSkills: (params: TransferSkillsParams) => ipcRenderer.invoke('skills:transferSkills', params),
+  readRules: (targetPath: string) => ipcRenderer.invoke('rules:read', targetPath),
+  saveRules: (params: SaveRulesParams) => ipcRenderer.invoke('rules:save', params),
+  readAgentRules: (agentConfigs) => ipcRenderer.invoke('rules:readAgentRules', agentConfigs),
+  forgePluginBundle: (params: ForgePluginBundleParams) => ipcRenderer.invoke('plugin:forgeBundle', params),
+  exportInstalledPluginZip: (params) => ipcRenderer.invoke('plugin:exportInstalledPluginZip', params),
+  showSaveDialog: (options) => ipcRenderer.invoke('dialog:showSaveDialog', options),
+  showOpenDirectory: (options) => ipcRenderer.invoke('dialog:showOpenDirectory', options),
   openExternal: (url: string) => ipcRenderer.invoke('app:openExternal', url),
   openPath: (targetPath: string) => ipcRenderer.invoke('app:openPath', targetPath),
 };
