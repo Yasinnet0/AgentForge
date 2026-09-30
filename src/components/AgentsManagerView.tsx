@@ -9,13 +9,16 @@ import {
   Compass, 
   Server, 
   CheckCircle2,
-  FolderOpen
+  FolderOpen,
+  CheckSquare,
+  Square
 } from 'lucide-react';
 
 interface AgentsManagerViewProps {
   agents: SupportedAgent[];
   onToggleAgent: (id: string) => void;
   onSelectOnly: (id: string) => void;
+  onSelectAll?: (select: boolean) => void;
   searchQuery?: string;
   highlightedId?: string | null;
 }
@@ -34,12 +37,27 @@ export const AgentsManagerView: React.FC<AgentsManagerViewProps> = ({
   agents,
   onToggleAgent,
   onSelectOnly,
+  onSelectAll,
   searchQuery = '',
   highlightedId,
 }) => {
   const activeCount = agents.filter((a) => a.selected).length;
+  const allSelected = agents.length > 0 && agents.every((a) => a.selected);
 
-  // Scroll into view when an item is selected from search
+  const handleToggleSelectAll = () => {
+    const nextState = !allSelected;
+    if (onSelectAll) {
+      onSelectAll(nextState);
+    } else {
+      agents.forEach((a) => {
+        if (nextState ? !a.selected : a.selected) {
+          onToggleAgent(a.id);
+        }
+      });
+    }
+  };
+
+  // Scroll into view
   useEffect(() => {
     if (highlightedId) {
       const timer = setTimeout(() => {
@@ -62,12 +80,14 @@ export const AgentsManagerView: React.FC<AgentsManagerViewProps> = ({
 
   return (
     <div className="agents-manager-container">
-      {/* Header Banner */}
+      {/* Header */}
       <div className="agents-manager-header">
         <div>
           <div className="header-title-line">
             <h2 className="view-title">Connected AI Agents</h2>
-            <span className="active-pill font-mono">{activeCount} ACTIVE TARGETS</span>
+            <span className="active-pill font-mono" key={activeCount}>
+              {activeCount} ACTIVE TARGETS
+            </span>
           </div>
           <p className="view-desc">
             Select one or multiple target agents. Skills, MCP servers, and context bundles will install directly into their respective configuration folders.
@@ -76,10 +96,17 @@ export const AgentsManagerView: React.FC<AgentsManagerViewProps> = ({
 
         <div className="header-actions">
           <button 
-            className="secondary-btn"
-            onClick={() => agents.forEach(a => !a.selected && onToggleAgent(a.id))}
+            type="button"
+            className={`select-all-btn ${allSelected ? 'deselect-mode' : 'select-mode'}`}
+            onClick={handleToggleSelectAll}
+            title={allSelected ? 'Deselect all target agents' : 'Select all target agents'}
           >
-            Select All
+            <span className="btn-icon-swap" key={allSelected ? 'icon-deselect' : 'icon-select'}>
+              {allSelected ? <Square size={13} className="btn-icon" /> : <CheckSquare size={13} className="btn-icon" />}
+            </span>
+            <span className="btn-text-swap" key={allSelected ? 'text-deselect' : 'text-select'}>
+              {allSelected ? 'Deselect All' : 'Select All'}
+            </span>
           </button>
         </div>
       </div>
@@ -140,7 +167,7 @@ export const AgentsManagerView: React.FC<AgentsManagerViewProps> = ({
                 </label>
               </div>
 
-              {/* Known Configuration Paths */}
+              {/* Configuration Paths */}
               <div className="agent-paths-section">
                 <div className="path-row">
                   <span className="path-label font-mono">BASE DIR:</span>
@@ -286,6 +313,23 @@ export const AgentsManagerView: React.FC<AgentsManagerViewProps> = ({
           padding: 2px 8px;
           border-radius: 4px;
           border: 1px solid rgba(56, 189, 248, 0.25);
+          transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+          display: inline-block;
+          animation: pillScale 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        @keyframes pillScale {
+          0% {
+            transform: scale(0.92);
+            opacity: 0.8;
+          }
+          50% {
+            transform: scale(1.06);
+          }
+          100% {
+            transform: scale(1);
+            opacity: 1;
+          }
         }
 
         .view-desc {
@@ -295,21 +339,69 @@ export const AgentsManagerView: React.FC<AgentsManagerViewProps> = ({
           line-height: 1.4;
         }
 
-        .secondary-btn {
+        .select-all-btn {
           background: #182032;
           border: 1px solid #22304a;
           color: #cbd5e1;
-          font-size: 11.5px;
+          font-size: 11px;
           font-weight: 600;
-          padding: 6px 12px;
+          height: 28px;
+          padding: 0 12px;
           border-radius: 6px;
           cursor: pointer;
-          transition: all 0.15s ease;
+          transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+          box-sizing: border-box;
+          user-select: none;
         }
 
-        .secondary-btn:hover {
+        .select-all-btn:hover {
           background: #202b42;
+          border-color: #334466;
           color: #ffffff;
+          transform: translateY(-1px);
+        }
+
+        .select-all-btn:active {
+          transform: scale(0.95);
+        }
+
+        .select-all-btn.select-mode:hover {
+          box-shadow: 0 0 14px rgba(99, 102, 241, 0.18);
+        }
+
+        .select-all-btn.deselect-mode {
+          background: rgba(99, 102, 241, 0.12);
+          border-color: rgba(99, 102, 241, 0.35);
+          color: #c7d2fe;
+        }
+
+        .select-all-btn.deselect-mode:hover {
+          background: rgba(239, 68, 68, 0.12);
+          border-color: rgba(239, 68, 68, 0.38);
+          color: #fca5a5;
+          box-shadow: 0 0 14px rgba(239, 68, 68, 0.18);
+        }
+
+        .btn-icon-swap,
+        .btn-text-swap {
+          display: inline-flex;
+          align-items: center;
+          animation: btnFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
+        @keyframes btnFadeIn {
+          0% {
+            opacity: 0;
+            transform: translateY(2px) scale(0.96);
+          }
+          100% {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
         }
 
         .agents-cards-grid {
@@ -326,17 +418,47 @@ export const AgentsManagerView: React.FC<AgentsManagerViewProps> = ({
           display: flex;
           flex-direction: column;
           gap: 12px;
-          transition: all 0.15s ease;
+          position: relative;
+          overflow: hidden;
+          transition: border-color 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+                      background-color 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+                      box-shadow 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+                      transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
         .agent-card:hover {
-          border-color: #2b3a56;
-          box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+          border-color: rgba(99, 102, 241, 0.35);
+          background: #131b2c;
+          box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.45);
+          transform: translateY(-1px);
         }
 
         .agent-card-selected {
-          border-color: rgba(59, 130, 246, 0.4);
+          border-color: rgba(99, 102, 241, 0.48);
           background: #131a2b;
+          box-shadow: 0 4px 20px -2px rgba(99, 102, 241, 0.14);
+        }
+
+        .agent-card-selected::before {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          height: 2px;
+          background: linear-gradient(90deg, transparent, #818cf8, transparent);
+          animation: cardTopGlow 0.3s ease-out;
+        }
+
+        @keyframes cardTopGlow {
+          from {
+            opacity: 0;
+            transform: scaleX(0.3);
+          }
+          to {
+            opacity: 1;
+            transform: scaleX(1);
+          }
         }
 
         .agent-card-header {
@@ -445,8 +567,9 @@ export const AgentsManagerView: React.FC<AgentsManagerViewProps> = ({
         }
 
         .toggle-switch input:checked + .toggle-slider {
-          background-color: #3b82f6;
-          border-color: #3b82f6;
+          background-color: #6366f1;
+          border-color: #6366f1;
+          box-shadow: 0 0 10px rgba(99, 102, 241, 0.35);
         }
 
         .toggle-switch input:checked + .toggle-slider:before {
@@ -542,13 +665,17 @@ export const AgentsManagerView: React.FC<AgentsManagerViewProps> = ({
           background: #141b2a;
           border: 1px solid #1f2b42;
           color: #818cf8;
-          font-size: 10.5px;
-          padding: 3px 8px;
-          border-radius: 4px;
+          font-size: 11px;
+          font-weight: 600;
+          height: 26px;
+          padding: 0 9px;
+          border-radius: 5px;
           cursor: pointer;
           display: inline-flex;
           align-items: center;
-          gap: 4px;
+          justify-content: center;
+          gap: 5px;
+          box-sizing: border-box;
           transition: all 0.15s ease;
         }
 
@@ -562,10 +689,16 @@ export const AgentsManagerView: React.FC<AgentsManagerViewProps> = ({
           background: transparent;
           border: 1px solid #22304a;
           color: #818cf8;
-          font-size: 10.5px;
-          padding: 3px 8px;
-          border-radius: 4px;
+          font-size: 11px;
+          font-weight: 600;
+          height: 26px;
+          padding: 0 9px;
+          border-radius: 5px;
           cursor: pointer;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          box-sizing: border-box;
           transition: all 0.15s ease;
         }
 

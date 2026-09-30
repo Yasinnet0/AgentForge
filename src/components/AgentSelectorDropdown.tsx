@@ -123,16 +123,17 @@ export const AgentSelectorDropdown: React.FC<AgentSelectorDropdownProps> = ({
         .agent-selector-wrapper {
           position: relative;
           display: inline-block;
-          width: 270px;
+          width: 280px;
         }
 
         .agent-selector-trigger {
           width: 100%;
+          height: 34px;
           box-sizing: border-box;
           background: #131b2e;
           border: 1px solid #22304a;
-          border-radius: 6px;
-          padding: 4px 10px;
+          border-radius: 7px;
+          padding: 0 12px;
           display: flex;
           align-items: center;
           justify-content: space-between;
@@ -143,7 +144,7 @@ export const AgentSelectorDropdown: React.FC<AgentSelectorDropdownProps> = ({
         .agent-selector-trigger:hover,
         .agent-selector-trigger.open {
           background: #18233c;
-          border-color: #3b82f6;
+          border-color: #6366f1;
         }
 
         .trigger-left {
@@ -165,8 +166,8 @@ export const AgentSelectorDropdown: React.FC<AgentSelectorDropdownProps> = ({
           width: 6px;
           height: 6px;
           border-radius: 50%;
-          background: #3b82f6;
-          box-shadow: 0 0 8px rgba(59, 130, 246, 0.6);
+          background: #6366f1;
+          box-shadow: 0 0 8px rgba(99, 102, 241, 0.6);
           flex-shrink: 0;
         }
 
@@ -189,8 +190,8 @@ export const AgentSelectorDropdown: React.FC<AgentSelectorDropdownProps> = ({
 
         .count-pill {
           font-size: 10px;
-          color: #3b82f6;
-          background: rgba(59, 130, 246, 0.15);
+          color: #818cf8;
+          background: rgba(99, 102, 241, 0.15);
           padding: 1px 5px;
           border-radius: 4px;
           flex-shrink: 0;
@@ -206,11 +207,13 @@ export const AgentSelectorDropdown: React.FC<AgentSelectorDropdownProps> = ({
           transform: rotate(180deg);
         }
 
+        .agent-selector-wrapper .agent-dropdown-menu,
         .agent-dropdown-menu {
           position: absolute;
           top: calc(100% + 5px);
           left: 0;
           width: 100%;
+          min-width: 100%;
           box-sizing: border-box;
           background: #0d121f;
           border: 1px solid #1e283d;
@@ -267,7 +270,7 @@ export const AgentSelectorDropdown: React.FC<AgentSelectorDropdownProps> = ({
         }
 
         .agent-dropdown-row.selected {
-          background: rgba(59, 130, 246, 0.08);
+          background: rgba(99, 102, 241, 0.08);
         }
 
         .custom-checkbox {
@@ -285,8 +288,8 @@ export const AgentSelectorDropdown: React.FC<AgentSelectorDropdownProps> = ({
         }
 
         .custom-checkbox.checked {
-          background: #3b82f6;
-          border-color: #3b82f6;
+          background: #6366f1;
+          border-color: #6366f1;
         }
 
         .agent-icon-pill {
@@ -340,10 +343,15 @@ export const AgentSelectorDropdown: React.FC<AgentSelectorDropdownProps> = ({
           border: 1px solid #1c2638;
           color: #64748b;
           font-size: 9.5px;
-          padding: 1px 5px;
+          padding: 0 6px;
+          height: 20px;
           border-radius: 3px;
           cursor: pointer;
           opacity: 0;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          box-sizing: border-box;
           transition: all 0.15s ease;
         }
 
@@ -353,8 +361,8 @@ export const AgentSelectorDropdown: React.FC<AgentSelectorDropdownProps> = ({
 
         .only-btn:hover {
           color: #f1f5f9;
-          border-color: #3b82f6;
-          background: rgba(59, 130, 246, 0.2);
+          border-color: #6366f1;
+          background: rgba(99, 102, 241, 0.2);
         }
       `}</style>
     </div>

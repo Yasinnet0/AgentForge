@@ -19,10 +19,9 @@ import { AgentsManagerView } from './components/AgentsManagerView';
 import { SkillsView } from './components/SkillsView';
 import { McpServersView } from './components/McpServersView';
 import { PluginsView } from './components/PluginsView';
+import { RulesBuilderView } from './components/RulesBuilderView';
 import {
-  Shield,
-  Layers,
-  Plus
+  Layers
 } from 'lucide-react';
 
 export const App: React.FC = () => {
@@ -47,7 +46,7 @@ export const App: React.FC = () => {
     plugins: [],
   });
 
-  // Dynamic cloud catalog state (synced with sickn33/agentic-awesome-skills)
+  // Cloud Catalog Sync
   const [skillsCatalog, setSkillsCatalog] = useState<CatalogSkill[]>(SKILLS_CATALOG);
   const [pluginsCatalog, setPluginsCatalog] = useState<CatalogPlugin[]>(PLUGINS_CATALOG);
   const [mcpCatalog, setMcpCatalog] = useState<CatalogMcpServer[]>([
@@ -57,7 +56,6 @@ export const App: React.FC = () => {
   const [isSyncingCatalog, setIsSyncingCatalog] = useState(false);
   const [catalogSyncedAt, setCatalogSyncedAt] = useState<string | null>(null);
 
-  // Manual & automated catalog sync handler
   const handleSyncCloudCatalog = async () => {
     setIsSyncingCatalog(true);
     try {
@@ -75,7 +73,7 @@ export const App: React.FC = () => {
     }
   };
 
-  // Load cached or fresh cloud catalogs on startup
+  // Lifecycle
   useEffect(() => {
     const initCatalog = async () => {
       try {
@@ -93,7 +91,6 @@ export const App: React.FC = () => {
     initCatalog();
   }, []);
 
-  // Auto-clear transient card highlight after 1.4s
   useEffect(() => {
     if (highlightTarget) {
       const timer = setTimeout(() => {
@@ -108,8 +105,8 @@ export const App: React.FC = () => {
     setHighlightTarget({ tab, id: itemId });
   };
 
+  // Capability Scanning
   const refreshCapabilities = async () => {
-    // Ingest real agent capabilities (skills, MCP servers, plugins)
     if (window.electronAPI?.scanCapabilities) {
       try {
         const scanPayloads = INITIAL_SUPPORTED_AGENTS.map((a) => ({
@@ -130,7 +127,6 @@ export const App: React.FC = () => {
       }
     }
 
-    // Re-detect agent counts
     if (window.electronAPI?.detectAgents) {
       try {
         const payloads = INITIAL_SUPPORTED_AGENTS.map((a) => ({
@@ -159,7 +155,6 @@ export const App: React.FC = () => {
     }
   };
 
-  // Auto-detect installed agents on host filesystem & restore persisted user choices
   useEffect(() => {
     const detectAndLoadAgents = async () => {
       let detectionMap: Record<string, { detected: boolean; installedCounts: { skills: number; mcps: number; rules: number } }> = {};
@@ -180,7 +175,6 @@ export const App: React.FC = () => {
         }
       }
 
-      // Check for user-saved selection in localStorage
       let savedSelectedIds: string[] | null = null;
       try {
         const raw = localStorage.getItem('agentforge_selected_agents');
@@ -196,9 +190,6 @@ export const App: React.FC = () => {
           const info = detectionMap[agent.id];
           const isDetected = info ? info.detected : agent.detected;
           const counts = info ? info.installedCounts : agent.installedCounts;
-
-          // If user previously saved choices, respect them.
-          // Otherwise (first run), auto-select by default if detected!
           const isSelected = savedSelectedIds !== null
             ? savedSelectedIds.includes(agent.id)
             : isDetected;
@@ -212,7 +203,6 @@ export const App: React.FC = () => {
         });
       });
 
-      // Ingest real agent capabilities
       await refreshCapabilities();
     };
 
@@ -242,11 +232,23 @@ export const App: React.FC = () => {
     });
   };
 
+  const handleSelectAllAgents = (select: boolean) => {
+    setAgents((prev) => {
+      const updated = prev.map((agent) => ({
+        ...agent,
+        selected: select,
+      }));
+      const selectedIds = updated.filter((a) => a.selected).map((a) => a.id);
+      localStorage.setItem('agentforge_selected_agents', JSON.stringify(selectedIds));
+      return updated;
+    });
+  };
+
   const handleEnvChange = (newEnv: string) => {
     setCurrentEnv(newEnv);
   };
 
-  // Derive selected agents and filter capabilities by user selection
+  // Selection filtering
   const selectedAgentIds = useMemo(() => agents.filter((a) => a.selected).map((a) => a.id), [agents]);
   const selectedAgents = useMemo(() => agents.filter((a) => a.selected), [agents]);
 
@@ -292,7 +294,7 @@ export const App: React.FC = () => {
 
   return (
     <div className="app-container">
-      {/* Top Bar with window controls, search & agent selector */}
+      {/* Top Bar */}
       <TopBar
         agents={agents}
         onToggleAgent={handleToggleAgent}
@@ -308,7 +310,7 @@ export const App: React.FC = () => {
       />
 
       <div className="app-body">
-        {/* Left Navigation Sidebar with dynamic capability counts */}
+        {/* Sidebar */}
         <Sidebar 
           activeTab={activeTab} 
           onTabChange={setActiveTab}
@@ -320,7 +322,7 @@ export const App: React.FC = () => {
           }}
         />
 
-        {/* Center Main Content Area with Keep-Alive for Visited Tabs */}
+        {/* Main Content */}
         <main className="main-content">
           {visitedTabs.has('overview') && (
             <div
@@ -328,7 +330,7 @@ export const App: React.FC = () => {
               style={{ display: activeTab === 'overview' ? 'block' : 'none' }}
             >
               <div className="overview-view">
-                {/* 4 Metric Cards showing live dynamic counts */}
+                {/* Metric Cards */}
                 <StatCards 
                   stats={{
                     agentsCount: selectedAgents.length,
@@ -338,10 +340,10 @@ export const App: React.FC = () => {
                   }}
                 />
 
-                {/* Quick Actions Launchpad */}
+                {/* Quick Actions */}
                 <QuickActionsBar onNavigate={setActiveTab} />
 
-                {/* Installed Packages Table */}
+                {/* Installed Packages */}
                 <RecentlyInstalledPackages
                   packages={overviewPackages}
                   searchQuery={searchQuery}
@@ -360,6 +362,7 @@ export const App: React.FC = () => {
                 agents={agents}
                 onToggleAgent={handleToggleAgent}
                 onSelectOnly={handleSelectOnly}
+                onSelectAll={handleSelectAllAgents}
                 searchQuery={searchQuery}
                 highlightedId={highlightTarget?.tab === 'agents' ? highlightTarget.id : null}
               />
@@ -411,6 +414,9 @@ export const App: React.FC = () => {
               <PluginsView
                 plugins={filteredPlugins}
                 selectedAgents={selectedAgents}
+                allAgents={agents}
+                skills={filteredSkills}
+                mcpServers={filteredMcps}
                 pluginsCatalog={pluginsCatalog}
                 skillsCatalog={skillsCatalog}
                 isSyncingCatalog={isSyncingCatalog}
@@ -428,30 +434,12 @@ export const App: React.FC = () => {
               className={`tab-pane-container ${activeTab === 'rules' ? 'active tab-pane-animated' : ''}`}
               style={{ display: activeTab === 'rules' ? 'block' : 'none' }}
             >
-              <div className="secondary-view">
-                <div className="view-header">
-                  <div>
-                    <h2 className="view-title">Active Rules</h2>
-                    <p className="view-desc">0 active workspace directives and guidelines</p>
-                  </div>
-                  <button className="primary-action-btn">
-                    <Plus size={14} />
-                    <span>Add Rule</span>
-                  </button>
-                </div>
-
-                <div className="empty-state-card">
-                  <div className="empty-icon-wrap">
-                    <Shield size={26} />
-                  </div>
-                  <div className="empty-title">No rules configured</div>
-                  <div className="empty-desc">Define guidelines, style constraints, and behavioral boundaries for agents</div>
-                  <button className="empty-action-btn">
-                    <Plus size={13} />
-                    <span>Add Rule</span>
-                  </button>
-                </div>
-              </div>
+              <RulesBuilderView
+                selectedAgents={selectedAgents}
+                allAgents={agents}
+                searchQuery={searchQuery}
+                onRefreshCapabilities={refreshCapabilities}
+              />
             </div>
           )}
 
@@ -473,7 +461,7 @@ export const App: React.FC = () => {
           )}
         </main>
 
-        {/* Right Activity & Updates Panel */}
+        {/* Right Panel */}
         <RightPanel />
       </div>
 
