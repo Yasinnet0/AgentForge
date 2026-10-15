@@ -112,6 +112,126 @@ export const RULE_PRESETS: RulePreset[] = [
         content: 'Validate and sanitize file paths and target directories before executing file read, write, or deletion operations.'
       }
     ]
+  },
+  {
+    id: 'preset-performance-optimization',
+    title: 'High-Performance & Memory Profiling',
+    summary: 'Eliminate V8 heap leaks, minimize garbage collection pressure, and profile before optimizing.',
+    category: 'engineering',
+    directives: [
+      {
+        title: 'Profile Before Optimizing',
+        content: 'Never perform speculative performance optimization without micro-benchmarks or flame graph profiling proving the bottleneck physically.'
+      },
+      {
+        title: 'Zero Memory Leaks',
+        content: 'Clean up all event listeners, intervals, abort controllers, and stream subscriptions on teardown or unmount. Inspect retainer trees for detached references.'
+      },
+      {
+        title: 'V8 GC Pressure Reduction',
+        content: 'Avoid object thrashing and excessive allocations inside high-frequency loops or render passes. Favor object reuse and typed arrays where appropriate.'
+      }
+    ]
+  },
+  {
+    id: 'preset-cloud-native-devops',
+    title: 'Cloud-Native & 12-Factor Discipline',
+    summary: 'Enforce environment parity, stateless processes, immutable container images, and declarative configuration.',
+    category: 'engineering',
+    directives: [
+      {
+        title: 'Stateless & Ephemeral Workloads',
+        content: 'Treat application runtime processes as stateless and share-nothing. Persist state exclusively into managed databases, vector stores, or object storage.'
+      },
+      {
+        title: 'Immutable Infrastructure Artifacts',
+        content: 'Never modify production containers or virtual machines in-place. Build deterministic, immutable images tagged with explicit Git commit SHAs.'
+      },
+      {
+        title: 'Strict Environment Separation',
+        content: 'Store all environment configuration strictly in environment variables or KMS vaults. Never bundle environment-specific secrets into code or build artifacts.'
+      }
+    ]
+  },
+  {
+    id: 'preset-game-dev-determinism',
+    title: 'Game Engine & Real-Time Loop Determinism',
+    summary: 'Zero allocations in hot game tick loops, fixed timestep physics, and cache-friendly data structures.',
+    category: 'engineering',
+    directives: [
+      {
+        title: 'Zero Allocations in Hot Tick Loops',
+        content: 'Never allocate memory or instantiate objects inside `_process`, `Update()`, or `Tick()`. Pre-allocate object pools during scene initialization.'
+      },
+      {
+        title: 'Fixed Timestep Physics & Delta Consistency',
+        content: 'Always multiply frame delta time by velocities. Decouple physics updates into fixed tick rates to prevent simulation divergence and tunneling.'
+      },
+      {
+        title: 'Cache-Friendly Component Layout',
+        content: 'Organize gameplay data in contiguous memory structures (Struct-of-Arrays or Data-Oriented ECS) rather than deeply nested pointer trees.'
+      }
+    ]
+  },
+  {
+    id: 'preset-type-safety-contracts',
+    title: 'Strict Type Safety & Runtime Schemas',
+    summary: 'Enforce strict compile-time types with zero `any` casting and validate all external boundary inputs with runtime schemas.',
+    category: 'engineering',
+    directives: [
+      {
+        title: 'Zero Unsafe Type Casting',
+        content: 'Do NOT use `as any`, `@ts-ignore`, or unchecked dynamic casts. If types are uncertain, narrow with type guards or unknown discrimination.'
+      },
+      {
+        title: 'Runtime Schema Validation at Boundaries',
+        content: 'Parse and validate all incoming HTTP payloads, WebSocket messages, IPC requests, and environment variables using Zod, Pydantic, or TypeBox schemas.'
+      },
+      {
+        title: 'Explicit Return Types',
+        content: 'Exported functions, public API routes, and interface contracts must specify explicit return types to prevent unintended contract drift.'
+      }
+    ]
+  },
+  {
+    id: 'preset-clean-architecture-ddd',
+    title: 'Clean Architecture & Domain Isolation',
+    summary: 'Preserve unidirectional dependency flow, hexagonal ports-and-adapters, and keep business logic isolated from frameworks.',
+    category: 'engineering',
+    directives: [
+      {
+        title: 'Framework Independence',
+        content: 'Keep core domain entities and business rules agnostic of UI frameworks, ORMs, and transport protocols. Frameworks are implementation details.'
+      },
+      {
+        title: 'Unidirectional Dependency Inversion',
+        content: 'Inner architectural layers must never import or depend on outer layers. Depend upon interfaces and abstractions, not concrete implementations.'
+      },
+      {
+        title: 'Surgical Responsibility Separation',
+        content: 'Keep controllers thin, services focused on orchestration, repositories dedicated to data access, and entities encapsulating invariants.'
+      }
+    ]
+  },
+  {
+    id: 'preset-ai-tool-guardrails',
+    title: 'Agentic Tool Safety & Guardrails',
+    summary: 'Enforce dry-run validations, prevent destructive file actions without confirmation, and ensure tool call idempotence.',
+    category: 'security',
+    directives: [
+      {
+        title: 'Idempotent Tool Invocations',
+        content: 'Ensure tool calls and mutations can be retried safely without causing duplicate records, state corruption, or resource exhaustion.'
+      },
+      {
+        title: 'Dry-Run & Confirmation for Destructive Actions',
+        content: 'Never perform irreversible file deletion, database drop, or external payment execution without first demonstrating a dry-run preview and requiring confirmation.'
+      },
+      {
+        title: 'Bounded Execution Timeouts',
+        content: 'Wrap all asynchronous external network and tool requests with explicit timeout thresholds and circuit breakers to avoid hanging processes.'
+      }
+    ]
   }
 ];
 

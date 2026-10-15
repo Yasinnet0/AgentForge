@@ -9,6 +9,8 @@ export interface CatalogSkill {
   sourceRepo: string;
   hasScripts?: boolean;
   hasReferences?: boolean;
+  sourceRegistry?: string;
+  license?: string;
 }
 
 export interface CatalogMcpServer {
@@ -25,6 +27,8 @@ export interface CatalogMcpServer {
   author: string;
   tags: string[];
   docsUrl?: string;
+  sourceRegistry?: string;
+  license?: string;
 }
 
 export interface CatalogPlugin {
@@ -37,4 +41,6 @@ export interface CatalogPlugin {
   bundledSkills: string[];
   bundledMcps: string[];
   tags: string[];
+  sourceRegistry?: string;
+  license?: string;
 }
