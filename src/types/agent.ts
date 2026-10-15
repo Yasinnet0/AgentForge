@@ -35,6 +35,7 @@ export interface ScannedSkill {
   pluginName?: string;
   hasScripts: boolean;
   hasReferences: boolean;
+  disabled?: boolean;
 }
 
 export interface ScannedMcpServer {
@@ -51,6 +52,7 @@ export interface ScannedMcpServer {
   sourceAgentIcon: string;
   sourcePath: string;
   pluginName?: string;
+  disabled?: boolean;
 }
 
 export interface ScannedPlugin {
@@ -68,6 +70,7 @@ export interface ScannedPlugin {
   skillsCount: number;
   mcpsCount: number;
   rulesCount: number;
+  disabled?: boolean;
 }
 
 export interface AgentCapabilitiesPayload {
@@ -87,6 +90,25 @@ export interface ProvisionResult {
   count?: number;
   installedAgents?: string[];
   error?: string;
+}
+
+export interface ToggleSkillParams {
+  skillId: string;
+  enabled: boolean;
+  targets: Array<{ agentId: string; skillsDir: string }>;
+}
+
+export interface ToggleMcpParams {
+  serverKey: string;
+  enabled: boolean;
+  targets: Array<{ agentId: string; mcpConfigPath: string }>;
+}
+
+export interface TogglePluginParams {
+  pluginId: string;
+  folderName?: string;
+  enabled: boolean;
+  targets: Array<{ agentId: string; pluginsDir?: string }>;
 }
 
 export interface TransferSkillsParams {
@@ -187,5 +209,43 @@ export interface ForgePluginResult {
   installedAgents?: string[];
   error?: string;
   canceled?: boolean;
+}
+
+export interface InstalledPluginDetails {
+  success: boolean;
+  folderName: string;
+  pluginPath: string;
+  manifest: {
+    name: string;
+    displayName: string;
+    version: string;
+    description: string;
+    author: string;
+    category?: string;
+    tags?: string[];
+    skills?: string[];
+    mcpServers?: Record<string, any>;
+    rules?: string[];
+  };
+  skills: Array<{
+    folderName: string;
+    name: string;
+    description: string;
+    sourcePath: string;
+  }>;
+  mcpServers: Array<{
+    name: string;
+    command?: string;
+    args?: string[];
+    env?: Record<string, string>;
+    url?: string;
+    transport?: 'stdio' | 'sse';
+  }>;
+  rules: Array<{
+    filename: string;
+    title: string;
+    content: string;
+  }>;
+  error?: string;
 }
 
