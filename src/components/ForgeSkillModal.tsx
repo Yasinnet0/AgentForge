@@ -10,18 +10,35 @@ import {
   Loader2, 
   FolderPlus,
   Bot,
-  FileText
+  FileText,
+  Edit3,
+  Copy
 } from 'lucide-react';
 import { SupportedAgent } from '../types/agent';
 import { logActivity } from '../services/activityLogger';
 import { MarkdownViewer } from './MarkdownViewer';
 import { useModalTransition } from '../hooks/useModalTransition';
 
+export interface InitialSkillData {
+  id: string;
+  name: string;
+  folderSlug?: string;
+  description?: string;
+  category?: string;
+  tags?: string[];
+  instructions?: string;
+  targetAgentIds?: string[];
+  localPath?: string;
+  rawUrl?: string;
+}
+
 interface ForgeSkillModalProps {
   isOpen: boolean;
   onClose: () => void;
   selectedAgents: SupportedAgent[];
   onSkillCreated?: (skillName: string, count: number) => void;
+  mode?: 'create' | 'edit';
+  initialSkill?: InitialSkillData | null;
 }
 
 const CATEGORIES = [
@@ -69,7 +86,9 @@ export const ForgeSkillModal: React.FC<ForgeSkillModalProps> = ({
   isOpen,
   onClose,
   selectedAgents,
-  onSkillCreated
+  onSkillCreated,
+  mode = 'create',
+  initialSkill = null,
 }) => {
   const { isRendered, isClosing, handleClose } = useModalTransition(isOpen, onClose, 140);
 
@@ -81,8 +100,12 @@ export const ForgeSkillModal: React.FC<ForgeSkillModalProps> = ({
   const [description, setDescription] = useState('');
   const [instructions, setInstructions] = useState(TEMPLATES.standard.template);
   const [selectedTemplate, setSelectedTemplate] = useState('standard');
-  const [activeTab, setActiveTab] = useState<'editor' | 'preview'>('editor');
-  const [previewMode, setPreviewMode] = useState<'formatted' | 'raw'>('formatted');
+  const [activeTab, setActiveTab] = useState<'instructions' | 'raw'>('instructions');
+  const [instructionsMode, setInstructionsMode] = useState<'edit' | 'view'>('edit');
+  const [rawMode, setRawMode] = useState<'view' | 'edit'>('view');
+  const [rawSkillMd, setRawSkillMd] = useState('');
+  const [isRawCustomEdited, setIsRawCustomEdited] = useState(false);
+  const [copiedRaw, setCopiedRaw] = useState(false);
   const [selectedAgentIds, setSelectedAgentIds] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -92,15 +115,50 @@ export const ForgeSkillModal: React.FC<ForgeSkillModalProps> = ({
   // Effects
   useEffect(() => {
     if (isOpen && !prevIsOpenRef.current) {
-      if (selectedAgents && selectedAgents.length > 0) {
-        setSelectedAgentIds(selectedAgents.map((a) => a.id));
+      if (mode === 'edit' && initialSkill) {
+        setName(initialSkill.name || '');
+        setFolderSlug(initialSkill.folderSlug || initialSkill.id || '');
+        setIsSlugManuallyEdited(true);
+        setCategory(initialSkill.category || 'Development');
+        setTagsInput(
+          initialSkill.tags && initialSkill.tags.length > 0
+            ? initialSkill.tags.join(', ')
+            : 'custom, playbook'
+        );
+        setDescription(initialSkill.description || '');
+        setInstructions(initialSkill.instructions || '');
+        setSelectedTemplate('');
+        if (initialSkill.targetAgentIds && initialSkill.targetAgentIds.length > 0) {
+          setSelectedAgentIds(initialSkill.targetAgentIds);
+        } else if (selectedAgents && selectedAgents.length > 0) {
+          setSelectedAgentIds(selectedAgents.map((a) => a.id));
+        } else {
+          setSelectedAgentIds([]);
+        }
       } else {
-        setSelectedAgentIds([]);
+        setName('');
+        setFolderSlug('');
+        setIsSlugManuallyEdited(false);
+        setCategory('Development');
+        setTagsInput('custom, playbook');
+        setDescription('');
+        setInstructions(TEMPLATES.standard.template);
+        setSelectedTemplate('standard');
+        if (selectedAgents && selectedAgents.length > 0) {
+          setSelectedAgentIds(selectedAgents.map((a) => a.id));
+        } else {
+          setSelectedAgentIds([]);
+        }
       }
       setErrorMsg(null);
+      setActiveTab('instructions');
+      setInstructionsMode('edit');
+      setRawMode('view');
+      setIsRawCustomEdited(false);
+      setCopiedRaw(false);
     }
     prevIsOpenRef.current = isOpen;
-  }, [isOpen, selectedAgents]);
+  }, [isOpen, selectedAgents, mode, initialSkill]);
 
   useEffect(() => {
     if (!isRendered) return;
@@ -138,6 +196,53 @@ export const ForgeSkillModal: React.FC<ForgeSkillModalProps> = ({
     const t = TEMPLATES[key];
     if (t) {
       setInstructions(t.template);
+      setIsRawCustomEdited(false);
+    }
+  };
+
+  const handleCopyRaw = () => {
+    const textToCopy = isRawCustomEdited ? rawSkillMd : compiledSkillMd;
+    navigator.clipboard.writeText(textToCopy);
+    setCopiedRaw(true);
+    setTimeout(() => setCopiedRaw(false), 1500);
+  };
+
+  const handleRawChange = (val: string) => {
+    setRawSkillMd(val);
+    setIsRawCustomEdited(true);
+
+    // Sync instructions and frontmatter if parseable
+    const match = val.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
+    if (match) {
+      const frontmatter = match[1];
+      const body = match[2];
+      setInstructions(body);
+
+      const nameMatch = frontmatter.match(/^name:\s*(.+)$/m);
+      if (nameMatch) {
+        setFolderSlug(nameMatch[1].trim());
+        setIsSlugManuallyEdited(true);
+      }
+      const descMatch = frontmatter.match(/^description:\s*"?([^"\r\n]+)"?$/m);
+      if (descMatch) {
+        setDescription(descMatch[1].trim());
+      }
+      const catMatch = frontmatter.match(/^category:\s*(.+)$/m);
+      if (catMatch) {
+        setCategory(catMatch[1].trim());
+      }
+      const tagsMatch = frontmatter.match(/tags:\s*\n((?:\s*-\s*[^\n]+\n?)+)/);
+      if (tagsMatch) {
+        const parsedTags = tagsMatch[1]
+          .split('\n')
+          .map((line) => line.replace(/^\s*-\s*/, '').trim())
+          .filter(Boolean);
+        if (parsedTags.length > 0) {
+          setTagsInput(parsedTags.join(', '));
+        }
+      }
+    } else {
+      setInstructions(val);
     }
   };
 
@@ -178,6 +283,13 @@ ${instructions.trim()}
 `;
   }, [name, folderSlug, description, category, tagsInput, instructions]);
 
+  // Keep raw content synchronized unless user is actively editing raw code
+  useEffect(() => {
+    if (!isRawCustomEdited) {
+      setRawSkillMd(compiledSkillMd);
+    }
+  }, [compiledSkillMd, isRawCustomEdited]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
@@ -188,7 +300,8 @@ ${instructions.trim()}
       return;
     }
 
-    if (!instructions.trim()) {
+    const finalContent = (isRawCustomEdited ? rawSkillMd : compiledSkillMd).trim();
+    if (!finalContent) {
       setErrorMsg('Skill instructions cannot be empty.');
       return;
     }
@@ -213,7 +326,7 @@ ${instructions.trim()}
 
       const res = await window.electronAPI.createCustomSkill({
         folderName: cleanSlug,
-        skillContent: compiledSkillMd,
+        skillContent: finalContent,
         targets
       });
 
@@ -223,8 +336,10 @@ ${instructions.trim()}
 
       logActivity({
         type: 'SKILL',
-        title: `Forged "${name || cleanSlug}"`,
-        description: `Created and deployed custom skill to ${targetAgents.map((a) => a.name).join(', ')}`,
+        title: mode === 'edit' ? `Updated "${name || cleanSlug}"` : `Forged "${name || cleanSlug}"`,
+        description: mode === 'edit'
+          ? `Saved changes and redeployed skill to ${targetAgents.map((a) => a.name).join(', ')}`
+          : `Created and deployed custom skill to ${targetAgents.map((a) => a.name).join(', ')}`,
         status: 'success',
         agentName: targetAgents.map((a) => a.name).join(', '),
       });
@@ -249,12 +364,16 @@ ${instructions.trim()}
         {/* Modal Header */}
         <div className="forge-modal-header">
           <div className="header-icon-box">
-            <Sparkles size={18} />
+            {mode === 'edit' ? <Edit3 size={18} /> : <Sparkles size={18} />}
           </div>
           <div className="header-text">
-            <h3 className="modal-title">Forge Custom Skill</h3>
+            <h3 className="modal-title">
+              {mode === 'edit' ? 'Edit Skill Playbook' : 'Forge Custom Skill'}
+            </h3>
             <p className="modal-subtitle">
-              Author an agent playbook and deploy directly to your local AI environments.
+              {mode === 'edit'
+                ? `Modify instructions, metadata, and deployment targets for "${name || folderSlug}".`
+                : 'Author an agent playbook and deploy directly to your local AI environments.'}
             </p>
           </div>
           <button className="close-btn" onClick={handleClose} aria-label="Close modal">
@@ -399,93 +518,184 @@ ${instructions.trim()}
                 <div className="editor-tab-pills">
                   <button
                     type="button"
-                    className={`tab-pill-btn ${activeTab === 'editor' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('editor')}
+                    className={`tab-pill-btn ${activeTab === 'instructions' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('instructions')}
                   >
-                    <Code2 size={13} />
-                    <span>Instructions (Editor)</span>
+                    <FileText size={13} />
+                    <span>Instructions</span>
                   </button>
                   <button
                     type="button"
-                    className={`tab-pill-btn ${activeTab === 'preview' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('preview')}
+                    className={`tab-pill-btn ${activeTab === 'raw' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('raw')}
                   >
-                    <Eye size={13} />
-                    <span>SKILL.md (Preview)</span>
+                    <Code2 size={13} />
+                    <span>Raw SKILL.md</span>
                   </button>
                 </div>
 
                 <div className="toolbar-controls-right">
-                  {activeTab === 'editor' ? (
-                    <div className="template-dropdown-group">
-                      <span className="template-select-label">Template:</span>
-                      <select
-                        className="template-select"
-                        value={selectedTemplate}
-                        onChange={(e) => handleApplyTemplate(e.target.value)}
+                  {activeTab === 'instructions' ? (
+                    <>
+                      {mode !== 'edit' && instructionsMode === 'edit' && (
+                        <div className="template-dropdown-group">
+                          <span className="template-select-label">Template:</span>
+                          <select
+                            className="template-select"
+                            value={selectedTemplate}
+                            onChange={(e) => handleApplyTemplate(e.target.value)}
+                          >
+                            {Object.entries(TEMPLATES).map(([key, t]) => (
+                              <option key={key} value={key}>
+                                {t.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+                      <div className="obsidian-mode-switch">
+                        <button
+                          type="button"
+                          className={`obsidian-mode-btn ${instructionsMode === 'edit' ? 'active' : ''}`}
+                          onClick={() => setInstructionsMode('edit')}
+                          title="Editing view: write and modify instructions"
+                        >
+                          <Edit3 size={11} />
+                          <span>Edit</span>
+                        </button>
+                        <button
+                          type="button"
+                          className={`obsidian-mode-btn ${instructionsMode === 'view' ? 'active' : ''}`}
+                          onClick={() => setInstructionsMode('view')}
+                          title="Reading view: preview rendered Markdown (read-only)"
+                        >
+                          <Eye size={11} />
+                          <span>View</span>
+                        </button>
+                      </div>
+                      <div
+                        className="instructions-char-pill font-mono"
+                        title={`${instructions.length.toLocaleString()} characters`}
                       >
-                        {Object.entries(TEMPLATES).map(([key, t]) => (
-                          <option key={key} value={key}>
-                            {t.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  ) : (
-                    <div className="preview-mode-switch">
-                      <button
-                        type="button"
-                        className={`preview-mode-btn ${previewMode === 'formatted' ? 'active' : ''}`}
-                        onClick={() => setPreviewMode('formatted')}
-                        title="Formatted document preview"
-                      >
-                        <Eye size={11} />
-                        <span>Formatted</span>
-                      </button>
-                      <button
-                        type="button"
-                        className={`preview-mode-btn ${previewMode === 'raw' ? 'active' : ''}`}
-                        onClick={() => setPreviewMode('raw')}
-                        title="Raw SKILL.md file text"
-                      >
-                        <Code2 size={11} />
-                        <span>Raw Code</span>
-                      </button>
-                    </div>
-                  )}
-                  <div className="instructions-char-pill font-mono">
-                    {instructions.length.toLocaleString()} chars
-                  </div>
-                </div>
-              </div>
-
-              {/* Editor Tab Content */}
-              {activeTab === 'editor' ? (
-                <div className="editor-content-wrap">
-                  <textarea
-                    className="markdown-editor-input font-mono"
-                    value={instructions}
-                    onChange={(e) => setInstructions(e.target.value)}
-                    placeholder="Write agent instructions, directives, workflows, and constraints in Markdown..."
-                    spellCheck={false}
-                  />
-                </div>
-              ) : (
-                <div className="preview-content-wrap">
-                  {previewMode === 'formatted' ? (
-                    <MarkdownViewer content={compiledSkillMd} />
+                        <FileText size={11} className="char-pill-icon" />
+                        <span>{instructions.length.toLocaleString()} chars</span>
+                      </div>
+                    </>
                   ) : (
                     <>
-                      <div className="preview-readonly-badge">
-                        <FileText size={12} />
-                        <span>Raw compiled SKILL.md with YAML frontmatter.</span>
+                      <div className="obsidian-mode-switch">
+                        <button
+                          type="button"
+                          className={`obsidian-mode-btn ${rawMode === 'view' ? 'active' : ''}`}
+                          onClick={() => setRawMode('view')}
+                          title="View raw compiled SKILL.md (read-only)"
+                        >
+                          <Eye size={11} />
+                          <span>View</span>
+                        </button>
+                        <button
+                          type="button"
+                          className={`obsidian-mode-btn ${rawMode === 'edit' ? 'active' : ''}`}
+                          onClick={() => setRawMode('edit')}
+                          title="Edit raw SKILL.md file directly"
+                        >
+                          <Edit3 size={11} />
+                          <span>Edit</span>
+                        </button>
                       </div>
-                      <pre className="preview-code-block font-mono">
-                        <code>{compiledSkillMd}</code>
-                      </pre>
+                      <button
+                        type="button"
+                        className={`raw-copy-btn ${copiedRaw ? 'copied' : ''}`}
+                        onClick={handleCopyRaw}
+                        title="Copy raw SKILL.md to clipboard"
+                      >
+                        {copiedRaw ? (
+                          <>
+                            <Check size={11} className="text-emerald-400" />
+                            <span className="text-emerald-400">Copied</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy size={11} />
+                            <span>Copy</span>
+                          </>
+                        )}
+                      </button>
+                      <div
+                        className="instructions-char-pill font-mono"
+                        title={`${(isRawCustomEdited ? rawSkillMd : compiledSkillMd).length.toLocaleString()} characters`}
+                      >
+                        <Code2 size={11} className="char-pill-icon" />
+                        <span>{(isRawCustomEdited ? rawSkillMd : compiledSkillMd).length.toLocaleString()} chars</span>
+                      </div>
                     </>
                   )}
                 </div>
+              </div>
+
+              {/* Editor / Preview Content Area */}
+              {activeTab === 'instructions' ? (
+                instructionsMode === 'edit' ? (
+                  <div className="editor-content-wrap">
+                    <textarea
+                      className="markdown-editor-input font-mono"
+                      value={instructions}
+                      onChange={(e) => {
+                        setInstructions(e.target.value);
+                        setIsRawCustomEdited(false);
+                      }}
+                      placeholder="Write agent instructions, directives, workflows, and constraints in Markdown..."
+                      spellCheck={false}
+                    />
+                  </div>
+                ) : (
+                  <div className="preview-content-wrap view-mode-wrap">
+                    <div className="preview-view-banner">
+                      <div className="view-banner-title">{name || folderSlug || 'Custom Skill'}</div>
+                      <div className="view-banner-meta">
+                        <span className="view-tag-badge category">{category}</span>
+                        {tagsInput
+                          .split(',')
+                          .map((t) => t.trim())
+                          .filter(Boolean)
+                          .map((tag) => (
+                            <span key={tag} className="view-tag-badge">
+                              #{tag}
+                            </span>
+                          ))}
+                      </div>
+                      {description && <p className="view-banner-desc">{description}</p>}
+                    </div>
+                    <div className="preview-scroll-body">
+                      <MarkdownViewer content={instructions} />
+                    </div>
+                  </div>
+                )
+              ) : (
+                rawMode === 'view' ? (
+                  <div className="preview-content-wrap">
+                    <div className="preview-readonly-badge">
+                      <Code2 size={12} />
+                      <span>Complete SKILL.md document with YAML frontmatter (read-only view)</span>
+                    </div>
+                    <pre className="preview-code-block font-mono">
+                      <code>{isRawCustomEdited ? rawSkillMd : compiledSkillMd}</code>
+                    </pre>
+                  </div>
+                ) : (
+                  <div className="editor-content-wrap">
+                    <div className="raw-edit-notice font-mono">
+                      <span>Editing raw SKILL.md. Changes to frontmatter sync back to metadata fields.</span>
+                    </div>
+                    <textarea
+                      className="markdown-editor-input font-mono"
+                      value={isRawCustomEdited ? rawSkillMd : compiledSkillMd}
+                      onChange={(e) => handleRawChange(e.target.value)}
+                      placeholder="---&#10;name: skill-name&#10;description: ...&#10;---&#10;&#10;Skill instructions..."
+                      spellCheck={false}
+                    />
+                  </div>
+                )
               )}
             </div>
           </div>
@@ -521,12 +731,12 @@ ${instructions.trim()}
                 {isSubmitting ? (
                   <>
                     <Loader2 size={14} className="spin" />
-                    <span>Forging Skill...</span>
+                    <span>{mode === 'edit' ? 'Saving Changes...' : 'Forging Skill...'}</span>
                   </>
                 ) : (
                   <>
-                    <Sparkles size={14} />
-                    <span>Forge & Deploy Skill</span>
+                    {mode === 'edit' ? <Edit3 size={14} /> : <Sparkles size={14} />}
+                    <span>{mode === 'edit' ? 'Save & Deploy Changes' : 'Forge & Deploy Skill'}</span>
                   </>
                 )}
               </button>
@@ -764,7 +974,7 @@ ${instructions.trim()}
             color: #f43f5e;
           }
 
-          .form-input, .form-select, .form-textarea-short {
+          .form-input, .form-select {
             width: 100%;
             min-width: 0;
             box-sizing: border-box;
@@ -774,7 +984,29 @@ ${instructions.trim()}
             color: #e2e8f0;
             font-size: 12px;
             padding: 8px 10px;
-            transition: all 0.15s;
+            transition: border-color 0.15s ease, box-shadow 0.15s ease;
+            user-select: text !important;
+            -webkit-user-select: text !important;
+            -webkit-app-region: no-drag !important;
+            pointer-events: auto !important;
+          }
+
+          .form-textarea-short {
+            width: 100%;
+            min-width: 0;
+            box-sizing: border-box;
+            background: #0b101b;
+            border: 1px solid #1c273c;
+            border-radius: 6px;
+            color: #e2e8f0;
+            font-size: 12px;
+            padding: 8px 10px;
+            resize: vertical;
+            min-height: 52px;
+            max-height: 220px;
+            line-height: 1.5;
+            font-family: inherit;
+            transition: border-color 0.15s ease, box-shadow 0.15s ease;
             user-select: text !important;
             -webkit-user-select: text !important;
             -webkit-app-region: no-drag !important;
@@ -904,12 +1136,15 @@ ${instructions.trim()}
             display: flex;
             align-items: center;
             justify-content: space-between;
+            min-height: 38px;
+            height: 38px;
             background: #0d1322;
             border: 1px solid #1c273c;
             border-radius: 8px 8px 0 0;
-            padding: 6px 10px;
-            gap: 12px;
+            padding: 0 10px;
+            gap: 10px;
             flex-shrink: 0;
+            box-sizing: border-box;
             -webkit-app-region: no-drag !important;
           }
 
@@ -917,21 +1152,27 @@ ${instructions.trim()}
             display: flex;
             align-items: center;
             gap: 4px;
+            flex-shrink: 0;
           }
 
           .tab-pill-btn {
-            display: flex;
+            display: inline-flex;
             align-items: center;
             gap: 6px;
             font-size: 11.5px;
             font-weight: 600;
-            padding: 4px 10px;
+            height: 26px;
+            padding: 0 10px;
+            white-space: nowrap;
             background: transparent;
             border: 1px solid transparent;
             border-radius: 5px;
             color: #64748b;
             cursor: pointer;
-            transition: all 0.12s;
+            transition: color 0.12s ease, background 0.12s ease, border-color 0.12s ease;
+            flex-shrink: 0;
+            box-sizing: border-box;
+            line-height: 1;
           }
 
           .tab-pill-btn:hover {
@@ -947,19 +1188,22 @@ ${instructions.trim()}
           .toolbar-controls-right {
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 8px;
+            flex-shrink: 0;
           }
 
           .template-dropdown-group {
             display: flex;
             align-items: center;
             gap: 6px;
+            flex-shrink: 0;
           }
 
           .template-select-label {
             font-size: 11px;
             font-weight: 600;
             color: #64748b;
+            white-space: nowrap;
           }
 
           .template-select {
@@ -968,18 +1212,20 @@ ${instructions.trim()}
             color: #cbd5e1;
             font-size: 11.5px;
             font-weight: 500;
-            padding: 3px 8px;
+            height: 24px;
+            padding: 0 8px;
             border-radius: 5px;
             outline: none;
             cursor: pointer;
             transition: border-color 0.15s;
+            box-sizing: border-box;
           }
 
           .template-select:hover, .template-select:focus {
             border-color: #3b82f6;
           }
 
-          .preview-mode-switch {
+          .obsidian-mode-switch {
             display: flex;
             align-items: center;
             background: #090e18;
@@ -987,40 +1233,95 @@ ${instructions.trim()}
             border-radius: 6px;
             padding: 2px;
             gap: 2px;
+            height: 26px;
+            box-sizing: border-box;
+            flex-shrink: 0;
           }
 
-          .preview-mode-btn {
-            display: flex;
+          .obsidian-mode-btn {
+            display: inline-flex;
             align-items: center;
             gap: 5px;
             font-size: 11px;
             font-weight: 600;
-            padding: 3px 8px;
+            height: 20px;
+            padding: 0 8px;
             border-radius: 4px;
             background: transparent;
             border: none;
             color: #64748b;
             cursor: pointer;
             transition: all 0.12s;
+            white-space: nowrap;
+            line-height: 1;
+            box-sizing: border-box;
           }
 
-          .preview-mode-btn:hover {
+          .obsidian-mode-btn:hover {
             color: #cbd5e1;
           }
 
-          .preview-mode-btn.active {
+          .obsidian-mode-btn.active {
             background: #172133;
             color: #c084fc;
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
           }
 
+          .raw-copy-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+            font-size: 11px;
+            font-weight: 500;
+            height: 24px;
+            width: 70px;
+            min-width: 70px;
+            max-width: 70px;
+            padding: 0 8px;
+            background: #0e1524;
+            border: 1px solid #1e293b;
+            border-radius: 5px;
+            color: #94a3b8;
+            cursor: pointer;
+            transition: all 0.12s;
+            white-space: nowrap;
+            line-height: 1;
+            box-sizing: border-box;
+            flex-shrink: 0;
+          }
+
+          .raw-copy-btn:hover {
+            background: #172236;
+            border-color: #3b82f6;
+            color: #e2e8f0;
+          }
+
+          .raw-copy-btn.copied {
+            border-color: rgba(52, 211, 153, 0.35);
+            background: rgba(16, 185, 129, 0.08);
+          }
+
           .instructions-char-pill {
-            font-size: 10.5px;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 11px;
             color: #64748b;
             background: #090e18;
             border: 1px solid #172236;
-            padding: 3px 7px;
+            height: 24px;
+            padding: 0 8px;
             border-radius: 5px;
+            white-space: nowrap;
+            flex-shrink: 0;
+            box-sizing: border-box;
+            line-height: 1;
+          }
+
+          .instructions-char-pill .char-pill-icon {
+            color: #64748b;
+            flex-shrink: 0;
           }
 
           .editor-content-wrap, .preview-content-wrap {
@@ -1056,11 +1357,11 @@ ${instructions.trim()}
             pointer-events: auto !important;
           }
 
-          .markdown-editor-input::-webkit-scrollbar, .preview-content-wrap::-webkit-scrollbar {
+          .markdown-editor-input::-webkit-scrollbar, .preview-content-wrap::-webkit-scrollbar, .preview-scroll-body::-webkit-scrollbar {
             width: 6px;
           }
 
-          .markdown-editor-input::-webkit-scrollbar-thumb, .preview-content-wrap::-webkit-scrollbar-thumb {
+          .markdown-editor-input::-webkit-scrollbar-thumb, .preview-content-wrap::-webkit-scrollbar-thumb, .preview-scroll-body::-webkit-scrollbar-thumb {
             background: #1c273c;
             border-radius: 3px;
           }
@@ -1069,6 +1370,72 @@ ${instructions.trim()}
             padding: 12px 14px;
             overflow-y: auto;
             gap: 10px;
+          }
+
+          .preview-content-wrap.view-mode-wrap {
+            padding: 0;
+            gap: 0;
+            overflow: hidden;
+          }
+
+          .preview-view-banner {
+            padding: 12px 16px 10px;
+            border-bottom: 1px solid #172238;
+            background: #090e18;
+            flex-shrink: 0;
+          }
+
+          .view-banner-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #f1f5f9;
+            margin-bottom: 4px;
+          }
+
+          .view-banner-meta {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-bottom: 4px;
+          }
+
+          .view-tag-badge {
+            font-size: 10px;
+            font-weight: 500;
+            padding: 1px 6px;
+            border-radius: 4px;
+            background: #131c2e;
+            border: 1px solid #1e293b;
+            color: #94a3b8;
+          }
+
+          .view-tag-badge.category {
+            background: rgba(124, 58, 237, 0.15);
+            border-color: rgba(124, 58, 237, 0.3);
+            color: #c084fc;
+          }
+
+          .view-banner-desc {
+            font-size: 11.5px;
+            color: #94a3b8;
+            line-height: 1.45;
+            margin: 0;
+          }
+
+          .preview-scroll-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 14px 16px;
+          }
+
+          .raw-edit-notice {
+            font-size: 10.5px;
+            color: #a78bfa;
+            background: rgba(124, 58, 237, 0.1);
+            border-bottom: 1px solid rgba(124, 58, 237, 0.2);
+            padding: 5px 12px;
+            flex-shrink: 0;
           }
 
           .preview-readonly-badge {

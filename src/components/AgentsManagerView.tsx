@@ -57,17 +57,27 @@ export const AgentsManagerView: React.FC<AgentsManagerViewProps> = ({
     }
   };
 
-  // Scroll into view
+  // Scroll into view with multi-attempt polling to handle tab transition & render delays
   useEffect(() => {
-    if (highlightedId) {
-      const timer = setTimeout(() => {
-        const el = document.getElementById(`agent-${highlightedId}`);
-        if (el) {
-          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
-      }, 100);
-      return () => clearTimeout(timer);
-    }
+    if (!highlightedId) return;
+
+    let attempts = 0;
+    const maxAttempts = 14;
+    const intervalId = setInterval(() => {
+      attempts++;
+      const el =
+        document.getElementById(`agent-${highlightedId}`) ||
+        document.querySelector('.item-card-highlighted');
+
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        clearInterval(intervalId);
+      } else if (attempts >= maxAttempts) {
+        clearInterval(intervalId);
+      }
+    }, 50);
+
+    return () => clearInterval(intervalId);
   }, [highlightedId]);
 
   const filteredAgents = useMemo(() => {
@@ -85,7 +95,7 @@ export const AgentsManagerView: React.FC<AgentsManagerViewProps> = ({
         <div>
           <div className="header-title-line">
             <h2 className="view-title">Connected AI Agents</h2>
-            <span className="active-pill font-mono" key={activeCount}>
+            <span className="active-pill font-mono">
               {activeCount} ACTIVE TARGETS
             </span>
           </div>
@@ -313,23 +323,6 @@ export const AgentsManagerView: React.FC<AgentsManagerViewProps> = ({
           padding: 2px 8px;
           border-radius: 4px;
           border: 1px solid rgba(56, 189, 248, 0.25);
-          transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-          display: inline-block;
-          animation: pillScale 0.22s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-
-        @keyframes pillScale {
-          0% {
-            transform: scale(0.92);
-            opacity: 0.8;
-          }
-          50% {
-            transform: scale(1.06);
-          }
-          100% {
-            transform: scale(1);
-            opacity: 1;
-          }
         }
 
         .view-desc {
@@ -346,7 +339,8 @@ export const AgentsManagerView: React.FC<AgentsManagerViewProps> = ({
           font-size: 11px;
           font-weight: 600;
           height: 28px;
-          padding: 0 12px;
+          width: 112px;
+          padding: 0;
           border-radius: 6px;
           cursor: pointer;
           transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
@@ -418,47 +412,18 @@ export const AgentsManagerView: React.FC<AgentsManagerViewProps> = ({
           display: flex;
           flex-direction: column;
           gap: 12px;
-          position: relative;
-          overflow: hidden;
-          transition: border-color 0.25s cubic-bezier(0.16, 1, 0.3, 1),
-                      background-color 0.25s cubic-bezier(0.16, 1, 0.3, 1),
-                      box-shadow 0.25s cubic-bezier(0.16, 1, 0.3, 1),
-                      transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+          transition: all 0.15s ease;
         }
 
         .agent-card:hover {
-          border-color: rgba(99, 102, 241, 0.35);
-          background: #131b2c;
-          box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.45);
+          border-color: #2b3a56;
+          box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
           transform: translateY(-1px);
         }
 
         .agent-card-selected {
-          border-color: rgba(99, 102, 241, 0.48);
+          border-color: rgba(59, 130, 246, 0.4);
           background: #131a2b;
-          box-shadow: 0 4px 20px -2px rgba(99, 102, 241, 0.14);
-        }
-
-        .agent-card-selected::before {
-          content: '';
-          position: absolute;
-          top: 0;
-          left: 0;
-          right: 0;
-          height: 2px;
-          background: linear-gradient(90deg, transparent, #818cf8, transparent);
-          animation: cardTopGlow 0.3s ease-out;
-        }
-
-        @keyframes cardTopGlow {
-          from {
-            opacity: 0;
-            transform: scaleX(0.3);
-          }
-          to {
-            opacity: 1;
-            transform: scaleX(1);
-          }
         }
 
         .agent-card-header {
@@ -567,9 +532,8 @@ export const AgentsManagerView: React.FC<AgentsManagerViewProps> = ({
         }
 
         .toggle-switch input:checked + .toggle-slider {
-          background-color: #6366f1;
-          border-color: #6366f1;
-          box-shadow: 0 0 10px rgba(99, 102, 241, 0.35);
+          background-color: #3b82f6;
+          border-color: #3b82f6;
         }
 
         .toggle-switch input:checked + .toggle-slider:before {
@@ -748,23 +712,37 @@ export const AgentsManagerView: React.FC<AgentsManagerViewProps> = ({
         }
 
         .item-card-highlighted {
-          border-color: rgba(96, 165, 250, 0.65) !important;
-          background: rgba(96, 165, 250, 0.05) !important;
-          box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.4), 0 4px 16px rgba(96, 165, 250, 0.12) !important;
-          animation: highlightAgentSoft 1.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-          z-index: 5;
+          border-color: rgba(96, 165, 250, 0.95) !important;
+          background: linear-gradient(135deg, rgba(96, 165, 250, 0.12), rgba(59, 130, 246, 0.04)) !important;
+          box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.7), 0 0 32px rgba(96, 165, 250, 0.38) !important;
+          animation: highlightAgentSoft 3.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+          z-index: 10;
+          position: relative;
         }
 
         @keyframes highlightAgentSoft {
           0% {
-            border-color: rgba(96, 165, 250, 0.8);
-            box-shadow: 0 0 0 1.5px rgba(96, 165, 250, 0.45), 0 4px 16px rgba(96, 165, 250, 0.15);
+            transform: scale(1.025);
+            border-color: rgba(96, 165, 250, 1);
+            box-shadow: 0 0 0 2.5px rgba(96, 165, 250, 0.85), 0 0 40px rgba(96, 165, 250, 0.5);
           }
-          60% {
-            border-color: rgba(96, 165, 250, 0.5);
-            box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.25), 0 2px 8px rgba(96, 165, 250, 0.08);
+          15% {
+            transform: scale(1);
+            border-color: rgba(96, 165, 250, 0.95);
+            box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.75), 0 0 32px rgba(96, 165, 250, 0.4);
+          }
+          65% {
+            transform: scale(1);
+            border-color: rgba(96, 165, 250, 0.8);
+            box-shadow: 0 0 0 1.5px rgba(96, 165, 250, 0.55), 0 0 22px rgba(96, 165, 250, 0.25);
+          }
+          88% {
+            transform: scale(1);
+            border-color: rgba(96, 165, 250, 0.45);
+            box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.2), 0 0 10px rgba(96, 165, 250, 0.1);
           }
           100% {
+            transform: scale(1);
             border-color: #1e283d;
             background: #121826;
             box-shadow: none;

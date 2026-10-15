@@ -14,8 +14,6 @@ import {
   FolderOpen, 
   Plus, 
   Trash2, 
-  CheckCircle2, 
-  AlertCircle, 
   Loader2, 
   FileText, 
   Sliders, 
@@ -34,6 +32,7 @@ import { RULE_PRESETS, DEFAULT_RULES_TEMPLATE } from '../data/rulePresets';
 import { logActivity } from '../services/activityLogger';
 import { MarkdownViewer, renderInlineMarkdown } from './MarkdownViewer';
 import { useModalTransition } from '../hooks/useModalTransition';
+import { useToast } from '../context/ToastContext';
 
 interface RulesBuilderViewProps {
   selectedAgents: SupportedAgent[];
@@ -196,8 +195,7 @@ export const RulesBuilderView: React.FC<RulesBuilderViewProps> = ({
 
   const [isLoadingFile, setIsLoadingFile] = useState<boolean>(false);
   const [isSaving, setIsSaving] = useState<boolean>(false);
-  const [actionMessage, setActionMessage] = useState<string | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const toast = useToast();
   const [lastSavedTime, setLastSavedTime] = useState<string | null>(null);
   const [resolvedFilePath, setResolvedFilePath] = useState<string>('');
 
@@ -288,7 +286,6 @@ export const RulesBuilderView: React.FC<RulesBuilderViewProps> = ({
     if (!window.electronAPI?.readRules) return;
 
     setIsLoadingFile(true);
-    setErrorMessage(null);
     setEditingDirectiveId(null);
     setActiveSectionId('all');
 
@@ -318,7 +315,7 @@ export const RulesBuilderView: React.FC<RulesBuilderViewProps> = ({
       }
     } catch (err: any) {
       console.warn('Failed to load rules file:', err);
-      setErrorMessage(`Failed to read rules: ${err.message || 'Unknown error'}`);
+      toast.error(`Failed to read rules: ${err.message || 'Unknown error'}`);
     } finally {
       setIsLoadingFile(false);
     }
@@ -327,13 +324,6 @@ export const RulesBuilderView: React.FC<RulesBuilderViewProps> = ({
   useEffect(() => {
     loadRulesFromDisk();
   }, [loadRulesFromDisk]);
-
-  useEffect(() => {
-    if (actionMessage) {
-      const t = setTimeout(() => setActionMessage(null), 3000);
-      return () => clearTimeout(t);
-    }
-  }, [actionMessage]);
 
   // Directive Actions
   const updateVisualSections = (newSections: RuleSection[]) => {
@@ -446,7 +436,7 @@ export const RulesBuilderView: React.FC<RulesBuilderViewProps> = ({
     setActiveSectionId(newSecId);
     setNewSectionTitle('');
     setIsAddingSection(false);
-    setActionMessage(`Section "${newSec.title}" created.`);
+    toast.success(`Section "${newSec.title}" created.`);
   };
 
   // Delete section
@@ -456,7 +446,7 @@ export const RulesBuilderView: React.FC<RulesBuilderViewProps> = ({
     if (activeSectionId === sectionId) {
       setActiveSectionId('all');
     }
-    setActionMessage(`Section "${title}" removed.`);
+    toast.info(`Section "${title}" removed.`);
   };
 
   // Presets & Templates
@@ -498,7 +488,7 @@ export const RulesBuilderView: React.FC<RulesBuilderViewProps> = ({
     }
 
     updateVisualSections(updated);
-    setActionMessage(`Injected preset: "${preset.title}"`);
+    toast.success(`Injected preset: "${preset.title}"`);
     setIsPresetModalOpen(false);
   };
 
@@ -515,7 +505,7 @@ export const RulesBuilderView: React.FC<RulesBuilderViewProps> = ({
   const handleReset = () => {
     setMarkdownContent(DEFAULT_RULES_TEMPLATE);
     setSections(parseMarkdownToSections(DEFAULT_RULES_TEMPLATE));
-    setActionMessage('Directives reset to default template.');
+    toast.info('Directives reset to default template.');
     setIsMoreMenuOpen(false);
   };
 
@@ -524,7 +514,6 @@ export const RulesBuilderView: React.FC<RulesBuilderViewProps> = ({
     if (!window.electronAPI?.saveRules) return;
 
     setIsSaving(true);
-    setErrorMessage(null);
 
     const targets = syncToAllSelected
       ? selectedAgents.map((ag) => ({
@@ -559,7 +548,7 @@ export const RulesBuilderView: React.FC<RulesBuilderViewProps> = ({
           ? ' (+ GEMINI.md sync)'
           : '';
 
-        setActionMessage(`Directives deployed to ${targetNames.join(', ')}${syncNote}`);
+        toast.success(`Directives deployed to ${targetNames.join(', ')}${syncNote}`);
 
         logActivity({
           type: 'RULES',
@@ -573,10 +562,10 @@ export const RulesBuilderView: React.FC<RulesBuilderViewProps> = ({
           await onRefreshCapabilities();
         }
       } else {
-        setErrorMessage(res.error || 'Failed to deploy directives');
+        toast.error(res.error || 'Failed to deploy directives');
       }
     } catch (err: any) {
-      setErrorMessage(`Error: ${err.message || 'Unknown error'}`);
+      toast.error(`Error: ${err.message || 'Unknown error'}`);
     } finally {
       setIsSaving(false);
     }
@@ -626,25 +615,6 @@ export const RulesBuilderView: React.FC<RulesBuilderViewProps> = ({
 
   return (
     <div className="clean-rules-container">
-      {/* Toast Notification Banner */}
-      {actionMessage && (
-        <div className="clean-toast-banner">
-          <CheckCircle2 size={14} className="text-emerald-400" />
-          <span>{actionMessage}</span>
-        </div>
-      )}
-
-      {/* Error Notification Banner */}
-      {errorMessage && (
-        <div className="clean-toast-banner error">
-          <AlertCircle size={14} className="text-rose-400" />
-          <span className="flex-1">{errorMessage}</span>
-          <button onClick={() => setErrorMessage(null)} className="close-toast-btn">
-            <X size={12} />
-          </button>
-        </div>
-      )}
-
       {/* Single Consolidated Header Card */}
       <div className="clean-header-card">
         {/* Top Control Bar */}
@@ -1265,33 +1235,6 @@ export const RulesBuilderView: React.FC<RulesBuilderViewProps> = ({
           flex-direction: column;
           gap: 12px;
           width: 100%;
-        }
-
-        /* Toast */
-        .clean-toast-banner {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          background: rgba(16, 185, 129, 0.12);
-          border: 1px solid rgba(16, 185, 129, 0.28);
-          color: #34d399;
-          padding: 8px 14px;
-          border-radius: 6px;
-          font-size: 12px;
-          font-weight: 500;
-        }
-
-        .clean-toast-banner.error {
-          background: rgba(239, 68, 68, 0.12);
-          border-color: rgba(239, 68, 68, 0.28);
-          color: #f87171;
-        }
-
-        .close-toast-btn {
-          background: transparent;
-          border: none;
-          color: inherit;
-          cursor: pointer;
         }
 
         /* Single Consolidated Header Card */

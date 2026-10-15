@@ -11,6 +11,7 @@ import {
   AgentCapabilitiesPayload 
 } from './types/agent';
 import { CatalogSkill, CatalogPlugin, CatalogMcpServer } from './types/catalog';
+import { DependencyReport } from './types/dependencies';
 import { SKILLS_CATALOG } from './data/skillsCatalog';
 import { PLUGINS_CATALOG } from './data/pluginsCatalog';
 import { MCP_CATALOG } from './data/mcpCatalog';
@@ -55,6 +56,23 @@ export const App: React.FC = () => {
   ]);
   const [isSyncingCatalog, setIsSyncingCatalog] = useState(false);
   const [catalogSyncedAt, setCatalogSyncedAt] = useState<string | null>(null);
+  const [activeAgentFilter, setActiveAgentFilter] = useState<string[]>([]);
+  const [dependencyReport, setDependencyReport] = useState<DependencyReport | null>(null);
+
+  const refreshDependencies = async (): Promise<void> => {
+    if (window.electronAPI?.checkDependencies) {
+      try {
+        const rep = await window.electronAPI.checkDependencies();
+        setDependencyReport(rep);
+      } catch (err) {
+        console.warn('Failed to check dependencies:', err);
+      }
+    }
+  };
+
+  useEffect(() => {
+    refreshDependencies();
+  }, []);
 
   const handleSyncCloudCatalog = async () => {
     setIsSyncingCatalog(true);
@@ -95,14 +113,22 @@ export const App: React.FC = () => {
     if (highlightTarget) {
       const timer = setTimeout(() => {
         setHighlightTarget(null);
-      }, 1400);
+      }, 3500);
       return () => clearTimeout(timer);
     }
   }, [highlightTarget]);
 
   const handleSelectSearchResult = (tab: NavTab, itemId: string) => {
+    setSearchQuery('');
     setActiveTab(tab);
     setHighlightTarget({ tab, id: itemId });
+  };
+
+  const handleNavigateFromOverview = (tab: NavTab, itemId?: string) => {
+    setActiveTab(tab);
+    if (itemId) {
+      setHighlightTarget({ tab, id: itemId });
+    }
   };
 
   // Capability Scanning
@@ -252,6 +278,15 @@ export const App: React.FC = () => {
   const selectedAgentIds = useMemo(() => agents.filter((a) => a.selected).map((a) => a.id), [agents]);
   const selectedAgents = useMemo(() => agents.filter((a) => a.selected), [agents]);
 
+  // Automatically remove any filtered agents that get deselected
+  useEffect(() => {
+    const selectedIds = new Set(selectedAgents.map((a) => a.id));
+    setActiveAgentFilter((prev) => {
+      const next = prev.filter((id) => selectedIds.has(id));
+      return next.length === prev.length ? prev : next;
+    });
+  }, [selectedAgents]);
+
   const filteredSkills = useMemo(
     () => capabilities.skills.filter((s) => selectedAgentIds.includes(s.sourceAgentId)),
     [capabilities.skills, selectedAgentIds]
@@ -269,28 +304,76 @@ export const App: React.FC = () => {
     const list: InstalledPackage[] = [];
     filteredMcps.slice(0, 5).forEach((m) => {
       list.push({
-        id: m.id,
+        id: `mcp-${m.id}`,
         name: m.name,
         version: '1.0.0',
         type: 'MCP SERVER',
-        source: 'COMMUNITY',
+        source: m.pluginName ? 'OFFICIAL' : 'COMMUNITY',
         installedDate: 'Installed',
         status: 'Active',
+        rawType: 'mcp',
+        sourcePath: m.sourcePath,
+        sourceAgentId: m.sourceAgentId,
+        sourceAgentName: m.sourceAgentName,
+        sourceAgentColor: m.sourceAgentColor,
+        sourceAgentIcon: m.sourceAgentIcon,
+        folderName: m.name,
+        description: m.command
+          ? `Command: ${m.command} ${(m.args || []).join(' ')}`
+          : m.url
+          ? `URL: ${m.url}`
+          : 'Model Context Protocol server configuration',
+        command: m.command,
+        args: m.args,
+        transport: m.transport,
+        url: m.url,
       });
     });
     filteredPlugins.slice(0, 5).forEach((p) => {
       list.push({
-        id: p.id,
+        id: `plugin-${p.id}`,
         name: p.name,
         version: p.version || '1.0.0',
         type: 'SKILL BUNDLE',
         source: 'OFFICIAL',
         installedDate: 'Installed',
         status: 'Active',
+        rawType: 'plugin',
+        sourcePath: p.sourcePath,
+        sourceAgentId: p.sourceAgentId,
+        sourceAgentName: p.sourceAgentName,
+        sourceAgentColor: p.sourceAgentColor,
+        sourceAgentIcon: p.sourceAgentIcon,
+        folderName: p.folderName || p.id,
+        description: p.description || 'Pre-configured capability kit containing bundled skills and tools',
+        author: p.author,
+        skillsCount: p.skillsCount,
+        mcpsCount: p.mcpsCount,
+      });
+    });
+    filteredSkills.slice(0, 5).forEach((s) => {
+      list.push({
+        id: `skill-${s.id}`,
+        name: s.name,
+        version: '1.0.0',
+        type: 'SKILL',
+        source: 'LOCAL',
+        installedDate: 'Installed',
+        status: 'Active',
+        rawType: 'skill',
+        sourcePath: s.sourcePath,
+        sourceAgentId: s.sourceAgentId,
+        sourceAgentName: s.sourceAgentName,
+        sourceAgentColor: s.sourceAgentColor,
+        sourceAgentIcon: s.sourceAgentIcon,
+        folderName: s.folderName || s.name,
+        description: s.description || 'Specialized agent instructions and workflows',
+        hasScripts: s.hasScripts,
+        hasReferences: s.hasReferences,
       });
     });
     return list;
-  }, [filteredMcps, filteredPlugins]);
+  }, [filteredMcps, filteredPlugins, filteredSkills]);
 
   return (
     <div className="app-container">
@@ -306,6 +389,9 @@ export const App: React.FC = () => {
         activeTab={activeTab}
         onNavigateTab={setActiveTab}
         capabilities={capabilities}
+        skillsCatalog={skillsCatalog}
+        mcpCatalog={mcpCatalog}
+        pluginsCatalog={pluginsCatalog}
         onSelectSearchResult={handleSelectSearchResult}
       />
 
@@ -346,8 +432,10 @@ export const App: React.FC = () => {
                 {/* Installed Packages */}
                 <RecentlyInstalledPackages
                   packages={overviewPackages}
-                  searchQuery={searchQuery}
-                  onNavigate={setActiveTab}
+                  searchQuery={activeTab === 'overview' ? searchQuery : ''}
+                  onNavigate={handleNavigateFromOverview}
+                  agents={agents}
+                  onRefreshCapabilities={refreshCapabilities}
                 />
               </div>
             </div>
@@ -363,7 +451,7 @@ export const App: React.FC = () => {
                 onToggleAgent={handleToggleAgent}
                 onSelectOnly={handleSelectOnly}
                 onSelectAll={handleSelectAllAgents}
-                searchQuery={searchQuery}
+                searchQuery={activeTab === 'agents' ? searchQuery : ''}
                 highlightedId={highlightTarget?.tab === 'agents' ? highlightTarget.id : null}
               />
             </div>
@@ -380,8 +468,14 @@ export const App: React.FC = () => {
                 mcpCatalog={mcpCatalog}
                 catalogSyncedAt={catalogSyncedAt}
                 onRefreshCapabilities={refreshCapabilities}
-                searchQuery={searchQuery}
+                searchQuery={activeTab === 'mcp' ? searchQuery : ''}
                 highlightedId={highlightTarget?.tab === 'mcp' ? highlightTarget.id : null}
+                activeAgentFilter={activeAgentFilter}
+                onAgentFilterChange={setActiveAgentFilter}
+                isSyncingCatalog={isSyncingCatalog}
+                onSyncCatalog={handleSyncCloudCatalog}
+                dependencyReport={dependencyReport}
+                onRefreshDependencies={refreshDependencies}
               />
             </div>
           )}
@@ -400,8 +494,12 @@ export const App: React.FC = () => {
                 onSyncCatalog={handleSyncCloudCatalog}
                 catalogSyncedAt={catalogSyncedAt}
                 onRefreshCapabilities={refreshCapabilities}
-                searchQuery={searchQuery}
+                searchQuery={activeTab === 'skills' ? searchQuery : ''}
                 highlightedId={highlightTarget?.tab === 'skills' ? highlightTarget.id : null}
+                activeAgentFilter={activeAgentFilter}
+                onAgentFilterChange={setActiveAgentFilter}
+                dependencyReport={dependencyReport}
+                onRefreshDependencies={refreshDependencies}
               />
             </div>
           )}
@@ -423,8 +521,12 @@ export const App: React.FC = () => {
                 onSyncCatalog={handleSyncCloudCatalog}
                 catalogSyncedAt={catalogSyncedAt}
                 onRefreshCapabilities={refreshCapabilities}
-                searchQuery={searchQuery}
+                searchQuery={activeTab === 'plugins' ? searchQuery : ''}
                 highlightedId={highlightTarget?.tab === 'plugins' ? highlightTarget.id : null}
+                activeAgentFilter={activeAgentFilter}
+                onAgentFilterChange={setActiveAgentFilter}
+                dependencyReport={dependencyReport}
+                onRefreshDependencies={refreshDependencies}
               />
             </div>
           )}
@@ -437,7 +539,7 @@ export const App: React.FC = () => {
               <RulesBuilderView
                 selectedAgents={selectedAgents}
                 allAgents={agents}
-                searchQuery={searchQuery}
+                searchQuery={activeTab === 'rules' ? searchQuery : ''}
                 onRefreshCapabilities={refreshCapabilities}
               />
             </div>

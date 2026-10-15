@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { ScannedPlugin, ScannedSkill, ScannedMcpServer, SupportedAgent } from '../types/agent';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { ScannedPlugin, ScannedSkill, ScannedMcpServer, SupportedAgent, InstalledPluginDetails } from '../types/agent';
 import { CatalogPlugin, CatalogSkill } from '../types/catalog';
 import { PLUGINS_CATALOG } from '../data/pluginsCatalog';
 import { SKILLS_CATALOG } from '../data/skillsCatalog';
@@ -18,10 +18,27 @@ import {
   Filter,
   FolderOpen,
   RefreshCw,
-  Archive
+  Archive,
+  Edit3,
+  Trash2,
+  Check,
+  X,
+  ChevronDown,
+  Globe,
+  Package,
+  AlertCircle,
+  Copy,
+  Power,
+  PowerOff,
 } from 'lucide-react';
+import { MCP_CATALOG } from '../data/mcpCatalog';
 import { logActivity } from '../services/activityLogger';
+import { useToast } from '../context/ToastContext';
+import { formatSourceBadge } from '../services/catalogSync';
 import { ForgePluginModal } from './ForgePluginModal';
+import { DependencyReport } from '../types/dependencies';
+import { getRequiredDependencies, evaluateDependencyStatus, getInstallSnippetForPlatform } from '../utils/dependencyResolver';
+import { DependencyInstallDrawer } from './DependencyInstallDrawer';
 
 interface PluginsViewProps {
   plugins: ScannedPlugin[];
@@ -38,6 +55,10 @@ interface PluginsViewProps {
   onRefreshCapabilities?: () => Promise<void>;
   searchQuery?: string;
   highlightedId?: string | null;
+  activeAgentFilter?: string[];
+  onAgentFilterChange?: (agentIds: string[]) => void;
+  dependencyReport?: DependencyReport | null;
+  onRefreshDependencies?: () => Promise<void>;
 }
 
 const AGENT_ICON_MAP: Record<string, React.ElementType> = {
@@ -67,6 +88,22 @@ interface UnifiedPluginCard {
   installedAgents: SupportedAgent[];
   rulesCount?: number;
   sourcePath?: string;
+  sourceRegistry?: string;
+  license?: string;
+  disabledAgentIds?: string[];
+  isDisabled?: boolean;
+}
+
+const EMPTY_AGENTS: SupportedAgent[] = [];
+const pluginSearchCache = new WeakMap<UnifiedPluginCard, string>();
+
+function getPluginSearchString(p: UnifiedPluginCard): string {
+  let cached = pluginSearchCache.get(p);
+  if (!cached) {
+    cached = `${p.name} ${p.description} ${p.category || ''} ${p.author || ''} ${(p.tags || []).join(' ')}`.toLowerCase();
+    pluginSearchCache.set(p, cached);
+  }
+  return cached;
 }
 
 export const PluginsView: React.FC<PluginsViewProps> = ({
@@ -84,38 +121,120 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
   onRefreshCapabilities,
   searchQuery = '',
   highlightedId,
+  activeAgentFilter: propActiveAgentFilter,
+  onAgentFilterChange,
+  dependencyReport,
+  onRefreshDependencies,
 }) => {
   const [activeSegment, setActiveSegment] = useState<SegmentTab>('all');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
+  const [localAgentFilter, setLocalAgentFilter] = useState<string[]>([]);
+  const currentAgentFilter = propActiveAgentFilter !== undefined ? propActiveAgentFilter : localAgentFilter;
+  const setAgentFilter = onAgentFilterChange || setLocalAgentFilter;
+  const [visibleCount, setVisibleCount] = useState(36);
   const [loadingPluginId, setLoadingPluginId] = useState<string | null>(null);
-  const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [loadingEditPluginId, setLoadingEditPluginId] = useState<string | null>(null);
+  const [depDrawerTarget, setDepDrawerTarget] = useState<{
+    targetName: string;
+    requiredBinaries: string[];
+  } | null>(null);
+  const [copiedDepKey, setCopiedDepKey] = useState<string | null>(null);
+  const [copiedPluginId, setCopiedPluginId] = useState<string | null>(null);
+  const [togglingPluginId, setTogglingPluginId] = useState<string | null>(null);
+  const toast = useToast();
+
+  const handleCopyMissingDep = async (key: string, binary: string) => {
+    try {
+      const snippet = getInstallSnippetForPlatform(binary);
+      await navigator.clipboard.writeText(snippet);
+      setCopiedDepKey(key);
+      toast.success(`Copied install command: "${snippet}"`);
+      setTimeout(() => setCopiedDepKey(null), 2000);
+    } catch {
+      toast.error('Failed to copy install command');
+    }
+  };
+
+  const handleCopyPluginCommand = async (plugin: UnifiedPluginCard) => {
+    try {
+      const command = `npx plugins add ${plugin.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+      await navigator.clipboard.writeText(command);
+      setCopiedPluginId(plugin.id);
+      toast.success(`Copied plugin command: "${command}"`);
+      setTimeout(() => setCopiedPluginId(null), 2000);
+    } catch {
+      toast.error('Failed to copy plugin command');
+    }
+  };
   const [isForgeModalOpen, setIsForgeModalOpen] = useState(false);
+  const [editingPluginData, setEditingPluginData] = useState<InstalledPluginDetails | null>(null);
+  const [isAgentMenuOpen, setIsAgentMenuOpen] = useState(false);
+  const agentMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (agentMenuRef.current && !agentMenuRef.current.contains(e.target as Node)) {
+        setIsAgentMenuOpen(false);
+      }
+    };
+    if (isAgentMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [isAgentMenuOpen]);
 
   const activePluginsCatalog = pluginsCatalog || PLUGINS_CATALOG;
   const activeSkillsCatalog = skillsCatalog || SKILLS_CATALOG;
 
-  useEffect(() => {
-    if (actionMessage) {
-      const timer = setTimeout(() => setActionMessage(null), 3200);
-      return () => clearTimeout(timer);
-    }
-  }, [actionMessage]);
-
-  // Data Processing
+  // Ultra-fast O(N + P) Data Processing with Map lookups
   const unifiedPlugins = useMemo<UnifiedPluginCard[]>(() => {
     const list: UnifiedPluginCard[] = [];
     const processedIds = new Set<string>();
 
-    for (const cat of activePluginsCatalog) {
-      processedIds.add(cat.id.toLowerCase());
-      const installedOn = selectedAgents.filter((agent) =>
-        plugins.some(
-          (p) =>
-            p.sourceAgentId === agent.id &&
-            (p.folderName?.toLowerCase() === cat.id.toLowerCase() ||
-              p.name.toLowerCase() === cat.name.toLowerCase())
-        )
-      );
+    // 1. Pre-index installed plugins by normalized name/folder in O(P)
+    const installedLookup = new Map<string, {
+      installedAgents: SupportedAgent[];
+      disabledAgentIds: string[];
+      matchedPlugin?: any;
+    }>();
+    for (let i = 0; i < plugins.length; i++) {
+      const p = plugins[i];
+      const agent = selectedAgents.find((a) => a.id === p.sourceAgentId);
+      const keys = [
+        p.folderName?.toLowerCase().trim(),
+        p.name?.toLowerCase().trim(),
+        p.id?.toLowerCase().trim(),
+      ].filter(Boolean) as string[];
+
+      for (let k = 0; k < keys.length; k++) {
+        const key = keys[k];
+        let entry = installedLookup.get(key);
+        if (!entry) {
+          entry = { installedAgents: [], disabledAgentIds: [], matchedPlugin: p };
+          installedLookup.set(key, entry);
+        }
+        if (agent && !entry.installedAgents.some((a) => a.id === agent.id)) {
+          entry.installedAgents.push(agent);
+        }
+        if (agent && p.disabled && !entry.disabledAgentIds.includes(agent.id)) {
+          entry.disabledAgentIds.push(agent.id);
+        }
+      }
+    }
+
+    // 2. Map catalog items with O(1) installed status lookups
+    for (let i = 0; i < activePluginsCatalog.length; i++) {
+      const cat = activePluginsCatalog[i];
+      const catIdLower = cat.id.toLowerCase().trim();
+      const catNameLower = cat.name ? cat.name.toLowerCase().trim() : '';
+      processedIds.add(catIdLower);
+      if (catNameLower) processedIds.add(catNameLower);
+
+      const match = installedLookup.get(catIdLower) || (catNameLower ? installedLookup.get(catNameLower) : undefined);
+      const installedOn = match ? match.installedAgents : EMPTY_AGENTS;
+      const disabledAgentIds = match ? match.disabledAgentIds : [];
+      const isDisabled = installedOn.length > 0 && disabledAgentIds.length >= installedOn.length;
+      const matchedInstalled = match?.matchedPlugin;
 
       list.push({
         id: cat.id,
@@ -127,22 +246,26 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
         bundledSkills: cat.bundledSkills,
         bundledMcps: cat.bundledMcps,
         tags: cat.tags,
+        sourceRegistry: cat.sourceRegistry || 'AAS Bundles',
+        license: cat.license || 'MIT',
         isCatalog: true,
         installedAgents: installedOn,
+        disabledAgentIds,
+        isDisabled,
+        sourcePath: matchedInstalled?.sourcePath,
       });
     }
 
-    for (const p of plugins) {
-      const folder = (p.folderName || p.name).toLowerCase();
+    // 3. Add local/custom installed plugins not in catalog
+    for (let i = 0; i < plugins.length; i++) {
+      const p = plugins[i];
+      const folder = (p.folderName || p.name).toLowerCase().trim();
       if (!processedIds.has(folder)) {
         processedIds.add(folder);
-        const installedOn = selectedAgents.filter((agent) =>
-          plugins.some(
-            (other) =>
-              other.sourceAgentId === agent.id &&
-              (other.folderName?.toLowerCase() === folder || other.name.toLowerCase() === p.name.toLowerCase())
-          )
-        );
+        const match = installedLookup.get(folder);
+        const installedOn = match ? match.installedAgents : EMPTY_AGENTS;
+        const disabledAgentIds = match ? match.disabledAgentIds : [];
+        const isDisabled = installedOn.length > 0 && disabledAgentIds.length >= installedOn.length;
 
         list.push({
           id: p.folderName || p.id,
@@ -154,74 +277,194 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
           bundledSkills: Array(p.skillsCount).fill('Skill'),
           bundledMcps: Array(p.mcpsCount).fill('MCP'),
           rulesCount: p.rulesCount,
+          sourceRegistry: 'Local Workspace',
+          license: 'Custom',
           isCatalog: false,
           installedAgents: installedOn,
+          disabledAgentIds,
+          isDisabled,
           sourcePath: p.sourcePath,
         });
       }
     }
 
     return list;
-  }, [plugins, selectedAgents]);
+  }, [plugins, selectedAgents, activePluginsCatalog]);
 
   const categories = useMemo(() => {
     const set = new Set<string>();
-    unifiedPlugins.forEach((p) => {
-      if (p.category) set.add(p.category);
-    });
+    for (let i = 0; i < unifiedPlugins.length; i++) {
+      const cat = unifiedPlugins[i].category;
+      if (cat) set.add(cat);
+    }
     return ['All', ...Array.from(set)];
   }, [unifiedPlugins]);
 
   const counts = useMemo(() => {
-    const installed = unifiedPlugins.filter((p) => p.installedAgents.length > 0).length;
-    const available = unifiedPlugins.filter((p) => p.isCatalog && p.installedAgents.length < selectedAgents.length).length;
+    let installed = 0;
+    let available = 0;
+    const selCount = selectedAgents.length;
+    for (let i = 0; i < unifiedPlugins.length; i++) {
+      const p = unifiedPlugins[i];
+      if (p.installedAgents.length > 0) installed++;
+      if (p.isCatalog && p.installedAgents.length < selCount) available++;
+    }
     return {
       all: unifiedPlugins.length,
       installed,
       available,
     };
-  }, [unifiedPlugins, selectedAgents]);
-
-  const indexedPlugins = useMemo(() => {
-    return unifiedPlugins.map((p) => ({
-      item: p,
-      searchStr: `${p.name} ${p.description} ${p.category || ''} ${p.author || ''} ${(p.tags || []).join(' ')}`.toLowerCase(),
-    }));
-  }, [unifiedPlugins]);
+  }, [unifiedPlugins, selectedAgents.length]);
 
   const filteredPlugins = useMemo(() => {
-    let result = indexedPlugins;
+    const q = searchQuery.trim().toLowerCase();
+    const isInstalledOnly = activeSegment === 'installed';
+    const isAvailableOnly = activeSegment === 'available';
+    const hasCategory = selectedCategory !== 'All';
+    const selectedCount = selectedAgents.length;
 
-    if (activeSegment === 'installed') {
-      result = result.filter((p) => p.item.installedAgents.length > 0);
-    } else if (activeSegment === 'available') {
-      result = result.filter((p) => p.item.isCatalog && p.item.installedAgents.length < selectedAgents.length);
+    // Zero-allocation fast-path
+    if (!q && activeSegment === 'all' && !hasCategory && currentAgentFilter.length === 0) {
+      return unifiedPlugins;
     }
 
-    if (selectedCategory !== 'All') {
-      result = result.filter((p) => p.item.category === selectedCategory);
-    }
+    const matched: UnifiedPluginCard[] = [];
+    for (let i = 0; i < unifiedPlugins.length; i++) {
+      const p = unifiedPlugins[i];
+      if (isInstalledOnly && p.installedAgents.length === 0) continue;
+      if (isAvailableOnly && (!p.isCatalog || p.installedAgents.length >= selectedCount)) continue;
+      if (hasCategory && p.category !== selectedCategory) continue;
+      if (q && !getPluginSearchString(p).includes(q)) continue;
 
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase().trim();
-      result = result.filter((p) => p.searchStr.includes(q));
-    }
-
-    return result.map((p) => p.item);
-  }, [indexedPlugins, activeSegment, selectedCategory, searchQuery, selectedAgents.length]);
-
-  // Effects
-  useEffect(() => {
-    if (highlightedId) {
-      const timer = setTimeout(() => {
-        const el = document.getElementById(`plugin-card-${highlightedId}`);
-        if (el) {
-          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      if (currentAgentFilter.length > 0) {
+        const hasFilteredAgent = p.installedAgents.some((a) => currentAgentFilter.includes(a.id));
+        if (isInstalledOnly) {
+          if (!hasFilteredAgent) continue;
+        } else if (isAvailableOnly) {
+          const installedFilteredCount = p.installedAgents.filter((a) => currentAgentFilter.includes(a.id)).length;
+          if (installedFilteredCount >= currentAgentFilter.length) continue;
+        } else {
+          if (p.installedAgents.length > 0 && !hasFilteredAgent) {
+            continue;
+          }
         }
-      }, 100);
-      return () => clearTimeout(timer);
+      }
+
+      matched.push(p);
     }
-  }, [highlightedId]);
+
+    return matched;
+  }, [unifiedPlugins, activeSegment, selectedCategory, searchQuery, selectedAgents.length, currentAgentFilter]);
+
+  const displayedPlugins = useMemo(() => {
+    return filteredPlugins.slice(0, visibleCount);
+  }, [filteredPlugins, visibleCount]);
+
+  useEffect(() => {
+    setVisibleCount(36);
+  }, [searchQuery, activeSegment, selectedCategory, currentAgentFilter]);
+
+  // Identify target plugin match from highlightedId
+  const targetPluginMatch = useMemo(() => {
+    if (!highlightedId) return null;
+    const hLower = highlightedId.toLowerCase().trim();
+    return (
+      unifiedPlugins.find(
+        (p) =>
+          p.id.toLowerCase() === hLower ||
+          p.name.toLowerCase() === hLower ||
+          plugins.some(
+            (mp) =>
+              mp.id === highlightedId &&
+              (mp.name.toLowerCase() === p.name.toLowerCase() ||
+                (mp.folderName && mp.folderName.toLowerCase() === p.id.toLowerCase()))
+          )
+      ) || null
+    );
+  }, [highlightedId, unifiedPlugins, plugins]);
+
+  // If highlighted item is hidden by category or segment filters, auto-reveal it
+  useEffect(() => {
+    if (!targetPluginMatch) return;
+
+    // Reset segment if it hides the target
+    if (activeSegment === 'installed' && targetPluginMatch.installedAgents.length === 0) {
+      setActiveSegment('all');
+    } else if (
+      activeSegment === 'available' &&
+      targetPluginMatch.isCatalog &&
+      targetPluginMatch.installedAgents.length >= selectedAgents.length
+    ) {
+      setActiveSegment('all');
+    }
+
+    // Reset category if it hides the target
+    if (selectedCategory !== 'All' && targetPluginMatch.category && targetPluginMatch.category !== selectedCategory) {
+      setSelectedCategory('All');
+    }
+
+    // Reset agent filter if it hides the target
+    if (
+      currentAgentFilter.length > 0 &&
+      !targetPluginMatch.installedAgents.some((a) => currentAgentFilter.includes(a.id))
+    ) {
+      setAgentFilter([]);
+    }
+  }, [targetPluginMatch, activeSegment, selectedCategory, currentAgentFilter, selectedAgents.length, setAgentFilter]);
+
+  // Expand pagination if target is beyond current slice
+  useEffect(() => {
+    if (!targetPluginMatch) return;
+    const targetIdx = filteredPlugins.findIndex((p) => p.id === targetPluginMatch.id);
+    if (targetIdx !== -1 && targetIdx >= visibleCount) {
+      setVisibleCount(targetIdx + 12);
+    }
+  }, [targetPluginMatch, filteredPlugins, visibleCount]);
+
+  // Scroll into view with multi-attempt polling to handle tab transition & render delays
+  useEffect(() => {
+    if (!targetPluginMatch && !highlightedId) return;
+    const targetCardId = targetPluginMatch ? targetPluginMatch.id : highlightedId;
+
+    let attempts = 0;
+    const maxAttempts = 14;
+    const intervalId = setInterval(() => {
+      attempts++;
+      const el =
+        document.getElementById(`plugin-card-${targetCardId}`) ||
+        document.getElementById(`plugin-card-${highlightedId}`) ||
+        document.querySelector('.item-card-highlighted');
+
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        clearInterval(intervalId);
+      } else if (attempts >= maxAttempts) {
+        clearInterval(intervalId);
+      }
+    }, 50);
+
+    return () => clearInterval(intervalId);
+  }, [targetPluginMatch, highlightedId, visibleCount]);
+
+  const handleToggleAgentFilter = (agentId: string | null) => {
+    if (!agentId) {
+      setAgentFilter([]);
+      return;
+    }
+    if (currentAgentFilter.includes(agentId)) {
+      setAgentFilter(currentAgentFilter.filter((id) => id !== agentId));
+    } else {
+      setAgentFilter([...currentAgentFilter, agentId]);
+    }
+  };
+
+  const handleAgentPillClick = (agentId: string) => {
+    if (currentAgentFilter.length === 1 && currentAgentFilter[0] === agentId) {
+      setAgentFilter([]);
+    } else {
+      setAgentFilter([agentId]);
+    }
+  };
 
   // Handlers
   const handleInstallPluginKit = async (plugin: UnifiedPluginCard) => {
@@ -231,40 +474,84 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
       (agent) => !plugin.installedAgents.some((inst) => inst.id === agent.id)
     );
 
-    if (targetAgents.length === 0) return;
+    if (targetAgents.length === 0) {
+      toast.info(`"${plugin.name}" is already equipped on all selected agents.`);
+      return;
+    }
 
     // Skills payload
-    const skillsToDownload = plugin.bundledSkills.map((sId) => {
-      const cat = activeSkillsCatalog.find((c) => c.id === sId);
-      const rawUrl = cat?.rawUrl || `https://raw.githubusercontent.com/sickn33/agentic-awesome-skills/main/skills/${sId}/SKILL.md`;
-      return { skillId: sId, rawUrl };
+    const skillsToDownload = (plugin.bundledSkills || []).map((sId) => {
+      const cleanId = sId.trim();
+      const cat = activeSkillsCatalog.find((c) => 
+        c.id === cleanId || 
+        c.id === cleanId.split('/').pop() ||
+        c.rawUrl?.includes(`/${cleanId}/`)
+      );
+      const rawUrl = cat?.rawUrl || (
+        cleanId.startsWith('skills/')
+          ? `https://raw.githubusercontent.com/sickn33/agentic-awesome-skills/main/${cleanId}/SKILL.md`
+          : `https://raw.githubusercontent.com/sickn33/agentic-awesome-skills/main/skills/${cleanId}/SKILL.md`
+      );
+      return { skillId: cat?.id || cleanId.split('/').pop() || cleanId, rawUrl };
     });
+
+    // Bundled MCP server configurations from catalog
+    const mcpConfigs: Record<string, any> = {};
+    if (plugin.bundledMcps && plugin.bundledMcps.length > 0) {
+      for (const mcpId of plugin.bundledMcps) {
+        const found = MCP_CATALOG.find((m) => m.id === mcpId);
+        if (found) {
+          mcpConfigs[found.id] = {
+            ...(found.command ? { command: found.command } : {}),
+            ...(found.args ? { args: found.args } : {}),
+            ...(found.url ? { url: found.url } : {}),
+            ...(found.transport ? { transport: found.transport } : {}),
+            ...(found.env ? { env: found.env } : {}),
+          };
+        } else {
+          mcpConfigs[mcpId] = {
+            command: 'npx',
+            args: ['-y', mcpId],
+          };
+        }
+      }
+    }
 
     setLoadingPluginId(plugin.id);
     try {
       const res = await window.electronAPI.installPlugin({
         pluginId: plugin.id,
+        name: plugin.name,
+        version: plugin.version || '1.0.0',
+        description: plugin.description || '',
+        author: plugin.author || 'AgentForge Catalog',
+        category: plugin.category || 'General',
+        tags: plugin.tags || [],
+        bundledSkills: plugin.bundledSkills || [],
+        bundledMcps: plugin.bundledMcps || [],
+        mcpConfigs,
         skills: skillsToDownload,
         targets: targetAgents.map((a) => ({
           agentId: a.id,
           skillsDir: a.paths.skillsDir,
           pluginsDir: a.paths.pluginsDir,
+          mcpConfigPath: a.paths.mcpConfigPath,
         })),
       });
 
       if (res.success) {
-        setActionMessage(`Equipped kit "${plugin.name}" on ${targetAgents.map((a) => a.name).join(', ')}`);
+        toast.success(`Equipped kit "${plugin.name}" on ${targetAgents.map((a) => a.name).join(', ')}`);
         logActivity({
           type: 'PLUGIN',
           title: 'Plugin Kit Equipped',
-          description: `Equipped kit "${plugin.name}" (${plugin.bundledSkills.length} skills) on ${targetAgents.map((a) => a.name).join(', ')}`,
+          description: `Equipped kit "${plugin.name}" (${(plugin.bundledSkills || []).length} skills) on ${targetAgents.map((a) => a.name).join(', ')}`,
           status: 'success',
         });
         if (onRefreshCapabilities) {
           await onRefreshCapabilities();
         }
       } else {
-        setActionMessage(`Error: ${res.error || 'Failed to install plugin kit'}`);
+        toast.error(`Error: ${res.error || 'Failed to install plugin kit'}`);
         logActivity({
           type: 'PLUGIN',
           title: 'Kit Equip Failed',
@@ -273,7 +560,7 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
         });
       }
     } catch (err: any) {
-      setActionMessage(`Error: ${err.message || 'Installation failed'}`);
+      toast.error(`Error: ${err.message || 'Installation failed'}`);
       logActivity({
         type: 'PLUGIN',
         title: 'Kit Equip Error',
@@ -282,6 +569,91 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
       });
     } finally {
       setLoadingPluginId(null);
+    }
+  };
+
+  // Uninstall Plugin
+  const handleUninstallPlugin = async (plugin: UnifiedPluginCard) => {
+    if (!window.electronAPI?.uninstallPlugin) return;
+
+    const targetAgents = selectedAgents.filter((agent) =>
+      plugin.installedAgents.some((inst) => inst.id === agent.id)
+    );
+    if (targetAgents.length === 0) return;
+
+    setLoadingPluginId(plugin.id);
+    try {
+      const res = await window.electronAPI.uninstallPlugin({
+        pluginId: plugin.id,
+        folderName: plugin.id,
+        targets: targetAgents.map((a) => ({
+          agentId: a.id,
+          pluginsDir: a.paths.pluginsDir,
+        })),
+      });
+
+      if (res.success) {
+        toast.success(`Removed "${plugin.name}" from ${targetAgents.map((a) => a.name).join(', ')}`);
+        logActivity({
+          type: 'PLUGIN',
+          title: 'Plugin Removed',
+          description: `Removed "${plugin.name}" from ${targetAgents.map((a) => a.name).join(', ')}`,
+          status: 'success',
+        });
+        if (onRefreshCapabilities) {
+          await onRefreshCapabilities();
+        }
+      } else {
+        toast.error(`Error: ${res.error || 'Failed to remove plugin'}`);
+      }
+    } catch (err: any) {
+      toast.error(`Error: ${err.message || 'Uninstall failed'}`);
+    } finally {
+      setLoadingPluginId(null);
+    }
+  };
+
+  // Enable / Disable Plugin Toggle
+  const handleTogglePlugin = async (plugin: UnifiedPluginCard) => {
+    if (!window.electronAPI?.togglePlugin) return;
+
+    const targetAgents = plugin.installedAgents.filter((agent) =>
+      selectedAgents.length === 0 || selectedAgents.some((sel) => sel.id === agent.id)
+    );
+    const effectiveTargets = targetAgents.length > 0 ? targetAgents : plugin.installedAgents;
+    if (effectiveTargets.length === 0) return;
+
+    const newEnabledState = Boolean(plugin.isDisabled);
+    setTogglingPluginId(plugin.id);
+    try {
+      const res = await window.electronAPI.togglePlugin({
+        pluginId: plugin.id,
+        folderName: plugin.id,
+        enabled: newEnabledState,
+        targets: effectiveTargets.map((a) => ({
+          agentId: a.id,
+          pluginsDir: a.paths.pluginsDir,
+        })),
+      });
+
+      if (res.success) {
+        toast.success(`${newEnabledState ? 'Enabled' : 'Disabled'} plugin kit "${plugin.name}" on ${effectiveTargets.map((a) => a.name).join(', ')}`);
+        logActivity({
+          type: 'PLUGIN',
+          title: newEnabledState ? 'Plugin Enabled' : 'Plugin Disabled',
+          description: `${newEnabledState ? 'Enabled' : 'Disabled'} "${plugin.name}" on ${effectiveTargets.map((a) => a.name).join(', ')}`,
+          status: newEnabledState ? 'success' : 'info',
+        });
+        if (onRefreshCapabilities) {
+          await onRefreshCapabilities();
+        }
+      } else {
+        toast.error(`Error: ${res.error || 'Failed to toggle plugin'}`);
+      }
+    } catch (err: any) {
+      toast.error(`Error: ${err.message || 'Toggle failed'}`);
+    } finally {
+      setTogglingPluginId(null);
     }
   };
 
@@ -300,6 +672,25 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
     }
   };
 
+  // Edit Plugin
+  const handleEditPlugin = async (plugin: UnifiedPluginCard) => {
+    if (!plugin.sourcePath || !window.electronAPI?.loadPluginDetails) return;
+    setLoadingEditPluginId(plugin.id);
+    try {
+      const details = await window.electronAPI.loadPluginDetails(plugin.sourcePath);
+      if (details && details.success) {
+        setEditingPluginData(details);
+        setIsForgeModalOpen(true);
+      } else {
+        toast.error(`Failed to read plugin details: ${details?.error || 'Unknown error'}`);
+      }
+    } catch (err: any) {
+      toast.error(`Error loading plugin details: ${err.message || 'Unknown error'}`);
+    } finally {
+      setLoadingEditPluginId(null);
+    }
+  };
+
   // Export ZIP
   const handleExportPluginZip = async (plugin: UnifiedPluginCard) => {
     if (!plugin.sourcePath || !window.electronAPI?.exportInstalledPluginZip) return;
@@ -310,7 +701,7 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
         defaultZipName: `${cleanSlug}-v${plugin.version || '1.0.0'}.zip`,
       });
       if (res.success && res.exportPath) {
-        setActionMessage(`Exported "${plugin.name}" to .ZIP archive!`);
+        toast.success(`Exported "${plugin.name}" to .ZIP archive!`);
         logActivity({
           type: 'PLUGIN',
           title: `Exported "${plugin.name}" as .ZIP`,
@@ -319,20 +710,12 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
         });
       }
     } catch (err: any) {
-      setActionMessage(`Failed to export ZIP: ${err.message}`);
+      toast.error(`Failed to export ZIP: ${err.message}`);
     }
   };
 
   return (
     <div className="plugins-view-container">
-      {/* Toast Notification */}
-      {actionMessage && (
-        <div className="action-toast-banner">
-          <CheckCircle2 size={15} />
-          <span>{actionMessage}</span>
-        </div>
-      )}
-
       {/* Header */}
       <div className="plugins-view-header">
         <div className="header-info">
@@ -393,6 +776,7 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
             <button
               className="import-action-btn"
               onClick={() => {
+                setEditingPluginData(null);
                 if (onCreatePlugin) {
                   onCreatePlugin();
                 } else {
@@ -408,16 +792,18 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
         </div>
       </div>
 
-      {/* Category Filter Bar */}
-      <div className="category-filter-bar">
-        <div className="category-label">
-          <Filter size={12} />
-          <span>Category:</span>
-        </div>
+      {/* Category Pills Bar with Floating Agent Filter Dropdown */}
+      <div className="category-toolbar-row">
+        {/* Left: Category Pills with Category Label */}
         <div className="category-pills">
+          <div className="category-label">
+            <Filter size={12} />
+            <span>Category:</span>
+          </div>
           {categories.map((cat) => (
             <button
               key={cat}
+              type="button"
               className={`cat-pill ${selectedCategory === cat ? 'active' : ''}`}
               onClick={() => setSelectedCategory(cat)}
             >
@@ -425,6 +811,115 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
             </button>
           ))}
         </div>
+
+        {/* Right: Floating Agent Filter Menu (if >1 agent selected) */}
+        {selectedAgents.length > 1 && (
+          <div className="agent-dropdown-wrapper" ref={agentMenuRef}>
+            <button
+              type="button"
+              className={`agent-dropdown-trigger ${currentAgentFilter.length > 0 ? 'filtered' : ''}`}
+              onClick={() => setIsAgentMenuOpen((prev) => !prev)}
+              title="Filter plugins to specific target agents"
+            >
+              <Bot size={12} className="agent-trigger-bot-icon" />
+              <span className="agent-trigger-text">
+                {currentAgentFilter.length === 0
+                  ? `All Agents (${selectedAgents.length})`
+                  : currentAgentFilter.length === 1
+                  ? selectedAgents.find((a) => a.id === currentAgentFilter[0])?.name || '1 Agent'
+                  : `${currentAgentFilter.length} Agents`}
+              </span>
+              <ChevronDown
+                size={11}
+                className={`agent-trigger-chevron ${isAgentMenuOpen ? 'open' : ''}`}
+              />
+            </button>
+
+            {currentAgentFilter.length > 0 && (
+              <button
+                type="button"
+                className="agent-quick-reset-btn"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleToggleAgentFilter(null);
+                }}
+                title="Clear agent filter"
+              >
+                <X size={10} />
+              </button>
+            )}
+
+            {isAgentMenuOpen && (
+              <div className="toolbar-agent-dropdown-menu">
+                <div className="toolbar-dropdown-header">
+                  <span>Filter by Agent</span>
+                  {currentAgentFilter.length > 0 && (
+                    <button
+                      type="button"
+                      className="toolbar-dropdown-reset-btn"
+                      onClick={() => {
+                        handleToggleAgentFilter(null);
+                      }}
+                    >
+                      Reset
+                    </button>
+                  )}
+                </div>
+
+                <div className="toolbar-dropdown-list">
+                  <button
+                    type="button"
+                    className={`toolbar-dropdown-item ${currentAgentFilter.length === 0 ? 'selected' : ''}`}
+                    onClick={() => {
+                      handleToggleAgentFilter(null);
+                      setIsAgentMenuOpen(false);
+                    }}
+                  >
+                    <div className="toolbar-dropdown-item-left">
+                      <span className="toolbar-dropdown-item-icon">
+                        <Bot size={13} />
+                      </span>
+                      <span className="toolbar-dropdown-item-name">All Selected Agents</span>
+                    </div>
+                    <div className="toolbar-dropdown-item-right">
+                      <span className="toolbar-dropdown-item-count">{selectedAgents.length}</span>
+                      {currentAgentFilter.length === 0 && <Check size={12} className="toolbar-dropdown-item-check" />}
+                    </div>
+                  </button>
+
+                  <div className="toolbar-dropdown-divider" />
+
+                  {selectedAgents.map((ag) => {
+                    const isFiltered = currentAgentFilter.includes(ag.id);
+                    const agentPluginsCount = plugins.filter((p) => p.sourceAgentId === ag.id).length;
+                    const AgentIcon = AGENT_ICON_MAP[ag.iconName] || Bot;
+                    return (
+                      <button
+                        type="button"
+                        key={ag.id}
+                        className={`toolbar-dropdown-item ${isFiltered ? 'selected' : ''}`}
+                        onClick={() => handleToggleAgentFilter(ag.id)}
+                      >
+                        <div className="toolbar-dropdown-item-left">
+                          <span
+                            className="toolbar-dropdown-item-dot"
+                            style={{ background: ag.color }}
+                          />
+                          <AgentIcon size={12} style={{ color: ag.color }} />
+                          <span className="toolbar-dropdown-item-name">{ag.name}</span>
+                        </div>
+                        <div className="toolbar-dropdown-item-right">
+                          <span className="toolbar-dropdown-item-count">{agentPluginsCount}</span>
+                          {isFiltered && <Check size={12} className="toolbar-dropdown-item-check" />}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Content Area */}
@@ -455,22 +950,32 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
           </div>
         </div>
       ) : (
-        <div className="plugins-grid">
-          {filteredPlugins.map((plugin) => {
+        <>
+          <div className="plugins-grid">
+            {displayedPlugins.map((plugin) => {
             const isInstalledOnAll =
               selectedAgents.length > 0 && plugin.installedAgents.length === selectedAgents.length;
             const isPartiallyInstalled =
               plugin.installedAgents.length > 0 && plugin.installedAgents.length < selectedAgents.length;
-            const isHighlighted =
-              highlightedId === plugin.id ||
-              plugins.some((p) => p.id === highlightedId && (p.folderName === plugin.id || p.name === plugin.name));
+            const isHighlighted = targetPluginMatch
+              ? targetPluginMatch.id === plugin.id
+              : highlightedId === plugin.id ||
+                plugins.some((p) => p.id === highlightedId && (p.folderName === plugin.id || p.name === plugin.name));
             const isLoading = loadingPluginId === plugin.id;
+
+            const requiredBinaries = getRequiredDependencies({
+              name: plugin.name,
+              description: plugin.description,
+              category: plugin.category,
+              tags: plugin.tags,
+            });
+            const depStatus = evaluateDependencyStatus(requiredBinaries, dependencyReport || null);
 
             return (
               <div
                 key={plugin.id}
                 id={`plugin-card-${plugin.id}`}
-                className={`plugin-card ${isHighlighted ? 'item-card-highlighted' : ''}`}
+                className={`plugin-card ${isHighlighted ? 'item-card-highlighted' : ''} ${plugin.isDisabled ? 'is-card-disabled' : ''}`}
               >
                 {/* 1. Header: Icon Avatar + Name/Version + Status */}
                 <div className="card-header-cluster">
@@ -493,21 +998,105 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
                         {plugin.author && (
                           <span className="author-text font-mono">by {plugin.author}</span>
                         )}
+                        {plugin.sourceRegistry && (() => {
+                          const badge = formatSourceBadge(plugin.sourceRegistry);
+                          return (
+                            <>
+                              <span className="card-meta-dot">·</span>
+                              <span
+                                className={`source-registry-pill font-mono ${badge.badgeClass}`}
+                                title={`${badge.tooltip} · License: ${plugin.license || 'MIT'}`}
+                              >
+                                {badge.badgeText}
+                              </span>
+                            </>
+                          );
+                        })()}
                       </div>
                     </div>
                   </div>
 
                   <div className="card-header-right">
+                    {depStatus.status !== 'none' && (
+                      <div className="dep-badge-cluster">
+                        <button
+                          type="button"
+                          className={`dep-badge ${
+                            depStatus.status === 'ready'
+                              ? 'ready'
+                              : depStatus.firstMissing === 'docker' || depStatus.firstMissing === 'go'
+                              ? 'missing-amber'
+                              : 'missing-rose'
+                          } font-mono`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDepDrawerTarget({
+                              targetName: plugin.name,
+                              requiredBinaries,
+                            });
+                          }}
+                          title={
+                            depStatus.status === 'ready'
+                              ? `Prerequisites: ${requiredBinaries.join(', ')} (Verified on system PATH). Click to inspect.`
+                              : `Missing prerequisite: ${depStatus.missingBinaries.join(', ')}. Click for 1-click install snippets.`
+                          }
+                        >
+                          {depStatus.status === 'ready' ? (
+                            <>
+                              <CheckCircle2 size={10} className="dep-badge-icon" />
+                              <span>Ready</span>
+                            </>
+                          ) : (
+                            <>
+                              <AlertCircle size={10} className="dep-badge-icon" />
+                              <span>Missing: {depStatus.firstMissing}</span>
+                            </>
+                          )}
+                        </button>
+
+                        {depStatus.status === 'missing' && depStatus.firstMissing && (
+                          <button
+                            type="button"
+                            className={`dep-badge-quick-copy ${copiedDepKey === `dep-${plugin.id}` ? 'copied' : ''}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleCopyMissingDep(`dep-${plugin.id}`, depStatus.firstMissing!);
+                            }}
+                            title={`Copy install command: ${getInstallSnippetForPlatform(depStatus.firstMissing)}`}
+                            aria-label="Copy prerequisite install command"
+                          >
+                            {copiedDepKey === `dep-${plugin.id}` ? <Check size={10} /> : <Copy size={10} />}
+                          </button>
+                        )}
+                      </div>
+                    )}
+
                     {isInstalledOnAll ? (
-                      <span className="status-pill-clean installed font-mono">
-                        <span className="status-dot installed" />
-                        <span>INSTALLED</span>
-                      </span>
+                      <button
+                        type="button"
+                        className={`status-pill-clean ${plugin.isDisabled ? 'disabled' : 'installed'} font-mono clickable`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleTogglePlugin(plugin);
+                        }}
+                        title={plugin.isDisabled ? 'Plugin kit is disabled. Click to enable.' : 'Plugin kit is enabled. Click to disable.'}
+                      >
+                        <span className={`status-dot ${plugin.isDisabled ? 'disabled' : 'installed'}`} />
+                        <span>{plugin.isDisabled ? 'DISABLED' : 'INSTALLED'}</span>
+                      </button>
                     ) : isPartiallyInstalled ? (
-                      <span className="status-pill-clean partial font-mono">
-                        <span className="status-dot partial" />
-                        <span>PARTIAL ({plugin.installedAgents.length}/{selectedAgents.length})</span>
-                      </span>
+                      <button
+                        type="button"
+                        className={`status-pill-clean ${plugin.isDisabled ? 'disabled' : 'partial'} font-mono clickable`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleTogglePlugin(plugin);
+                        }}
+                        title={plugin.isDisabled ? 'Plugin kit is disabled. Click to enable.' : `Equipped on ${plugin.installedAgents.length}/${selectedAgents.length} agents. Click to toggle.`}
+                      >
+                        <span className={`status-dot ${plugin.isDisabled ? 'disabled' : 'partial'}`} />
+                        <span>{plugin.isDisabled ? 'DISABLED' : `PARTIAL (${plugin.installedAgents.length}/${selectedAgents.length})`}</span>
+                      </button>
                     ) : (
                       <span className="status-pill-clean available font-mono">
                         <span className="status-dot available" />
@@ -522,14 +1111,23 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
                   <p className="card-description-text">{plugin.description}</p>
 
                   <div className="bundled-stats-row">
-                    <span className="meta-subtle-badge skills font-mono">
-                      <Sparkles size={11} />
-                      <span>{plugin.bundledSkills.length} Skills</span>
-                    </span>
-                    <span className="meta-subtle-badge mcps font-mono">
-                      <Server size={11} />
-                      <span>{plugin.bundledMcps.length} MCPs</span>
-                    </span>
+                    {plugin.bundledSkills.length > 0 || plugin.bundledMcps.length > 0 ? (
+                      <>
+                        <span className="meta-subtle-badge skills font-mono">
+                          <Sparkles size={11} />
+                          <span>{plugin.bundledSkills.length} Skills</span>
+                        </span>
+                        <span className="meta-subtle-badge mcps font-mono">
+                          <Server size={11} />
+                          <span>{plugin.bundledMcps.length} MCPs</span>
+                        </span>
+                      </>
+                    ) : (
+                      <span className="meta-subtle-badge font-mono" style={{ color: '#38bdf8' }}>
+                        <Package size={11} />
+                        <span>Plugin Extension</span>
+                      </span>
+                    )}
                   </div>
 
                   {plugin.installedAgents.length > 0 && (
@@ -538,19 +1136,27 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
                       <div className="equipped-pills-list">
                         {plugin.installedAgents.map((ag) => {
                           const AgentIcon = AGENT_ICON_MAP[ag.iconName] || Bot;
+                          const isThisFiltered = currentAgentFilter.includes(ag.id);
                           return (
-                            <span
+                            <button
+                              type="button"
                               key={ag.id}
-                              className="agent-pill"
+                              className={`agent-pill clickable ${isThisFiltered ? 'filtered-active' : ''}`}
                               style={{
                                 color: ag.color,
-                                borderColor: `${ag.color}40`,
-                                background: `${ag.color}15`,
+                                borderColor: isThisFiltered ? `${ag.color}80` : `${ag.color}35`,
+                                background: isThisFiltered ? `${ag.color}20` : `${ag.color}0d`,
                               }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleAgentPillClick(ag.id);
+                              }}
+                              title={isThisFiltered ? `Filtered by ${ag.name} (click to clear)` : `Click to filter by ${ag.name}`}
                             >
                               <AgentIcon size={10} />
-                              {ag.name}
-                            </span>
+                              <span>{ag.name}</span>
+                              {isThisFiltered && <Check size={9} />}
+                            </button>
                           );
                         })}
                       </div>
@@ -561,12 +1167,59 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
                 {/* 3. Bottom Toolbar */}
                 <div className="card-bottom-toolbar">
                   <div className="toolbar-left-chips">
+                    {plugin.sourceRegistry && (
+                      <span
+                        className="meta-subtle-badge source-badge font-mono"
+                        title={`Source: ${plugin.sourceRegistry} (${plugin.license || 'MIT'})`}
+                      >
+                        <Globe size={11} />
+                        <span>{plugin.sourceRegistry}</span>
+                      </span>
+                    )}
                     <span className="source-path-clean font-mono" title={plugin.id}>
                       {plugin.id}
                     </span>
                   </div>
 
                   <div className="toolbar-right-actions">
+                    {/* Enable / Disable Toggle Button */}
+                    {plugin.installedAgents.length > 0 && (
+                      <button
+                        type="button"
+                        className={`card-action-icon-btn toggle-state-btn ${plugin.isDisabled ? 'disabled-state' : 'active-state'}`}
+                        onClick={() => handleTogglePlugin(plugin)}
+                        disabled={togglingPluginId === plugin.id}
+                        title={plugin.isDisabled ? 'Enable plugin kit in equipped agent(s)' : 'Disable plugin kit without uninstalling'}
+                        aria-label={plugin.isDisabled ? 'Enable plugin kit' : 'Disable plugin kit'}
+                      >
+                        {togglingPluginId === plugin.id ? (
+                          <Loader2 size={13} className="spin" />
+                        ) : plugin.isDisabled ? (
+                          <PowerOff size={13} style={{ color: '#fb7185' }} />
+                        ) : (
+                          <Power size={13} style={{ color: '#34d399' }} />
+                        )}
+                      </button>
+                    )}
+
+                    {/* Edit Button for Installed Plugins */}
+                    {plugin.installedAgents.length > 0 && plugin.sourcePath && (
+                      <button
+                        type="button"
+                        className="card-action-icon-btn edit"
+                        onClick={() => handleEditPlugin(plugin)}
+                        disabled={loadingEditPluginId === plugin.id}
+                        title="Edit plugin skills, MCP servers, and behavioral rules"
+                        aria-label="Edit Plugin"
+                      >
+                        {loadingEditPluginId === plugin.id ? (
+                          <Loader2 size={13} className="spin" />
+                        ) : (
+                          <Edit3 size={13} />
+                        )}
+                      </button>
+                    )}
+
                     {/* Open Folder Button for Installed Plugins */}
                     {plugin.installedAgents.length > 0 && (
                       <button
@@ -588,6 +1241,31 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
                         title="Export this installed plugin as a shareable .ZIP archive"
                       >
                         <Archive size={13} />
+                      </button>
+                    )}
+
+                    {/* Manual Install / CLI Copy Button */}
+                    <button
+                      type="button"
+                      className={`card-action-icon-btn ${copiedPluginId === plugin.id ? 'active-copied' : ''}`}
+                      onClick={() => handleCopyPluginCommand(plugin)}
+                      title="Copy CLI command for manual plugin installation"
+                      aria-label="Copy plugin manual install command"
+                    >
+                      {copiedPluginId === plugin.id ? <Check size={13} style={{ color: '#34d399' }} /> : <Copy size={13} />}
+                    </button>
+
+                    {/* Uninstall Button for Installed Plugins */}
+                    {plugin.installedAgents.length > 0 && (
+                      <button
+                        type="button"
+                        className="card-action-icon-btn danger"
+                        onClick={() => handleUninstallPlugin(plugin)}
+                        disabled={loadingPluginId === plugin.id}
+                        title="Uninstall plugin from selected agent(s)"
+                        aria-label="Uninstall Plugin"
+                      >
+                        <Trash2 size={13} />
                       </button>
                     )}
 
@@ -624,23 +1302,56 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
             );
           })}
         </div>
-      )}
+
+        {filteredPlugins.length > visibleCount && (
+          <div className="load-more-wrap">
+            <button
+              className="load-more-btn font-mono"
+              onClick={() => setVisibleCount((prev) => prev + 36)}
+            >
+              <span>Show more plugins ({displayedPlugins.length} of {filteredPlugins.length})</span>
+            </button>
+          </div>
+        )}
+      </>
+    )}
 
       {/* Forge Skill Kit & Plugin Bundler Modal */}
       <ForgePluginModal
         isOpen={isForgeModalOpen}
-        onClose={() => setIsForgeModalOpen(false)}
+        onClose={() => {
+          setIsForgeModalOpen(false);
+          setEditingPluginData(null);
+        }}
+        editingPlugin={editingPluginData}
         agents={allAgents && allAgents.length > 0 ? allAgents : selectedAgents}
         skills={skills || []}
         mcpServers={mcpServers || []}
         onPluginForged={async (pluginName, action, countOrPath) => {
           if (action === 'install') {
-            setActionMessage(`Successfully forged and equipped "${pluginName}" to ${countOrPath} agent(s)!`);
+            toast.success(
+              editingPluginData
+                ? `Successfully updated "${pluginName}" on ${countOrPath} agent(s)!`
+                : `Successfully forged and equipped "${pluginName}" to ${countOrPath} agent(s)!`
+            );
             if (onRefreshCapabilities) {
               await onRefreshCapabilities();
             }
           } else {
-            setActionMessage(`Successfully forged "${pluginName}" bundle!`);
+            toast.success(`Successfully forged "${pluginName}" bundle!`);
+          }
+        }}
+      />
+
+      <DependencyInstallDrawer
+        isOpen={Boolean(depDrawerTarget)}
+        onClose={() => setDepDrawerTarget(null)}
+        targetName={depDrawerTarget?.targetName || ''}
+        requiredBinaries={depDrawerTarget?.requiredBinaries || []}
+        report={dependencyReport || null}
+        onRefreshReport={async () => {
+          if (onRefreshDependencies) {
+            await onRefreshDependencies();
           }
         }}
       />
@@ -650,20 +1361,6 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
           display: flex;
           flex-direction: column;
           gap: 16px;
-        }
-
-        .action-toast-banner {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          background: rgba(16, 185, 129, 0.15);
-          border: 1px solid rgba(16, 185, 129, 0.35);
-          color: #34d399;
-          padding: 10px 16px;
-          border-radius: 8px;
-          font-size: 12.5px;
-          font-weight: 600;
-          animation: toastSlideDown 0.2s ease-out;
         }
 
         .plugins-view-header {
@@ -699,7 +1396,7 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
           margin: 0;
         }
 
-        .count-pill {
+        .plugins-view-header .count-pill {
           font-size: 10px;
           font-weight: 700;
           color: #38bdf8;
@@ -864,48 +1561,94 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
           border-radius: 10px;
           font-family: monospace;
         }
-
-        .category-filter-bar {
+        /* Category Toolbar Row */
+        .category-toolbar-row {
           display: flex;
           align-items: center;
-          gap: 12px;
+          justify-content: space-between;
+          gap: 10px;
           background: #0f1523;
           border: 1px solid #182235;
-          padding: 8px 14px;
-          border-radius: 8px;
-          overflow-x: auto;
-        }
-
-        .category-label {
-          display: flex;
-          align-items: center;
-          gap: 5px;
-          color: #64748b;
-          font-size: 11px;
-          font-weight: 700;
-          text-transform: uppercase;
-          letter-spacing: 0.04em;
-          flex-shrink: 0;
+          padding: 0 10px;
+          height: 36px;
+          min-height: 36px;
+          max-height: 36px;
+          border-radius: 7px;
+          box-sizing: border-box;
+          position: relative;
+          z-index: 50;
         }
 
         .category-pills {
           display: flex;
           align-items: center;
-          gap: 6px;
-          flex-wrap: nowrap;
+          gap: 5px;
+          overflow-x: auto;
+          flex: 1;
+          min-width: 0;
+          height: 100%;
+          padding: 0;
+        }
+
+        .category-pills::-webkit-scrollbar {
+          height: 3px;
+        }
+
+        .category-pills::-webkit-scrollbar-track {
+          background: rgba(255, 255, 255, 0.02);
+          border-radius: 9999px;
+        }
+
+        .category-pills::-webkit-scrollbar-thumb {
+          background: #27354f;
+          border-radius: 9999px;
+        }
+
+        .category-pills::-webkit-scrollbar-thumb:hover {
+          background: #3b4e72;
+        }
+
+        .category-label {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          color: #64748b;
+          font-size: 10.5px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+          flex-shrink: 0;
+          position: sticky;
+          left: 0;
+          z-index: 2;
+          background: #0f1523;
+          padding-right: 6px;
+          height: 22px;
+          line-height: 1;
+          box-sizing: border-box;
+          user-select: none;
         }
 
         .cat-pill {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
           background: #141c2c;
           border: 1px solid #1f2b42;
           color: #94a3b8;
-          font-size: 11px;
+          font-size: 10.5px;
           font-weight: 500;
-          padding: 3px 10px;
-          border-radius: 6px;
+          padding: 0 9px;
+          height: 22px;
+          min-height: 22px;
+          max-height: 22px;
+          line-height: 1;
+          border-radius: 4px;
           cursor: pointer;
           white-space: nowrap;
           transition: all 0.12s ease;
+          flex-shrink: 0;
+          box-sizing: border-box;
         }
 
         .cat-pill:hover {
@@ -918,6 +1661,251 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
           border-color: #334155;
           color: #ffffff;
           font-weight: 600;
+        }
+
+        /* Agent Dropdown Filter */
+        .agent-dropdown-wrapper {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          flex-shrink: 0;
+          position: relative;
+          z-index: 60;
+          height: 22px;
+          align-self: center;
+        }
+
+        .agent-dropdown-trigger {
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          background: #141c2c;
+          border: 1px solid #1f2b42;
+          color: #94a3b8;
+          font-size: 10.5px;
+          font-weight: 500;
+          height: 22px;
+          min-height: 22px;
+          max-height: 22px;
+          line-height: 1;
+          padding: 0 8px;
+          border-radius: 4px;
+          cursor: pointer;
+          transition: all 0.12s ease;
+          user-select: none;
+          white-space: nowrap;
+          box-sizing: border-box;
+        }
+
+        .agent-dropdown-trigger:hover {
+          background: #1c263c;
+          border-color: #2e3e5c;
+          color: #e2e8f0;
+        }
+
+        .agent-dropdown-trigger.filtered {
+          background: #1e2a42;
+          border-color: #334155;
+          color: #ffffff;
+          font-weight: 600;
+        }
+
+        .agent-trigger-bot-icon {
+          color: #38bdf8;
+          flex-shrink: 0;
+        }
+
+        .agent-trigger-text {
+          max-width: 140px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .agent-trigger-chevron {
+          color: #64748b;
+          transition: transform 0.2s ease;
+          flex-shrink: 0;
+        }
+
+        .agent-trigger-chevron.open {
+          transform: rotate(180deg);
+        }
+
+        .agent-quick-reset-btn {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 22px;
+          height: 22px;
+          min-height: 22px;
+          max-height: 22px;
+          border-radius: 4px;
+          background: rgba(239, 68, 68, 0.1);
+          border: 1px solid rgba(239, 68, 68, 0.25);
+          color: #f87171;
+          cursor: pointer;
+          transition: all 0.12s ease;
+          padding: 0;
+          box-sizing: border-box;
+        }
+
+        .agent-quick-reset-btn:hover {
+          background: rgba(239, 68, 68, 0.2);
+          border-color: rgba(239, 68, 68, 0.45);
+          color: #ef4444;
+        }
+
+        .toolbar-agent-dropdown-menu {
+          position: absolute;
+          top: calc(100% + 6px);
+          right: 0;
+          left: auto !important;
+          background: #0d1320;
+          border: 1px solid #1f2b42;
+          box-shadow: 0 16px 36px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(255, 255, 255, 0.06);
+          border-radius: 8px;
+          min-width: 220px;
+          max-width: 280px;
+          width: max-content;
+          padding: 6px;
+          z-index: 1000;
+          animation: dropdownFadeIn 0.15s ease-out forwards;
+          box-sizing: border-box;
+        }
+
+        @keyframes dropdownFadeIn {
+          from {
+            opacity: 0;
+            transform: translateY(-4px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        .toolbar-dropdown-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 4px 8px 6px;
+          font-size: 10px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          color: #64748b;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+          margin-bottom: 4px;
+        }
+
+        .toolbar-dropdown-reset-btn {
+          background: transparent;
+          border: none;
+          color: #f87171;
+          font-size: 10px;
+          font-weight: 600;
+          cursor: pointer;
+          padding: 0;
+          transition: color 0.12s ease;
+        }
+
+        .toolbar-dropdown-reset-btn:hover {
+          color: #ef4444;
+          text-decoration: underline;
+        }
+
+        .toolbar-dropdown-list {
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+          max-height: min(220px, calc(100vh - 280px));
+          overflow-y: auto;
+          scrollbar-width: thin;
+          scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+        }
+
+        .toolbar-dropdown-item {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+          width: 100%;
+          padding: 6px 8px;
+          background: transparent;
+          border: 1px solid transparent;
+          border-radius: 5px;
+          cursor: pointer;
+          color: #cbd5e1;
+          font-size: 11.5px;
+          text-align: left;
+          transition: all 0.12s ease;
+        }
+
+        .toolbar-dropdown-item:hover {
+          background: #141d2f;
+          border-color: rgba(255, 255, 255, 0.05);
+          color: #ffffff;
+        }
+
+        .toolbar-dropdown-item.selected {
+          background: rgba(56, 189, 248, 0.1);
+          border-color: rgba(56, 189, 248, 0.25);
+          color: #38bdf8;
+          font-weight: 600;
+        }
+
+        .toolbar-dropdown-item-left {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          min-width: 0;
+          flex: 1;
+        }
+
+        .toolbar-dropdown-item-icon {
+          color: #38bdf8;
+          display: inline-flex;
+          align-items: center;
+        }
+
+        .toolbar-dropdown-item-dot {
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          flex-shrink: 0;
+        }
+
+        .toolbar-dropdown-item-name {
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .toolbar-dropdown-item-right {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          flex-shrink: 0;
+        }
+
+        .toolbar-dropdown-item-count {
+          font-family: monospace;
+          font-size: 10px;
+          background: rgba(0, 0, 0, 0.4);
+          color: #8da2be;
+          padding: 1px 5px;
+          border-radius: 4px;
+        }
+
+        .toolbar-dropdown-item-check {
+          color: #38bdf8;
+        }
+
+        .toolbar-dropdown-divider {
+          height: 1px;
+          background: rgba(255, 255, 255, 0.06);
+          margin: 3px 0;
         }
 
         .plugins-grid {
@@ -933,9 +1921,11 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
           padding: 16px 18px;
           display: flex;
           flex-direction: column;
-          min-height: 202px;
+          min-height: 206px;
+          box-sizing: border-box;
           transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
           position: relative;
+          overflow: hidden;
         }
 
         .plugin-card:hover {
@@ -945,20 +1935,26 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
           transform: translateY(-1px);
         }
 
-        /* Header */
+        /* Header: Rigid 38px height, never wraps or expands */
         .card-header-cluster {
           display: flex;
           align-items: flex-start;
           justify-content: space-between;
-          gap: 12px;
-          margin-bottom: 11px;
+          gap: 10px;
+          margin-bottom: 10px;
+          height: 38px;
+          min-height: 38px;
+          max-height: 38px;
+          flex-shrink: 0;
         }
 
         .card-header-left {
           display: flex;
-          align-items: center;
+          align-items: flex-start;
           gap: 10px;
           min-width: 0;
+          flex: 1;
+          overflow: hidden;
         }
 
         .card-icon-avatar.plugin {
@@ -977,24 +1973,30 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
         .card-identity-text {
           display: flex;
           flex-direction: column;
-          gap: 2px;
+          gap: 3px;
           min-width: 0;
+          flex: 1;
+          overflow: hidden;
         }
 
         .card-title-row {
           display: flex;
           align-items: center;
-          gap: 7px;
+          gap: 6px;
+          min-width: 0;
+          line-height: 1.2;
         }
 
         .card-item-name {
-          font-size: 14px;
+          font-size: 13.5px;
           font-weight: 600;
           color: #f8fafc;
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
           letter-spacing: -0.01em;
+          min-width: 0;
+          flex-shrink: 1;
         }
 
         .card-sub-meta {
@@ -1002,58 +2004,236 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
           align-items: center;
           gap: 5px;
           min-width: 0;
+          height: 16px;
+          overflow: hidden;
+          white-space: nowrap;
+          text-overflow: ellipsis;
         }
 
         .card-cat-text {
-          font-size: 10px;
+          font-size: 9.5px;
+          line-height: 1;
           color: #8fa0b5;
           text-transform: uppercase;
           letter-spacing: 0.04em;
           font-weight: 600;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          max-width: 105px;
+          flex-shrink: 1;
+          display: inline-flex;
+          align-items: center;
         }
 
         .card-meta-dot {
           color: #3b4d66;
           font-size: 10px;
+          flex-shrink: 0;
         }
 
         .author-text {
-          font-size: 10.5px;
+          font-size: 10px;
           color: #64748b;
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
+          max-width: 95px;
+          flex-shrink: 1;
         }
 
         .version-badge {
-          font-size: 9px;
+          font-size: 8.5px;
           font-weight: 700;
           color: #38bdf8;
           background: rgba(56, 189, 248, 0.12);
           border: 1px solid rgba(56, 189, 248, 0.25);
-          padding: 1px 5px;
+          padding: 0.5px 5px;
           border-radius: 3px;
+          flex-shrink: 0;
+        }
+
+        .source-registry-pill {
+          font-size: 8.5px;
+          color: #38bdf8;
+          background: rgba(56, 189, 248, 0.08);
+          border: 1px solid rgba(56, 189, 248, 0.22);
+          padding: 0.5px 5px;
+          border-radius: 3px;
+          font-weight: 600;
+          letter-spacing: 0.03em;
+          text-transform: uppercase;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          max-width: 110px;
+          flex-shrink: 0;
+        }
+
+        .source-registry-pill.pill-aas {
+          color: #c084fc;
+          background: rgba(192, 132, 252, 0.12);
+          border-color: rgba(192, 132, 252, 0.28);
+        }
+
+        .source-registry-pill.pill-official {
+          color: #38bdf8;
+          background: rgba(56, 189, 248, 0.12);
+          border-color: rgba(56, 189, 248, 0.28);
+        }
+
+        .source-registry-pill.pill-addy {
+          color: #fbbf24;
+          background: rgba(251, 191, 36, 0.12);
+          border-color: rgba(251, 191, 36, 0.28);
+        }
+
+        .source-registry-pill.pill-custom {
+          color: #34d399;
+          background: rgba(52, 211, 153, 0.12);
+          border-color: rgba(52, 211, 153, 0.28);
+        }
+
+        .source-registry-pill.pill-smithery {
+          color: #fb923c;
+          background: rgba(251, 146, 60, 0.12);
+          border-color: rgba(251, 146, 60, 0.28);
+        }
+
+        .source-registry-pill.pill-community {
+          color: #2dd4bf;
+          background: rgba(45, 212, 191, 0.12);
+          border-color: rgba(45, 212, 191, 0.28);
+        }
+
+        .source-registry-pill.pill-core {
+          color: #818cf8;
+          background: rgba(129, 140, 248, 0.12);
+          border-color: rgba(129, 140, 248, 0.28);
         }
 
         .card-header-right {
           flex-shrink: 0;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          margin-top: 1px;
+        }
+
+        .dep-badge-cluster {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+        }
+
+        .dep-badge-quick-copy {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 20px;
+          height: 19px;
+          border-radius: 9999px;
+          background: rgba(244, 63, 94, 0.12);
+          border: 1px solid rgba(244, 63, 94, 0.35);
+          color: #fb7185;
+          cursor: pointer;
+          transition: all 0.15s ease;
+          padding: 0;
+        }
+
+        .dep-badge-quick-copy:hover {
+          background: rgba(244, 63, 94, 0.25);
+          border-color: rgba(244, 63, 94, 0.6);
+          transform: translateY(-1px);
+        }
+
+        .dep-badge-quick-copy.copied {
+          background: rgba(52, 211, 153, 0.18);
+          border-color: rgba(52, 211, 153, 0.5);
+          color: #34d399;
+        }
+
+        .card-action-icon-btn.active-copied {
+          background: rgba(52, 211, 153, 0.15);
+          border-color: rgba(52, 211, 153, 0.4);
+        }
+
+        .dep-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          padding: 2px 7px;
+          border-radius: 9999px;
+          font-size: 9.5px;
+          font-weight: 600;
+          letter-spacing: 0.02em;
+          white-space: nowrap;
+          cursor: pointer;
+          border: 1px solid transparent;
+          transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+          user-select: none;
+        }
+
+        .dep-badge:hover {
+          transform: translateY(-1px);
+        }
+
+        .dep-badge.ready {
+          color: #34d399;
+          background: rgba(16, 185, 129, 0.09);
+          border-color: rgba(16, 185, 129, 0.25);
+        }
+
+        .dep-badge.ready:hover {
+          background: rgba(16, 185, 129, 0.18);
+          border-color: rgba(16, 185, 129, 0.45);
+        }
+
+        .dep-badge.missing-amber {
+          color: #fbbf24;
+          background: rgba(245, 158, 11, 0.12);
+          border-color: rgba(245, 158, 11, 0.35);
+        }
+
+        .dep-badge.missing-amber:hover {
+          background: rgba(245, 158, 11, 0.22);
+          border-color: rgba(245, 158, 11, 0.55);
+        }
+
+        .dep-badge.missing-rose {
+          color: #fb7185;
+          background: rgba(244, 63, 94, 0.12);
+          border-color: rgba(244, 63, 94, 0.35);
+        }
+
+        .dep-badge.missing-rose:hover {
+          background: rgba(244, 63, 94, 0.22);
+          border-color: rgba(244, 63, 94, 0.55);
         }
 
         .status-pill-clean {
           display: inline-flex;
           align-items: center;
           gap: 5px;
-          padding: 3px 8px;
+          padding: 2.5px 8px;
           border-radius: 9999px;
           font-size: 9.5px;
           font-weight: 600;
           letter-spacing: 0.02em;
+          white-space: nowrap;
+          flex-shrink: 0;
         }
 
         .status-pill-clean.installed {
           color: #34d399;
           background: rgba(16, 185, 129, 0.08);
           border: 1px solid rgba(16, 185, 129, 0.22);
+        }
+
+        .status-pill-clean.disabled {
+          color: #fb7185;
+          background: rgba(244, 63, 94, 0.08);
+          border: 1px solid rgba(244, 63, 94, 0.28);
         }
 
         .status-pill-clean.partial {
@@ -1068,6 +2248,45 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
           border: 1px solid rgba(56, 189, 248, 0.2);
         }
 
+        .status-pill-clean.clickable {
+          cursor: pointer;
+          transition: all 0.15s ease;
+        }
+
+        .status-pill-clean.clickable:hover {
+          transform: translateY(-1px);
+          filter: brightness(1.15);
+        }
+
+        .card-action-icon-btn.toggle-state-btn.disabled-state {
+          background: rgba(244, 63, 94, 0.1);
+          border-color: rgba(244, 63, 94, 0.3);
+          color: #fb7185;
+        }
+
+        .card-action-icon-btn.toggle-state-btn.disabled-state:hover {
+          background: rgba(244, 63, 94, 0.22);
+          border-color: rgba(244, 63, 94, 0.5);
+          color: #fda4af;
+        }
+
+        .card-action-icon-btn.toggle-state-btn.active-state {
+          background: rgba(52, 211, 153, 0.08);
+          border-color: rgba(52, 211, 153, 0.25);
+          color: #34d399;
+        }
+
+        .card-action-icon-btn.toggle-state-btn.active-state:hover {
+          background: rgba(52, 211, 153, 0.18);
+          border-color: rgba(52, 211, 153, 0.45);
+          color: #6ee7b7;
+        }
+
+        .plugin-card.is-card-disabled {
+          border-color: rgba(244, 63, 94, 0.2);
+          background: rgba(18, 24, 38, 0.7);
+        }
+
         .status-dot {
           width: 5px;
           height: 5px;
@@ -1078,6 +2297,11 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
         .status-dot.installed {
           background: #10b981;
           box-shadow: 0 0 6px rgba(16, 185, 129, 0.6);
+        }
+
+        .status-dot.disabled {
+          background: #fb7185;
+          box-shadow: 0 0 6px rgba(244, 63, 94, 0.6);
         }
 
         .status-dot.partial {
@@ -1091,30 +2315,36 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
         }
 
         /* Body */
+        /* Body */
         .card-content-body {
           flex: 1;
           display: flex;
           flex-direction: column;
           gap: 8px;
-          margin-bottom: 12px;
+          margin-bottom: 10px;
+          min-width: 0;
         }
 
         .card-description-text {
           font-size: 12px;
           color: #94a3b8;
-          line-height: 1.5;
+          line-height: 1.45;
           margin: 0;
-          min-height: 36px;
+          height: 35px;
+          min-height: 35px;
+          max-height: 35px;
           display: -webkit-box;
           -webkit-line-clamp: 2;
           -webkit-box-orient: vertical;
           overflow: hidden;
+          text-overflow: ellipsis;
         }
 
         .bundled-stats-row {
           display: flex;
           align-items: center;
           gap: 6px;
+          min-height: 22px;
         }
 
         .meta-subtle-badge {
@@ -1126,6 +2356,8 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
           border-radius: 4px;
           background: rgba(255, 255, 255, 0.03);
           border: 1px solid rgba(255, 255, 255, 0.06);
+          white-space: nowrap;
+          flex-shrink: 0;
         }
 
         .meta-subtle-badge.skills {
@@ -1140,14 +2372,25 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
           border-color: rgba(129, 140, 248, 0.2);
         }
 
+        .meta-subtle-badge.source-badge {
+          color: #38bdf8;
+          background: rgba(56, 189, 248, 0.06);
+          border-color: rgba(56, 189, 248, 0.2);
+          max-width: 120px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
         .equipped-agents-bar {
           display: flex;
           align-items: center;
           gap: 6px;
           background: rgba(0, 0, 0, 0.25);
           border: 1px solid rgba(255, 255, 255, 0.05);
-          padding: 4px 8px;
+          padding: 3px 8px;
           border-radius: 6px;
+          min-height: 24px;
+          box-sizing: border-box;
         }
 
         .equipped-label {
@@ -1161,7 +2404,8 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
           display: flex;
           align-items: center;
           gap: 4px;
-          flex-wrap: wrap;
+          flex-wrap: nowrap;
+          overflow: hidden;
         }
 
         .agent-pill {
@@ -1173,23 +2417,49 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
           font-size: 9.5px;
           font-weight: 600;
           border: 1px solid;
+          transition: all 0.15s ease;
+          white-space: nowrap;
+          flex-shrink: 0;
         }
 
-        /* Bottom Toolbar */
+        .agent-pill.clickable {
+          cursor: pointer;
+          user-select: none;
+        }
+
+        .agent-pill.clickable:hover {
+          transform: translateY(-0.5px);
+          filter: brightness(1.15);
+        }
+
+        .agent-pill.filtered-active {
+          font-weight: 600;
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+        }
+
+        /* Bottom Toolbar: Rigid 38px height, never wraps */
         .card-bottom-toolbar {
           margin-top: auto;
           border-top: 1px solid rgba(255, 255, 255, 0.06);
-          padding-top: 11px;
+          padding-top: 10px;
           display: flex;
           align-items: center;
           justify-content: space-between;
           gap: 8px;
+          min-height: 38px;
+          height: 38px;
+          max-height: 38px;
+          box-sizing: border-box;
         }
 
         .toolbar-left-chips {
           display: flex;
           align-items: center;
+          gap: 6px;
+          flex-wrap: nowrap;
           min-width: 0;
+          flex: 1;
+          overflow: hidden;
         }
 
         .source-path-clean {
@@ -1198,7 +2468,9 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
-          max-width: 140px;
+          min-width: 0;
+          max-width: 130px;
+          flex-shrink: 1;
         }
 
         .toolbar-right-actions {
@@ -1228,6 +2500,18 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
           background: #1d283e;
           color: #ffffff;
           border-color: #384b6c;
+        }
+
+        .card-action-icon-btn.edit:hover:not(:disabled) {
+          background: rgba(56, 189, 248, 0.15);
+          color: #38bdf8;
+          border-color: rgba(56, 189, 248, 0.4);
+        }
+
+        .card-action-icon-btn.danger:hover:not(:disabled) {
+          background: rgba(239, 68, 68, 0.15);
+          color: #ef4444;
+          border-color: rgba(239, 68, 68, 0.4);
         }
 
         .card-action-icon-btn:disabled {
@@ -1274,27 +2558,65 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
         }
 
         .item-card-highlighted {
-          border-color: rgba(251, 191, 36, 0.65) !important;
-          background: rgba(251, 191, 36, 0.05) !important;
-          box-shadow: 0 0 0 1px rgba(251, 191, 36, 0.4), 0 4px 16px rgba(251, 191, 36, 0.12) !important;
-          animation: highlightPluginSoft 1.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-          z-index: 5;
+          border-color: rgba(251, 191, 36, 0.95) !important;
+          background: linear-gradient(135deg, rgba(251, 191, 36, 0.12), rgba(245, 158, 11, 0.04)) !important;
+          box-shadow: 0 0 0 2px rgba(251, 191, 36, 0.7), 0 0 32px rgba(251, 191, 36, 0.38) !important;
+          animation: highlightPluginSoft 3.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+          z-index: 10;
+          position: relative;
         }
 
         @keyframes highlightPluginSoft {
           0% {
-            border-color: rgba(251, 191, 36, 0.8);
-            box-shadow: 0 0 0 1.5px rgba(251, 191, 36, 0.45), 0 4px 16px rgba(251, 191, 36, 0.15);
+            transform: scale(1.025);
+            border-color: rgba(251, 191, 36, 1);
+            box-shadow: 0 0 0 2.5px rgba(251, 191, 36, 0.85), 0 0 40px rgba(251, 191, 36, 0.5);
           }
-          60% {
-            border-color: rgba(251, 191, 36, 0.5);
-            box-shadow: 0 0 0 1px rgba(251, 191, 36, 0.25), 0 2px 8px rgba(251, 191, 36, 0.08);
+          15% {
+            transform: scale(1);
+            border-color: rgba(251, 191, 36, 0.95);
+            box-shadow: 0 0 0 2px rgba(251, 191, 36, 0.75), 0 0 32px rgba(251, 191, 36, 0.4);
+          }
+          65% {
+            transform: scale(1);
+            border-color: rgba(251, 191, 36, 0.8);
+            box-shadow: 0 0 0 1.5px rgba(251, 191, 36, 0.55), 0 0 22px rgba(251, 191, 36, 0.25);
+          }
+          88% {
+            transform: scale(1);
+            border-color: rgba(251, 191, 36, 0.45);
+            box-shadow: 0 0 0 1px rgba(251, 191, 36, 0.2), 0 0 10px rgba(251, 191, 36, 0.1);
           }
           100% {
+            transform: scale(1);
             border-color: #1e283d;
             background: #121826;
             box-shadow: none;
           }
+        }
+
+        .load-more-wrap {
+          display: flex;
+          justify-content: center;
+          margin-top: 14px;
+        }
+
+        .load-more-btn {
+          background: #141324;
+          border: 1px solid #2e2348;
+          color: #c084fc;
+          font-size: 11.5px;
+          font-weight: 600;
+          padding: 8px 20px;
+          border-radius: 8px;
+          cursor: pointer;
+          transition: all 0.15s ease;
+        }
+
+        .load-more-btn:hover {
+          background: #1e1a38;
+          border-color: #4a3875;
+          color: #ffffff;
         }
       `}</style>
     </div>

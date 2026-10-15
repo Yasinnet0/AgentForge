@@ -71,11 +71,35 @@ input, textarea, select, [contenteditable="true"] {
 
 ::-webkit-scrollbar-thumb {
   background: #222f46;
-  border-radius: 4px;
+  border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
   background: #334466;
+}
+
+/* Category pills horizontal smooth pill scrollbar */
+.category-pills::-webkit-scrollbar {
+  height: 7px;
+}
+
+.category-pills::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 9999px;
+  margin: 0 4px;
+}
+
+.category-pills::-webkit-scrollbar-thumb {
+  background: #334464;
+  border-radius: 9999px;
+}
+
+.category-pills::-webkit-scrollbar-thumb:hover {
+  background: #47618d;
+}
+
+.category-pills::-webkit-scrollbar-thumb:active {
+  background: #38bdf8;
 }
 
 /* Window Drag Regions for Electron Frameless Window */
@@ -85,6 +109,30 @@ input, textarea, select, [contenteditable="true"] {
 
 .no-drag {
   -webkit-app-region: no-drag;
+}
+
+/* TopBar Agent Selector Count Pill - Harmonized Premium Purple */
+.agent-count-pill,
+.agent-selector-trigger .count-pill {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  height: 20px !important;
+  padding: 0 8px !important;
+  font-size: 10.5px !important;
+  font-weight: 700 !important;
+  color: #c084fc !important;
+  background: rgba(168, 85, 247, 0.15) !important;
+  border: 1px solid rgba(168, 85, 247, 0.32) !important;
+  border-radius: 4px !important;
+  flex-shrink: 0 !important;
+  line-height: 1 !important;
+}
+
+.agent-dropdown-row .agent-row-name,
+.agent-dropdown-row .agent-row-name-line {
+  white-space: nowrap !important;
+  flex-wrap: nowrap !important;
 }
 
 /* Badge styles */

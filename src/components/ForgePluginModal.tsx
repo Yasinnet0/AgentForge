@@ -23,9 +23,10 @@ import {
   ExternalLink,
   Tag,
   ShieldCheck,
-  Download
+  Download,
+  Edit3
 } from 'lucide-react';
-import { ScannedSkill, ScannedMcpServer, SupportedAgent } from '../types/agent';
+import { ScannedSkill, ScannedMcpServer, SupportedAgent, InstalledPluginDetails } from '../types/agent';
 import { RULE_PRESETS } from '../data/rulePresets';
 import { logActivity } from '../services/activityLogger';
 import { useModalTransition } from '../hooks/useModalTransition';
@@ -36,6 +37,7 @@ interface ForgePluginModalProps {
   agents: SupportedAgent[];
   skills: ScannedSkill[];
   mcpServers: ScannedMcpServer[];
+  editingPlugin?: InstalledPluginDetails | null;
   onPluginForged?: (pluginName: string, action: 'install' | 'export-zip' | 'export-dir', countOrPath?: string | number) => void;
 }
 
@@ -62,9 +64,11 @@ export const ForgePluginModal: React.FC<ForgePluginModalProps> = ({
   agents,
   skills,
   mcpServers,
+  editingPlugin,
   onPluginForged,
 }) => {
   const { isRendered, isClosing, handleClose } = useModalTransition(isOpen, onClose, 140);
+  const isEditing = !!editingPlugin;
 
   // State
   const [currentStep, setCurrentStep] = useState<WizardStep>(1);
@@ -97,17 +101,113 @@ export const ForgePluginModal: React.FC<ForgePluginModalProps> = ({
   const [isCopiedManifest, setIsCopiedManifest] = useState(false);
 
   const prevIsOpenRef = useRef(false);
+  const prevEditingPluginRef = useRef<InstalledPluginDetails | null | undefined>(undefined);
 
   // Effects
   useEffect(() => {
-    if (isOpen && !prevIsOpenRef.current) {
+    const isNowOpen = isOpen && !prevIsOpenRef.current;
+    const editingChanged = isOpen && editingPlugin !== prevEditingPluginRef.current;
+
+    if (isNowOpen || editingChanged) {
       setCurrentStep(1);
       setErrorMsg(null);
-      // Reset wizard
-      if (successInfo) {
+      setSuccessInfo(null);
+
+      if (editingPlugin) {
+        // Pre-fill from installed plugin details
+        const m = editingPlugin.manifest || {};
+        setName(m.displayName || m.name || editingPlugin.folderName);
+        setFolderSlug(editingPlugin.folderName);
+        setVersion(m.version || '1.0.0');
+        setAuthor(m.author || 'Local Developer');
+        setCategory(m.category && CATEGORIES.includes(m.category) ? m.category : CATEGORIES[0]);
+        setDescription(m.description || '');
+        setTagsInput(Array.isArray(m.tags) ? m.tags.join(', ') : '');
+
+        // Pre-select skills
+        const pluginSkillSlugs = new Set<string>();
+        if (editingPlugin.skills) {
+          for (const s of editingPlugin.skills) {
+            pluginSkillSlugs.add(s.folderName);
+          }
+        }
+        if (m.skills) {
+          for (const s of m.skills) {
+            pluginSkillSlugs.add(s);
+          }
+        }
+        setSelectedSkillIds(pluginSkillSlugs);
+
+        // Pre-select MCPs
+        const pluginMcpNames = new Set<string>();
+        if (editingPlugin.mcpServers) {
+          for (const mcp of editingPlugin.mcpServers) {
+            pluginMcpNames.add(mcp.name);
+          }
+        }
+        if (m.mcpServers) {
+          for (const mcpKey of Object.keys(m.mcpServers)) {
+            pluginMcpNames.add(mcpKey);
+          }
+        }
+        setSelectedMcpIds(pluginMcpNames);
+
+        // Pre-select Rules
+        const initialSelectedRules = new Set<string>();
+        if (editingPlugin.rules && editingPlugin.rules.length > 0) {
+          for (const r of editingPlugin.rules) {
+            const matchedPreset = RULE_PRESETS.find((preset) => {
+              const expectedName = `${preset.category}-${preset.id.replace('preset-', '')}.md`;
+              return r.filename === expectedName || r.filename === `${preset.id}.md` || r.title === preset.title;
+            });
+            if (matchedPreset) {
+              initialSelectedRules.add(matchedPreset.id);
+            } else {
+              initialSelectedRules.add(`plugin-rule-${r.filename}`);
+            }
+          }
+        } else if (m.rules) {
+          for (const rf of m.rules) {
+            const matchedPreset = RULE_PRESETS.find((preset) => {
+              const expectedName = `${preset.category}-${preset.id.replace('preset-', '')}.md`;
+              return rf === expectedName || rf === `${preset.id}.md`;
+            });
+            if (matchedPreset) {
+              initialSelectedRules.add(matchedPreset.id);
+            }
+          }
+        }
+        setSelectedRulePresetIds(initialSelectedRules);
+
+        // Target action: default to 'install'
+        setExportAction('install');
+
+        // Target agents: match agents where this plugin exists
+        const matchedAgents = agents.filter((ag) => {
+          if (ag.paths?.pluginsDir) {
+            const normP = editingPlugin.pluginPath.replace(/\\/g, '/').toLowerCase();
+            const normA = ag.paths.pluginsDir.replace(/\\/g, '/').toLowerCase();
+            return normP.includes(normA);
+          }
+          return false;
+        });
+
+        if (matchedAgents.length > 0) {
+          setTargetAgentIds(matchedAgents.map((a) => a.id));
+        } else {
+          const activeIds = agents.filter((a) => a.selected).map((a) => a.id);
+          setTargetAgentIds(activeIds.length > 0 ? activeIds : (agents[0] ? [agents[0].id] : []));
+        }
+
+        setZipDestinationPath(`${editingPlugin.folderName}-v${m.version || '1.0.0'}.zip`);
+        setDirDestinationPath('');
+      } else {
+        // Reset wizard for fresh creation
         setName('');
         setFolderSlug('');
         setVersion('1.0.0');
+        setAuthor('AgentForge Developer');
+        setCategory(CATEGORIES[0]);
         setDescription('');
         setTagsInput('');
         setSelectedSkillIds(new Set());
@@ -116,17 +216,14 @@ export const ForgePluginModal: React.FC<ForgePluginModalProps> = ({
         setExportAction('install');
         setZipDestinationPath('custom-plugin-kit-v1.0.0.zip');
         setDirDestinationPath('');
+
+        const activeIds = agents.filter((a) => a.selected).map((a) => a.id);
+        setTargetAgentIds(activeIds.length > 0 ? activeIds : (agents[0] ? [agents[0].id] : []));
       }
-      setSuccessInfo(null);
-      const activeIds = agents.filter((a) => a.selected).map((a) => a.id);
-      setTargetAgentIds(activeIds.length > 0 ? activeIds : (agents[0] ? [agents[0].id] : []));
-      
-      // Default zip path
-      const defaultSlug = (successInfo ? '' : folderSlug) || 'custom-plugin-kit';
-      setZipDestinationPath(`${defaultSlug}-v1.0.0.zip`);
     }
     prevIsOpenRef.current = isOpen;
-  }, [isOpen, agents, folderSlug, successInfo]);
+    prevEditingPluginRef.current = editingPlugin;
+  }, [isOpen, editingPlugin, agents]);
 
   useEffect(() => {
     if (!isRendered) return;
@@ -142,16 +239,19 @@ export const ForgePluginModal: React.FC<ForgePluginModalProps> = ({
   // Slug Handlers
   const handleNameChange = (val: string) => {
     setName(val);
-    const slug = val
-      .toLowerCase()
-      .trim()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '');
-    setFolderSlug(slug);
-    setZipDestinationPath(`${slug || 'custom-plugin-kit'}-v${version}.zip`);
+    if (!isEditing) {
+      const slug = val
+        .toLowerCase()
+        .trim()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+      setFolderSlug(slug);
+      setZipDestinationPath(`${slug || 'custom-plugin-kit'}-v${version}.zip`);
+    }
   };
 
   const handleSlugChange = (val: string) => {
+    if (isEditing) return;
     const slug = val.toLowerCase().replace(/[^a-z0-9_-]/g, '-');
     setFolderSlug(slug);
     setZipDestinationPath(`${slug || 'custom-plugin-kit'}-v${version}.zip`);
@@ -160,6 +260,24 @@ export const ForgePluginModal: React.FC<ForgePluginModalProps> = ({
   // Capabilities & Filtering
   const uniqueSkills = useMemo(() => {
     const map = new Map<string, ScannedSkill>();
+    if (editingPlugin?.skills) {
+      for (const s of editingPlugin.skills) {
+        const slug = s.folderName;
+        map.set(slug, {
+          id: slug,
+          name: s.name || slug,
+          description: s.description || 'Skill bundled in this plugin',
+          folderName: slug,
+          sourceAgentId: 'plugin',
+          sourceAgentName: 'Current Plugin',
+          sourceAgentColor: '#10b981',
+          sourceAgentIcon: 'Boxes',
+          sourcePath: s.sourcePath,
+          hasScripts: false,
+          hasReferences: false,
+        });
+      }
+    }
     for (const s of skills) {
       const slug = s.folderName || s.id;
       if (!map.has(slug)) {
@@ -167,17 +285,68 @@ export const ForgePluginModal: React.FC<ForgePluginModalProps> = ({
       }
     }
     return Array.from(map.values());
-  }, [skills]);
+  }, [skills, editingPlugin]);
 
   const uniqueMcps = useMemo(() => {
     const map = new Map<string, ScannedMcpServer>();
+    if (editingPlugin?.mcpServers) {
+      for (const m of editingPlugin.mcpServers) {
+        map.set(m.name, {
+          id: m.name,
+          name: m.name,
+          command: m.command,
+          args: m.args,
+          url: m.url,
+          transport: (m.transport as any) || (m.url ? 'sse' : 'stdio'),
+          envKeys: m.env ? Object.keys(m.env) : [],
+          sourceAgentId: 'plugin',
+          sourceAgentName: 'Current Plugin',
+          sourceAgentColor: '#10b981',
+          sourceAgentIcon: 'Server',
+          sourcePath: editingPlugin.pluginPath,
+        });
+      }
+    }
     for (const m of mcpServers) {
       if (!map.has(m.name)) {
         map.set(m.name, m);
       }
     }
     return Array.from(map.values());
-  }, [mcpServers]);
+  }, [mcpServers, editingPlugin]);
+
+  const allRuleItems = useMemo(() => {
+    const list: Array<{
+      id: string;
+      title: string;
+      summary: string;
+      category: string;
+      directives: Array<{ title: string; content: string }>;
+      customContent?: string;
+      filename?: string;
+    }> = [...RULE_PRESETS];
+
+    if (editingPlugin?.rules) {
+      for (const r of editingPlugin.rules) {
+        const matchesPreset = RULE_PRESETS.some((preset) => {
+          const expectedName = `${preset.category}-${preset.id.replace('preset-', '')}.md`;
+          return r.filename === expectedName || r.filename === `${preset.id}.md` || r.title === preset.title;
+        });
+        if (!matchesPreset) {
+          list.push({
+            id: `plugin-rule-${r.filename}`,
+            title: r.title || r.filename,
+            summary: 'Custom behavioral directive bundled in this plugin',
+            category: 'custom',
+            directives: [],
+            customContent: r.content,
+            filename: r.filename,
+          });
+        }
+      }
+    }
+    return list;
+  }, [editingPlugin]);
 
   const filteredSkills = useMemo(() => {
     if (!skillSearch.trim()) return uniqueSkills;
@@ -202,15 +371,15 @@ export const ForgePluginModal: React.FC<ForgePluginModalProps> = ({
   }, [uniqueMcps, mcpSearch]);
 
   const filteredRulePresets = useMemo(() => {
-    if (!ruleSearch.trim()) return RULE_PRESETS;
+    if (!ruleSearch.trim()) return allRuleItems;
     const q = ruleSearch.toLowerCase().trim();
-    return RULE_PRESETS.filter(
+    return allRuleItems.filter(
       (r) =>
         r.title.toLowerCase().includes(q) ||
         r.summary.toLowerCase().includes(q) ||
         r.category.toLowerCase().includes(q)
     );
-  }, [ruleSearch]);
+  }, [allRuleItems, ruleSearch]);
 
   // Selection Handlers
   const toggleSkill = (slug: string) => {
@@ -301,9 +470,9 @@ export const ForgePluginModal: React.FC<ForgePluginModalProps> = ({
     }
 
     const bundledRulesList: string[] = [];
-    for (const preset of RULE_PRESETS) {
-      if (selectedRulePresetIds.has(preset.id)) {
-        bundledRulesList.push(`${preset.category}-${preset.id.replace('preset-', '')}.md`);
+    for (const ruleItem of allRuleItems) {
+      if (selectedRulePresetIds.has(ruleItem.id)) {
+        bundledRulesList.push(ruleItem.filename || `${ruleItem.category}-${ruleItem.id.replace('preset-', '')}.md`);
       }
     }
 
@@ -330,7 +499,8 @@ export const ForgePluginModal: React.FC<ForgePluginModalProps> = ({
     selectedSkillIds,
     selectedMcpIds,
     selectedRulePresetIds,
-    uniqueMcps
+    uniqueMcps,
+    allRuleItems
   ]);
 
   // Browse zip destination
@@ -403,9 +573,16 @@ export const ForgePluginModal: React.FC<ForgePluginModalProps> = ({
         transport: m.transport,
       }));
 
-    const selectedRulesData = RULE_PRESETS
+    const selectedRulesData = allRuleItems
       .filter((r) => selectedRulePresetIds.has(r.id))
       .map((r) => {
+        if (r.customContent) {
+          return {
+            filename: r.filename || `${r.id}.md`,
+            title: r.title,
+            content: r.customContent
+          };
+        }
         const content = `# ${r.title}\n\n> ${r.summary}\n\n` + 
           r.directives.map((d) => `## ${d.title}\n${d.content}\n`).join('\n');
         return {
@@ -467,14 +644,16 @@ export const ForgePluginModal: React.FC<ForgePluginModalProps> = ({
 
       const actionTitle = 
         exportAction === 'install' 
-          ? `Installed kit "${name || cleanSlug}" to ${targetAgentsPayload.map((a) => a.name || a.agentId).join(', ')}`
+          ? (isEditing
+              ? `Updated plugin "${name || cleanSlug}" on ${targetAgentsPayload.map((a) => a.name || a.agentId).join(', ')}`
+              : `Installed kit "${name || cleanSlug}" to ${targetAgentsPayload.map((a) => a.name || a.agentId).join(', ')}`)
           : exportAction === 'export-zip'
           ? `Exported plugin archive to ${res.exportPath || exportPath}`
           : `Exported plugin directory to ${res.exportPath || exportPath}`;
 
       logActivity({
         type: 'PLUGIN',
-        title: `Forged Plugin Kit "${name || cleanSlug}"`,
+        title: isEditing ? `Updated Plugin "${name || cleanSlug}"` : `Forged Plugin Kit "${name || cleanSlug}"`,
         description: actionTitle,
         status: 'success',
       });
@@ -508,13 +687,19 @@ export const ForgePluginModal: React.FC<ForgePluginModalProps> = ({
       <div className={`forge-modal-card forge-plugin-card ${isClosing ? 'is-closing' : ''}`} onClick={(e) => e.stopPropagation()}>
         {/* Modal Header */}
         <div className="forge-modal-header">
-          <div className="header-icon-box plugin">
-            <Boxes size={18} />
+          <div className={`header-icon-box plugin ${isEditing ? 'edit' : ''}`}>
+            {isEditing ? <Edit3 size={18} /> : <Boxes size={18} />}
           </div>
           <div className="header-title-box">
-            <h2 className="modal-title font-mono">Skill Kit & Plugin Bundler</h2>
+            <h2 className="modal-title font-mono">
+              {isEditing
+                ? `Edit Plugin: ${name || folderSlug}`
+                : 'Skill Kit & Plugin Bundler'}
+            </h2>
             <p className="modal-subtitle">
-              Package skills, MCP servers, and behavioral rules into a portable plugin bundle
+              {isEditing
+                ? 'Add, remove, or modify skills, MCP servers, and behavioral rules in this installed plugin'
+                : 'Package skills, MCP servers, and behavioral rules into a portable plugin bundle'}
             </p>
           </div>
 
@@ -592,8 +777,13 @@ export const ForgePluginModal: React.FC<ForgePluginModalProps> = ({
                     placeholder="e.g. fullstack-devops-studio"
                     value={folderSlug}
                     onChange={(e) => handleSlugChange(e.target.value)}
+                    disabled={isEditing}
                   />
-                  <span className="field-hint">Filesystem folder name (alphanumeric & hyphens)</span>
+                  <span className="field-hint">
+                    {isEditing
+                      ? 'Folder slug is locked to preserve directory integrity for this installed plugin'
+                      : 'Filesystem folder name (alphanumeric & hyphens)'}
+                  </span>
                 </div>
               </div>
 
@@ -1087,9 +1277,13 @@ export const ForgePluginModal: React.FC<ForgePluginModalProps> = ({
                         {exportAction === 'install' && <div className="radio-dot" />}
                       </div>
                       <div className="radio-title-group">
-                        <span className="radio-card-title">Install Directly to AI Agents</span>
+                        <span className="radio-card-title">
+                          {isEditing ? 'Save & Update in AI Agents' : 'Install Directly to AI Agents'}
+                        </span>
                         <span className="radio-card-desc">
-                          Equips the bundle directly into native agent plugin directories
+                          {isEditing
+                            ? 'Overwrites and updates the bundle directly in the target agents\' plugin directories'
+                            : 'Equips the bundle directly into native agent plugin directories'}
                         </span>
                       </div>
                     </div>
@@ -1229,7 +1423,11 @@ export const ForgePluginModal: React.FC<ForgePluginModalProps> = ({
             <ShieldCheck size={15} />
             <div className="success-banner-text">
               {successInfo.action === 'install' ? (
-                <span>Successfully forged and equipped plugin to {successInfo.pathOrCount} target AI agent(s)!</span>
+                <span>
+                  {isEditing
+                    ? `Successfully updated "${name || folderSlug}" on ${successInfo.pathOrCount} target AI agent(s)!`
+                    : `Successfully forged and equipped plugin to ${successInfo.pathOrCount} target AI agent(s)!`}
+                </span>
               ) : successInfo.action === 'export-zip' ? (
                 <span>Successfully generated shareable .zip bundle at: <strong>{String(successInfo.pathOrCount)}</strong></span>
               ) : (
@@ -1311,7 +1509,7 @@ export const ForgePluginModal: React.FC<ForgePluginModalProps> = ({
                     <Loader2 size={13} className="spin" />
                     <span>
                       {exportAction === 'install'
-                        ? 'Equipping Plugin...'
+                        ? (isEditing ? 'Updating Plugin...' : 'Equipping Plugin...')
                         : exportAction === 'export-zip'
                         ? 'Packaging .ZIP...'
                         : 'Exporting Folder...'}
@@ -1320,7 +1518,7 @@ export const ForgePluginModal: React.FC<ForgePluginModalProps> = ({
                 ) : (
                   <>
                     {exportAction === 'install' ? (
-                      <Boxes size={13} />
+                      isEditing ? <Check size={13} /> : <Boxes size={13} />
                     ) : exportAction === 'export-zip' ? (
                       <Download size={13} />
                     ) : (
@@ -1328,7 +1526,9 @@ export const ForgePluginModal: React.FC<ForgePluginModalProps> = ({
                     )}
                     <span>
                       {exportAction === 'install'
-                        ? `Equip to ${targetAgentIds.length} Agent(s)`
+                        ? (isEditing
+                            ? `Save Changes (${targetAgentIds.length} Agent${targetAgentIds.length === 1 ? '' : 's'})`
+                            : `Equip to ${targetAgentIds.length} Agent(s)`)
                         : exportAction === 'export-zip'
                         ? 'Create .ZIP Archive'
                         : 'Export Plugin Folder'}
@@ -1443,6 +1643,12 @@ export const ForgePluginModal: React.FC<ForgePluginModalProps> = ({
             align-items: center;
             justify-content: center;
             flex-shrink: 0;
+          }
+
+          .header-icon-box.plugin.edit {
+            background: rgba(56, 189, 248, 0.15);
+            border: 1px solid rgba(56, 189, 248, 0.35);
+            color: #38bdf8;
           }
 
           .header-title-box {
@@ -1617,6 +1823,14 @@ export const ForgePluginModal: React.FC<ForgePluginModalProps> = ({
           .field-input:focus, .field-select:focus, .field-textarea:focus {
             border-color: #6366f1;
             box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+          }
+
+          .field-input:disabled {
+            background: #080c16;
+            color: #64748b;
+            border-color: #151e2f;
+            cursor: not-allowed;
+            opacity: 0.75;
           }
 
           .field-hint {
@@ -1904,6 +2118,12 @@ export const ForgePluginModal: React.FC<ForgePluginModalProps> = ({
             background: #131c2e;
             padding: 1px 5px;
             border-radius: 4px;
+          }
+
+          .category-tag.custom {
+            color: #38bdf8;
+            background: rgba(56, 189, 248, 0.1);
+            border: 1px solid rgba(56, 189, 248, 0.25);
           }
 
           .capability-selection-summary-bar {
