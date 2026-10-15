@@ -59,7 +59,7 @@ export const AgentSelectorDropdown: React.FC<AgentSelectorDropdownProps> = ({
           <span className="target-name font-mono">{getLabel()}</span>
         </div>
         <div className="trigger-right">
-          <span className="count-pill font-mono">{selectedCount}</span>
+          <span className="agent-count-pill count-pill font-mono">{selectedCount}</span>
           <ChevronDown size={11} className={`dropdown-chevron ${isOpen ? 'rotated' : ''}`} />
         </div>
       </button>
@@ -166,8 +166,8 @@ export const AgentSelectorDropdown: React.FC<AgentSelectorDropdownProps> = ({
           width: 6px;
           height: 6px;
           border-radius: 50%;
-          background: #6366f1;
-          box-shadow: 0 0 8px rgba(99, 102, 241, 0.6);
+          background: #8b5cf6;
+          box-shadow: 0 0 8px rgba(139, 92, 246, 0.6);
           flex-shrink: 0;
         }
 
@@ -188,13 +188,21 @@ export const AgentSelectorDropdown: React.FC<AgentSelectorDropdownProps> = ({
           text-align: left;
         }
 
-        .count-pill {
-          font-size: 10px;
-          color: #818cf8;
-          background: rgba(99, 102, 241, 0.15);
-          padding: 1px 5px;
+        .agent-count-pill,
+        .agent-selector-trigger .count-pill {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          height: 20px;
+          padding: 0 8px;
+          font-size: 10.5px;
+          font-weight: 700;
+          color: #c084fc;
+          background: rgba(168, 85, 247, 0.15);
+          border: 1px solid rgba(168, 85, 247, 0.32);
           border-radius: 4px;
           flex-shrink: 0;
+          line-height: 1;
         }
 
         .dropdown-chevron {
@@ -207,13 +215,13 @@ export const AgentSelectorDropdown: React.FC<AgentSelectorDropdownProps> = ({
           transform: rotate(180deg);
         }
 
-        .agent-selector-wrapper .agent-dropdown-menu,
-        .agent-dropdown-menu {
+        .agent-selector-wrapper .agent-dropdown-menu {
           position: absolute;
           top: calc(100% + 5px);
           left: 0;
-          width: 100%;
-          min-width: 100%;
+          min-width: 320px;
+          width: max-content;
+          max-width: 380px;
           box-sizing: border-box;
           background: #0d121f;
           border: 1px solid #1e283d;
@@ -263,6 +271,7 @@ export const AgentSelectorDropdown: React.FC<AgentSelectorDropdownProps> = ({
           border-radius: 6px;
           cursor: pointer;
           transition: all 0.12s ease;
+          white-space: nowrap;
         }
 
         .agent-dropdown-row:hover {
@@ -313,12 +322,15 @@ export const AgentSelectorDropdown: React.FC<AgentSelectorDropdownProps> = ({
           display: flex;
           align-items: center;
           gap: 6px;
+          white-space: nowrap;
+          flex-wrap: nowrap;
         }
 
         .agent-row-name {
           font-size: 12px;
           font-weight: 600;
           color: #f1f5f9;
+          white-space: nowrap;
         }
 
         .detected-badge {
@@ -328,6 +340,8 @@ export const AgentSelectorDropdown: React.FC<AgentSelectorDropdownProps> = ({
           background: rgba(16, 185, 129, 0.12);
           padding: 1px 4px;
           border-radius: 3px;
+          flex-shrink: 0;
+          white-space: nowrap;
         }
 
         .agent-row-path {

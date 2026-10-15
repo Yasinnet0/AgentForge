@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useDeferredValue } from 'react';
 import {
   Search,
   Bell,
@@ -14,11 +14,9 @@ import {
 } from 'lucide-react';
 import { 
   SupportedAgent, 
-  AgentCapabilitiesPayload,
-  ScannedSkill,
-  ScannedMcpServer,
-  ScannedPlugin 
+  AgentCapabilitiesPayload
 } from '../types/agent';
+import { CatalogSkill, CatalogPlugin, CatalogMcpServer } from '../types/catalog';
 import { AgentSelectorDropdown } from './AgentSelectorDropdown';
 import { NavTab } from './Sidebar';
 
@@ -33,7 +31,41 @@ interface TopBarProps {
   activeTab?: NavTab;
   onNavigateTab?: (tab: NavTab) => void;
   capabilities?: AgentCapabilitiesPayload;
+  skillsCatalog?: CatalogSkill[];
+  mcpCatalog?: CatalogMcpServer[];
+  pluginsCatalog?: CatalogPlugin[];
   onSelectSearchResult?: (tab: NavTab, itemId: string) => void;
+}
+
+interface SearchSkillItem {
+  id: string;
+  name: string;
+  description?: string;
+  pluginName?: string;
+  sourceAgentName: string;
+  sourceAgentColor: string;
+  isCatalog?: boolean;
+}
+
+interface SearchMcpItem {
+  id: string;
+  name: string;
+  transport: 'stdio' | 'sse';
+  command?: string;
+  url?: string;
+  sourceAgentName: string;
+  sourceAgentColor: string;
+  isCatalog?: boolean;
+}
+
+interface SearchPluginItem {
+  id: string;
+  name: string;
+  description?: string;
+  skillsCount?: number;
+  sourceAgentName: string;
+  sourceAgentColor: string;
+  isCatalog?: boolean;
 }
 
 interface SearchResultItem {
@@ -58,6 +90,9 @@ export const TopBar: React.FC<TopBarProps> = ({
   activeTab = 'overview',
   onNavigateTab,
   capabilities,
+  skillsCatalog,
+  mcpCatalog,
+  pluginsCatalog,
   onSelectSearchResult,
 }) => {
   const [isMaximized, setIsMaximized] = useState(false);
@@ -65,6 +100,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [categoryFilter, setCategoryFilter] = useState<'all' | 'skills' | 'mcp' | 'plugins' | 'agents'>('all');
   const [localInput, setLocalInput] = useState(searchQuery);
+  const deferredInput = useDeferredValue(localInput);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const topBarCenterRef = useRef<HTMLDivElement>(null);
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -131,7 +167,7 @@ export const TopBar: React.FC<TopBarProps> = ({
     }
     debounceTimerRef.current = setTimeout(() => {
       onSearchChange?.(val);
-    }, 120);
+    }, 150);
   };
 
   const handleMinimize = () => {
@@ -166,30 +202,131 @@ export const TopBar: React.FC<TopBarProps> = ({
   }, [agents]);
 
   const indexedMcps = useMemo(() => {
-    return (capabilities?.mcpServers || []).map((m) => ({
-      item: m,
-      searchStr: `${m.name} ${m.sourceAgentName} ${m.command || ''} ${m.url || ''} ${m.transport}`.toLowerCase(),
-    }));
-  }, [capabilities?.mcpServers]);
+    const list: Array<{ item: SearchMcpItem; searchStr: string }> = [];
+    const seen = new Set<string>();
+
+    (capabilities?.mcpServers || []).forEach((m) => {
+      seen.add(m.name.toLowerCase());
+      list.push({
+        item: {
+          id: m.id,
+          name: m.name,
+          transport: m.transport,
+          command: m.command,
+          url: m.url,
+          sourceAgentName: m.sourceAgentName,
+          sourceAgentColor: m.sourceAgentColor,
+          isCatalog: false,
+        },
+        searchStr: `${m.name} ${m.sourceAgentName} ${m.command || ''} ${m.url || ''} ${m.transport}`.toLowerCase(),
+      });
+    });
+
+    (mcpCatalog || []).forEach((c) => {
+      if (!seen.has(c.name.toLowerCase())) {
+        list.push({
+          item: {
+            id: c.id,
+            name: c.name,
+            transport: c.transport,
+            command: c.command,
+            url: c.url,
+            sourceAgentName: c.category || 'Catalog',
+            sourceAgentColor: '#38bdf8',
+            isCatalog: true,
+          },
+          searchStr: `${c.name} ${c.description || ''} ${c.category || ''} ${c.author || ''} ${(c.tags || []).join(' ')} ${c.command || ''}`.toLowerCase(),
+        });
+      }
+    });
+
+    return list;
+  }, [capabilities?.mcpServers, mcpCatalog]);
 
   const indexedSkills = useMemo(() => {
-    return (capabilities?.skills || []).map((s) => ({
-      item: s,
-      searchStr: `${s.name} ${s.description} ${s.pluginName || ''} ${s.sourceAgentName}`.toLowerCase(),
-    }));
-  }, [capabilities?.skills]);
+    const list: Array<{ item: SearchSkillItem; searchStr: string }> = [];
+    const seen = new Set<string>();
+
+    (capabilities?.skills || []).forEach((s) => {
+      seen.add(s.name.toLowerCase());
+      list.push({
+        item: {
+          id: s.id,
+          name: s.name,
+          description: s.description,
+          pluginName: s.pluginName,
+          sourceAgentName: s.sourceAgentName,
+          sourceAgentColor: s.sourceAgentColor,
+          isCatalog: false,
+        },
+        searchStr: `${s.name} ${s.description || ''} ${s.pluginName || ''} ${s.sourceAgentName}`.toLowerCase(),
+      });
+    });
+
+    (skillsCatalog || []).forEach((c) => {
+      if (!seen.has(c.name.toLowerCase())) {
+        list.push({
+          item: {
+            id: c.id,
+            name: c.name,
+            description: c.description,
+            pluginName: c.category,
+            sourceAgentName: c.author || 'Catalog',
+            sourceAgentColor: '#c084fc',
+            isCatalog: true,
+          },
+          searchStr: `${c.name} ${c.description || ''} ${c.category || ''} ${c.author || ''} ${(c.tags || []).join(' ')}`.toLowerCase(),
+        });
+      }
+    });
+
+    return list;
+  }, [capabilities?.skills, skillsCatalog]);
 
   const indexedPlugins = useMemo(() => {
-    return (capabilities?.plugins || []).map((p) => ({
-      item: p,
-      searchStr: `${p.name} ${p.description} ${p.sourceAgentName}`.toLowerCase(),
-    }));
-  }, [capabilities?.plugins]);
+    const list: Array<{ item: SearchPluginItem; searchStr: string }> = [];
+    const seen = new Set<string>();
+
+    (capabilities?.plugins || []).forEach((p) => {
+      seen.add(p.name.toLowerCase());
+      list.push({
+        item: {
+          id: p.id,
+          name: p.name,
+          description: p.description,
+          skillsCount: p.skillsCount,
+          sourceAgentName: p.sourceAgentName,
+          sourceAgentColor: p.sourceAgentColor,
+          isCatalog: false,
+        },
+        searchStr: `${p.name} ${p.description || ''} ${p.sourceAgentName}`.toLowerCase(),
+      });
+    });
+
+    (pluginsCatalog || []).forEach((c) => {
+      if (!seen.has(c.name.toLowerCase())) {
+        list.push({
+          item: {
+            id: c.id,
+            name: c.name,
+            description: c.description,
+            skillsCount: c.bundledSkills?.length || 0,
+            sourceAgentName: c.category || 'Catalog',
+            sourceAgentColor: '#fbbf24',
+            isCatalog: true,
+          },
+          searchStr: `${c.name} ${c.description || ''} ${c.category || ''} ${c.author || ''} ${(c.tags || []).join(' ')}`.toLowerCase(),
+        });
+      }
+    });
+
+    return list;
+  }, [capabilities?.plugins, pluginsCatalog]);
 
   // Category counts
   const categoryCounts = useMemo(() => {
-    if (!localInput.trim()) return { skills: 0, mcps: 0, plugins: 0, agents: 0 };
-    const q = localInput.toLowerCase().trim();
+    if (!deferredInput.trim()) return { skills: 0, mcps: 0, plugins: 0, agents: 0 };
+    const q = deferredInput.toLowerCase().trim();
     let sCount = 0;
     for (const s of indexedSkills) if (s.searchStr.includes(q)) sCount++;
     let mCount = 0;
@@ -199,18 +336,18 @@ export const TopBar: React.FC<TopBarProps> = ({
     let aCount = 0;
     for (const a of indexedAgents) if (a.searchStr.includes(q)) aCount++;
     return { skills: sCount, mcps: mCount, plugins: pCount, agents: aCount };
-  }, [localInput, indexedSkills, indexedMcps, indexedPlugins, indexedAgents]);
+  }, [deferredInput, indexedSkills, indexedMcps, indexedPlugins, indexedAgents]);
 
   // Search matches
   const searchResults = useMemo(() => {
-    if (!localInput.trim()) {
+    if (!deferredInput.trim()) {
       return { agents: [], mcps: [], skills: [], plugins: [], flatItems: [], totalCount: 0 };
     }
-    const q = localInput.toLowerCase().trim();
+    const q = deferredInput.toLowerCase().trim();
 
     // Skills
     const shouldSearchSkills = categoryFilter === 'all' || categoryFilter === 'skills';
-    const matchingSkills: ScannedSkill[] = [];
+    const matchingSkills: SearchSkillItem[] = [];
     if (shouldSearchSkills) {
       const limit = categoryFilter === 'skills' ? 24 : 6;
       for (const entry of indexedSkills) {
@@ -223,7 +360,7 @@ export const TopBar: React.FC<TopBarProps> = ({
 
     // MCP Servers
     const shouldSearchMcps = categoryFilter === 'all' || categoryFilter === 'mcp';
-    const matchingMcps: ScannedMcpServer[] = [];
+    const matchingMcps: SearchMcpItem[] = [];
     if (shouldSearchMcps) {
       const limit = categoryFilter === 'mcp' ? 20 : 5;
       for (const entry of indexedMcps) {
@@ -236,7 +373,7 @@ export const TopBar: React.FC<TopBarProps> = ({
 
     // Plugins
     const shouldSearchPlugins = categoryFilter === 'all' || categoryFilter === 'plugins';
-    const matchingPlugins: ScannedPlugin[] = [];
+    const matchingPlugins: SearchPluginItem[] = [];
     if (shouldSearchPlugins) {
       const limit = categoryFilter === 'plugins' ? 16 : 4;
       for (const entry of indexedPlugins) {
@@ -268,8 +405,8 @@ export const TopBar: React.FC<TopBarProps> = ({
         rawId: s.id,
         type: 'skill',
         title: s.name,
-        subtitle: s.description,
-        badge: s.pluginName ? s.pluginName : 'Skill',
+        subtitle: s.description || 'Specialized agent instructions and workflows',
+        badge: s.pluginName ? s.pluginName : (s.isCatalog ? 'Catalog' : 'Skill'),
         badgeColor: '#c084fc',
         agentName: s.sourceAgentName,
         agentColor: s.sourceAgentColor,
@@ -298,8 +435,8 @@ export const TopBar: React.FC<TopBarProps> = ({
         rawId: p.id,
         type: 'plugin',
         title: p.name,
-        subtitle: p.description,
-        badge: `${p.skillsCount} skills`,
+        subtitle: p.description || 'Pre-configured capability kit',
+        badge: `${p.skillsCount || 0} skills`,
         badgeColor: '#fbbf24',
         agentName: p.sourceAgentName,
         agentColor: p.sourceAgentColor,
@@ -336,12 +473,17 @@ export const TopBar: React.FC<TopBarProps> = ({
       flatItems,
       totalCount,
     };
-  }, [localInput, categoryFilter, indexedAgents, indexedMcps, indexedSkills, indexedPlugins]);
+  }, [deferredInput, categoryFilter, indexedAgents, indexedMcps, indexedSkills, indexedPlugins]);
 
   const handleSelectItem = (item: SearchResultItem) => {
+    setLocalInput('');
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+    onSearchChange?.('');
+    setIsDropdownOpen(false);
     onSelectSearchResult?.(item.tab, item.rawId);
     onNavigateTab?.(item.tab);
-    setIsDropdownOpen(false);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -692,9 +834,36 @@ export const TopBar: React.FC<TopBarProps> = ({
           <button
             className="window-control-btn maximize"
             onClick={handleMaximize}
-            title={isMaximized ? "Restore" : "Maximize"}
+            title={isMaximized ? "Restore Down" : "Maximize"}
           >
-            <Square size={11} />
+            {isMaximized ? (
+              <svg
+                width="11"
+                height="11"
+                viewBox="0 0 11 11"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="M3 1.5H9.5V8"
+                  stroke="currentColor"
+                  strokeWidth="1.1"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <rect
+                  x="1.5"
+                  y="3"
+                  width="6.5"
+                  height="6.5"
+                  rx="0.5"
+                  stroke="currentColor"
+                  strokeWidth="1.1"
+                />
+              </svg>
+            ) : (
+              <Square size={11} />
+            )}
           </button>
           <button
             className="window-control-btn close"
@@ -1080,11 +1249,16 @@ export const TopBar: React.FC<TopBarProps> = ({
           display: flex;
           align-items: center;
           gap: 10px;
-          padding: 7px 10px;
+          height: 42px;
+          min-height: 42px;
+          max-height: 42px;
+          box-sizing: border-box;
+          padding: 0 10px;
           border-radius: 6px;
           cursor: pointer;
           transition: all 0.12s ease;
           border: 1px solid transparent;
+          overflow: hidden;
         }
 
         .result-item:hover,
@@ -1096,12 +1270,15 @@ export const TopBar: React.FC<TopBarProps> = ({
         .item-icon-wrapper {
           width: 26px;
           height: 26px;
+          min-height: 26px;
+          max-height: 26px;
           border-radius: 6px;
           display: flex;
           align-items: center;
           justify-content: center;
           flex-shrink: 0;
           border: 1px solid;
+          box-sizing: border-box;
         }
 
         .icon-mcp {
@@ -1127,13 +1304,20 @@ export const TopBar: React.FC<TopBarProps> = ({
           min-width: 0;
           display: flex;
           flex-direction: column;
-          gap: 1px;
+          justify-content: center;
+          gap: 2px;
+          overflow: hidden;
         }
 
         .item-title-row {
           display: flex;
           align-items: center;
-          gap: 7px;
+          gap: 6px;
+          min-width: 0;
+          height: 16px;
+          max-height: 16px;
+          line-height: 1;
+          overflow: hidden;
         }
 
         .item-title {
@@ -1143,6 +1327,9 @@ export const TopBar: React.FC<TopBarProps> = ({
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
+          line-height: 1;
+          flex-shrink: 1;
+          min-width: 0;
         }
 
         .item-desc {
@@ -1151,36 +1338,74 @@ export const TopBar: React.FC<TopBarProps> = ({
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
+          line-height: 1.2;
+          height: 14px;
+          max-height: 14px;
         }
 
         .item-transport-pill,
         .item-badge-pill {
           font-size: 8.5px;
-          padding: 1px 5px;
-          border-radius: 4px;
+          line-height: 1;
+          height: 15px;
+          min-height: 15px;
+          max-height: 15px;
+          box-sizing: border-box;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          padding: 0 5px;
+          border-radius: 3px;
           background: #192336;
           border: 1px solid #23344e;
           color: #93c5fd;
           font-weight: 600;
+          white-space: nowrap;
+          flex-shrink: 0;
         }
 
         .item-origin-pill {
           font-size: 9px;
+          line-height: 1;
+          height: 15px;
+          min-height: 15px;
+          max-height: 15px;
+          box-sizing: border-box;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
           padding: 0 5px;
-          border-radius: 4px;
+          border-radius: 3px;
           background: #1e1b38;
           border: 1px solid #362d60;
           color: #d8b4fe;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          max-width: 120px;
+          flex-shrink: 0;
         }
 
         .item-agent-tag {
-          font-size: 9.5px;
+          font-size: 9px;
+          line-height: 1;
+          height: 18px;
+          min-height: 18px;
+          max-height: 18px;
+          box-sizing: border-box;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
           font-weight: 600;
-          padding: 1px 6px;
+          padding: 0 6px;
           border-radius: 4px;
           border: 1px solid;
           background: rgba(255, 255, 255, 0.03);
           white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          max-width: 120px;
+          flex-shrink: 0;
         }
 
         .jump-icon {
@@ -1200,7 +1425,11 @@ export const TopBar: React.FC<TopBarProps> = ({
           display: flex;
           align-items: center;
           justify-content: space-between;
-          padding: 8px 12px;
+          height: 32px;
+          min-height: 32px;
+          max-height: 32px;
+          box-sizing: border-box;
+          padding: 0 12px;
           background: #080c14;
           border-top: 1px solid #1a2538;
           font-size: 10px;
@@ -1211,17 +1440,27 @@ export const TopBar: React.FC<TopBarProps> = ({
           display: flex;
           align-items: center;
           gap: 6px;
+          height: 100%;
         }
 
         .quick-tab-btn {
+          height: 20px;
+          min-height: 20px;
+          max-height: 20px;
+          box-sizing: border-box;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          line-height: 1;
           background: #121927;
           border: 1px solid #202d42;
           color: #93c5fd;
           font-size: 10px;
           font-weight: 600;
-          padding: 2px 7px;
+          padding: 0 7px;
           border-radius: 4px;
           cursor: pointer;
+          white-space: nowrap;
           transition: all 0.12s ease;
         }
 
@@ -1244,17 +1483,29 @@ export const TopBar: React.FC<TopBarProps> = ({
           letter-spacing: 0.05em;
           font-weight: 700;
           margin-right: 2px;
+          line-height: 1;
+          display: inline-flex;
+          align-items: center;
         }
 
         .filter-reset-btn {
+          height: 20px;
+          min-height: 20px;
+          max-height: 20px;
+          box-sizing: border-box;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          line-height: 1;
           background: transparent;
           border: 1px dashed #ef4444;
           color: #f87171;
           font-size: 9px;
           font-weight: 600;
-          padding: 1px 6px;
+          padding: 0 6px;
           border-radius: 4px;
           cursor: pointer;
+          white-space: nowrap;
           transition: all 0.12s ease;
         }
 
@@ -1267,17 +1518,24 @@ export const TopBar: React.FC<TopBarProps> = ({
           display: flex;
           align-items: center;
           gap: 8px;
+          line-height: 1;
         }
 
         .footer-keys kbd {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          height: 16px;
+          box-sizing: border-box;
           background: #131b2a;
           border: 1px solid #233146;
-          padding: 1px 4px;
+          padding: 0 4px;
           border-radius: 3px;
           font-size: 9px;
           color: #8ea1b8;
           font-family: var(--font-mono);
           margin-right: 2px;
+          line-height: 1;
         }
       `}</style>
     </header>
