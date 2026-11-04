@@ -2,6 +2,7 @@ import { CatalogSkill, CatalogPlugin, CatalogMcpServer } from '../types/catalog'
 import { SKILLS_CATALOG } from '../data/skillsCatalog';
 import { PLUGINS_CATALOG } from '../data/pluginsCatalog';
 import { MCP_CATALOG } from '../data/mcpCatalog';
+import { isVersionNewer } from '../utils/versionUtils';
 
 // Upstream Repositories and Endpoints (All under MIT or Apache-2.0)
 const AAS_REPO = 'sickn33/agentic-awesome-skills';
@@ -84,6 +85,13 @@ export function formatSourceBadge(sourceRegistry?: string): SourceBadgeInfo {
       badgeText: '[AAS]',
       badgeClass: 'pill-aas',
       tooltip: 'Primary AAS Catalog: sickn33/agentic-awesome-skills',
+    };
+  }
+  if (s.includes('anthropic')) {
+    return {
+      badgeText: s.includes('mcp') ? '[Anthropic MCP]' : '[Anthropic]',
+      badgeClass: 'pill-official',
+      tooltip: 'Anthropic Official Registry & Plugins',
     };
   }
   if (s.includes('official') || s.includes('mcp registry') || s === 'modelcontextprotocol') {
@@ -292,10 +300,15 @@ async function fetchAnthropicCommunityPlugins(): Promise<CatalogPlugin[]> {
   const rawPlugins: any[] = Array.isArray(data.plugins) ? data.plugins : [];
 
   return rawPlugins.map((p: any) => {
+    const rawRef = p.source?.ref || p.version;
+    const cleanRef = typeof rawRef === 'string' && /^\d+(\.\d+)+/.test(rawRef.replace(/^v/i, ''))
+      ? rawRef.replace(/^v/i, '')
+      : (p.version || '1.0.0');
+
     return {
       id: p.name,
       name: formatTitle(p.name),
-      version: '1.0.0',
+      version: cleanRef,
       description: p.description || 'Community Claude Code plugin extension',
       category: 'Community Plugin',
       author: 'Claude Community',
@@ -384,6 +397,10 @@ function mergePluginsDeduplicated(
         const existing = map.get(key)!;
         const mergedTags = Array.from(new Set([...(existing.tags || []), ...(item.tags || [])]));
         existing.tags = mergedTags;
+        // Never downgrade an existing higher version
+        if (item.version && isVersionNewer(existing.version, item.version)) {
+          existing.version = item.version;
+        }
       }
     }
   }

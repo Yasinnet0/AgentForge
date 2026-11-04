@@ -967,5 +967,35 @@ export const PLUGINS_CATALOG: CatalogPlugin[] = [
     ],
     "sourceRegistry": "AgentForge Core",
     "license": "MIT"
+  },
+  {
+    "id": "understand-anything",
+    "name": "Understand Anything",
+    "version": "2.9.2",
+    "description": "AI-powered codebase understanding — multi-agent pipeline, interactive knowledge graph, entity extraction, architectural layer maps, and onboarding dashboards.",
+    "category": "Codebase Intelligence",
+    "author": "Egonex",
+    "bundledSkills": [
+      "understand",
+      "understand-chat",
+      "understand-dashboard",
+      "understand-diff",
+      "understand-domain",
+      "understand-explain",
+      "understand-figma",
+      "understand-knowledge",
+      "understand-onboard"
+    ],
+    "bundledMcps": [],
+    "tags": [
+      "codebase-analysis",
+      "knowledge-graph",
+      "architecture",
+      "onboarding",
+      "dashboard"
+    ],
+    "sourceRegistry": "Anthropic Community",
+    "license": "MIT"
   }
 ];
+
