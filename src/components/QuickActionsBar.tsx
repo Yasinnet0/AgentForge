@@ -1,12 +1,12 @@
 import React from 'react';
-import { Sparkles, Boxes, Server, Shield, Compass, ChevronRight } from 'lucide-react';
+import { Sparkles, Boxes, Server, Shield, Lock, ChevronRight } from 'lucide-react';
 import { NavTab } from './Sidebar';
 
 interface QuickActionsBarProps {
   onNavigate: (tab: NavTab) => void;
 }
 
-export const QuickActionsBar: React.FC<QuickActionsBarProps> = ({ onNavigate }) => {
+const QuickActionsBarComponent: React.FC<QuickActionsBarProps> = ({ onNavigate }) => {
   const actions = [
     {
       id: 'create-skill',
@@ -23,19 +23,19 @@ export const QuickActionsBar: React.FC<QuickActionsBarProps> = ({ onNavigate }) 
       title: 'Bundle Kit',
       description: 'Package multi-tool kits',
       icon: Boxes,
-      iconColor: '#60a5fa',
-      bgColor: 'rgba(96, 165, 250, 0.08)',
-      borderColor: 'rgba(96, 165, 250, 0.2)',
-      tab: 'skills' as NavTab,
+      iconColor: '#fbbf24',
+      bgColor: 'rgba(245, 158, 11, 0.08)',
+      borderColor: 'rgba(245, 158, 11, 0.2)',
+      tab: 'plugins' as NavTab,
     },
     {
       id: 'add-mcp',
       title: 'Add MCP Server',
       description: 'Connect stdio / SSE server',
       icon: Server,
-      iconColor: '#818cf8',
-      bgColor: 'rgba(129, 140, 248, 0.08)',
-      borderColor: 'rgba(129, 140, 248, 0.2)',
+      iconColor: '#38bdf8',
+      bgColor: 'rgba(56, 189, 248, 0.08)',
+      borderColor: 'rgba(56, 189, 248, 0.2)',
       tab: 'mcp' as NavTab,
     },
     {
@@ -49,14 +49,14 @@ export const QuickActionsBar: React.FC<QuickActionsBarProps> = ({ onNavigate }) 
       tab: 'rules' as NavTab,
     },
     {
-      id: 'marketplace',
-      title: 'Marketplace',
-      description: 'Search & download tools',
-      icon: Compass,
-      iconColor: '#f59e0b',
-      bgColor: 'rgba(245, 158, 11, 0.08)',
-      borderColor: 'rgba(245, 158, 11, 0.2)',
-      tab: 'marketplace' as NavTab,
+      id: 'security-hub',
+      title: 'Security Hub',
+      description: 'Audit safety & isolation',
+      icon: Lock,
+      iconColor: '#818cf8',
+      bgColor: 'rgba(129, 140, 248, 0.08)',
+      borderColor: 'rgba(129, 140, 248, 0.2)',
+      tab: 'security' as NavTab,
     },
   ];
 
@@ -107,6 +107,11 @@ export const QuickActionsBar: React.FC<QuickActionsBarProps> = ({ onNavigate }) 
           border-radius: 9px;
           padding: 14px 16px;
           margin-bottom: 20px;
+          container-type: inline-size;
+          container-name: quickactions;
+          box-sizing: border-box;
+          width: 100%;
+          overflow: hidden;
         }
 
         .quick-actions-header {
@@ -114,6 +119,7 @@ export const QuickActionsBar: React.FC<QuickActionsBarProps> = ({ onNavigate }) 
           align-items: center;
           justify-content: space-between;
           margin-bottom: 12px;
+          gap: 8px;
         }
 
         .quick-actions-title {
@@ -122,17 +128,23 @@ export const QuickActionsBar: React.FC<QuickActionsBarProps> = ({ onNavigate }) 
           letter-spacing: 0.05em;
           color: #64748b;
           font-family: var(--font-mono);
+          white-space: nowrap;
         }
 
         .quick-actions-hint {
           font-size: 11px;
           color: #475569;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
 
         .quick-actions-grid {
           display: grid;
-          grid-template-columns: repeat(5, 1fr);
+          grid-template-columns: repeat(5, minmax(0, 1fr));
           gap: 10px;
+          width: 100%;
+          box-sizing: border-box;
         }
 
         .quick-action-card {
@@ -145,6 +157,10 @@ export const QuickActionsBar: React.FC<QuickActionsBarProps> = ({ onNavigate }) 
           gap: 10px;
           text-align: left;
           cursor: pointer;
+          min-width: 0;
+          width: 100%;
+          box-sizing: border-box;
+          overflow: hidden;
           transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
@@ -175,6 +191,7 @@ export const QuickActionsBar: React.FC<QuickActionsBarProps> = ({ onNavigate }) 
           flex-direction: column;
           min-width: 0;
           flex: 1;
+          overflow: hidden;
         }
 
         .action-title-row {
@@ -182,6 +199,8 @@ export const QuickActionsBar: React.FC<QuickActionsBarProps> = ({ onNavigate }) 
           align-items: center;
           justify-content: space-between;
           gap: 4px;
+          min-width: 0;
+          width: 100%;
         }
 
         .action-title {
@@ -191,6 +210,8 @@ export const QuickActionsBar: React.FC<QuickActionsBarProps> = ({ onNavigate }) 
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
+          min-width: 0;
+          flex: 1;
         }
 
         .action-arrow {
@@ -206,14 +227,82 @@ export const QuickActionsBar: React.FC<QuickActionsBarProps> = ({ onNavigate }) 
           overflow: hidden;
           text-overflow: ellipsis;
           margin-top: 1px;
+          min-width: 0;
         }
 
-        @media (max-width: 1200px) {
+        /* Viewport Fallback for Wide Desktop with Sidebars Open */
+        @media (max-width: 1480px) {
           .quick-actions-grid {
-            grid-template-columns: repeat(3, 1fr);
+            grid-template-columns: repeat(6, minmax(0, 1fr));
+          }
+          .quick-action-card:nth-child(1),
+          .quick-action-card:nth-child(2),
+          .quick-action-card:nth-child(3) {
+            grid-column: span 2;
+          }
+          .quick-action-card:nth-child(4),
+          .quick-action-card:nth-child(5) {
+            grid-column: span 3;
+          }
+        }
+
+        @media (max-width: 820px) {
+          .quick-actions-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+          .quick-action-card:nth-child(1),
+          .quick-action-card:nth-child(2),
+          .quick-action-card:nth-child(3),
+          .quick-action-card:nth-child(4) {
+            grid-column: span 1;
+          }
+          .quick-action-card:nth-child(5) {
+            grid-column: span 2;
+          }
+        }
+
+        /* Exact Container Queries Driven by Component Width */
+        @container quickactions (max-width: 920px) {
+          .quick-actions-grid {
+            grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+          }
+          .quick-action-card:nth-child(1),
+          .quick-action-card:nth-child(2),
+          .quick-action-card:nth-child(3) {
+            grid-column: span 2 !important;
+          }
+          .quick-action-card:nth-child(4),
+          .quick-action-card:nth-child(5) {
+            grid-column: span 3 !important;
+          }
+        }
+
+        @container quickactions (max-width: 580px) {
+          .quick-actions-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+          }
+          .quick-action-card:nth-child(1),
+          .quick-action-card:nth-child(2),
+          .quick-action-card:nth-child(3),
+          .quick-action-card:nth-child(4) {
+            grid-column: span 1 !important;
+          }
+          .quick-action-card:nth-child(5) {
+            grid-column: span 2 !important;
+          }
+        }
+
+        @container quickactions (max-width: 360px) {
+          .quick-actions-grid {
+            grid-template-columns: 1fr !important;
+          }
+          .quick-action-card {
+            grid-column: span 1 !important;
           }
         }
       `}</style>
     </div>
   );
 };
+
+export const QuickActionsBar = React.memo(QuickActionsBarComponent);

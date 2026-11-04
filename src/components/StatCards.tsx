@@ -20,7 +20,7 @@ interface StatCardsProps {
   };
 }
 
-export const StatCards: React.FC<StatCardsProps> = ({ stats }) => {
+const StatCardsComponent: React.FC<StatCardsProps> = ({ stats }) => {
   const agentsCount = stats?.agentsCount ?? 0;
   const mcpCount = stats?.mcpCount ?? 0;
   const skillsCount = stats?.skillsCount ?? 0;
@@ -33,8 +33,8 @@ export const StatCards: React.FC<StatCardsProps> = ({ stats }) => {
       count: agentsCount,
       subtitle: agentsCount > 0 ? `${agentsCount} selected active` : 'None active',
       icon: Bot,
-      accentColor: '#38bdf8',
-      borderColor: 'rgba(56, 189, 248, 0.25)',
+      accentColor: '#818cf8',
+      borderColor: 'rgba(129, 140, 248, 0.25)',
     },
     {
       id: 'mcp',
@@ -42,8 +42,8 @@ export const StatCards: React.FC<StatCardsProps> = ({ stats }) => {
       count: mcpCount,
       subtitle: mcpCount > 0 ? `${mcpCount} servers connected` : 'None connected',
       icon: Server,
-      accentColor: '#818cf8',
-      borderColor: 'rgba(129, 140, 248, 0.25)',
+      accentColor: '#38bdf8',
+      borderColor: 'rgba(56, 189, 248, 0.25)',
     },
     {
       id: 'skills',
@@ -66,15 +66,22 @@ export const StatCards: React.FC<StatCardsProps> = ({ stats }) => {
   ];
 
   return (
-    <div className="stat-cards-grid">
-      {cards.map((card) => {
+    <div className="stat-cards-wrapper">
+      <div className="stat-cards-grid">
+        {cards.map((card) => {
         const Icon = card.icon;
         return (
           <div key={card.id} className="stat-card">
             <div className="stat-card-header">
               <span className="stat-card-title">{card.title}</span>
-              <div className="stat-icon-wrapper">
-                <Icon size={14} className="stat-icon" />
+              <div
+                className="stat-icon-wrapper"
+                style={{
+                  background: `${card.accentColor}18`,
+                  borderColor: card.borderColor,
+                }}
+              >
+                <Icon size={14} className="stat-icon" style={{ color: card.accentColor }} />
               </div>
             </div>
 
@@ -85,13 +92,23 @@ export const StatCards: React.FC<StatCardsProps> = ({ stats }) => {
           </div>
         );
       })}
+      </div>
 
       <style>{`
+        .stat-cards-wrapper {
+          container-type: inline-size;
+          container-name: statcards;
+          width: 100%;
+          box-sizing: border-box;
+        }
+
         .stat-cards-grid {
           display: grid;
-          grid-template-columns: repeat(4, 1fr);
+          grid-template-columns: repeat(4, minmax(0, 1fr));
           gap: 14px;
           margin-bottom: 20px;
+          box-sizing: border-box;
+          width: 100%;
         }
 
         .stat-card {
@@ -102,6 +119,8 @@ export const StatCards: React.FC<StatCardsProps> = ({ stats }) => {
           display: flex;
           flex-direction: column;
           justify-content: space-between;
+          min-width: 0;
+          box-sizing: border-box;
           transition: border-color 0.15s ease;
         }
 
@@ -113,7 +132,9 @@ export const StatCards: React.FC<StatCardsProps> = ({ stats }) => {
           display: flex;
           align-items: center;
           justify-content: space-between;
+          gap: 8px;
           margin-bottom: 8px;
+          min-width: 0;
         }
 
         .stat-card-title {
@@ -122,6 +143,10 @@ export const StatCards: React.FC<StatCardsProps> = ({ stats }) => {
           letter-spacing: 0.05em;
           color: #64748b;
           font-family: var(--font-mono);
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
         }
 
         .stat-icon-wrapper {
@@ -133,6 +158,7 @@ export const StatCards: React.FC<StatCardsProps> = ({ stats }) => {
           display: flex;
           align-items: center;
           justify-content: center;
+          flex-shrink: 0;
         }
 
         .stat-icon {
@@ -148,6 +174,7 @@ export const StatCards: React.FC<StatCardsProps> = ({ stats }) => {
           display: flex;
           flex-direction: column;
           gap: 2px;
+          min-width: 0;
         }
 
         .stat-count {
@@ -156,13 +183,44 @@ export const StatCards: React.FC<StatCardsProps> = ({ stats }) => {
           color: #f8fafc;
           letter-spacing: -0.02em;
           line-height: 1.1;
+          font-variant-numeric: tabular-nums;
         }
 
         .stat-subtitle {
           font-size: 11.5px;
           color: #8899ac;
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        @media (max-width: 1300px) {
+          .stat-cards-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+        }
+
+        @media (max-width: 700px) {
+          .stat-cards-grid {
+            grid-template-columns: 1fr;
+          }
+        }
+
+        @container statcards (max-width: 760px) {
+          .stat-cards-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+          }
+        }
+
+        @container statcards (max-width: 380px) {
+          .stat-cards-grid {
+            grid-template-columns: 1fr !important;
+          }
         }
       `}</style>
     </div>
   );
 };
+
+export const StatCards = React.memo(StatCardsComponent);
