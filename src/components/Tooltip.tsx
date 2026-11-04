@@ -14,8 +14,17 @@ export const Tooltip: React.FC<TooltipProps> = ({
   shortcut,
   position = 'top',
   children,
-  delay = 50,
+  delay: delayProp,
 }) => {
+  const getDelay = () => {
+    if (delayProp !== undefined) return delayProp;
+    try {
+      const saved = localStorage.getItem('agentforge_tooltip_delay');
+      return saved ? parseInt(saved, 10) : 50;
+    } catch {
+      return 50;
+    }
+  };
   const [isVisible, setIsVisible] = useState(false);
   const [coords, setCoords] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
   const [actualPosition, setActualPosition] = useState<'top' | 'bottom' | 'left' | 'right'>(position);
@@ -78,7 +87,7 @@ export const Tooltip: React.FC<TooltipProps> = ({
         calculatePosition(targetRef.current);
         setIsVisible(true);
       }
-    }, delay);
+    }, getDelay());
   };
 
   const handleMouseLeave = () => {

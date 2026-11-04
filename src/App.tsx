@@ -27,7 +27,24 @@ import { SettingsView } from './components/SettingsView';
 import { Tooltip } from './components/Tooltip';
 
 export const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<NavTab>('overview');
+  const [activeTab, setActiveTab] = useState<NavTab>(() => {
+    try {
+      const remember = localStorage.getItem('agentforge_remember_last_tab') === 'true';
+      if (remember) {
+        const last = localStorage.getItem('agentforge_last_active_tab') as NavTab;
+        if (last) return last;
+      }
+      const def = localStorage.getItem('agentforge_default_tab') as NavTab;
+      if (def) return def;
+    } catch {}
+    return 'overview';
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('agentforge_last_active_tab', activeTab);
+    } catch {}
+  }, [activeTab]);
   const [currentEnv, setCurrentEnv] = useState('Default');
   const [searchQuery, setSearchQuery] = useState('');
   const [, startSearchTransition] = useTransition();
@@ -156,7 +173,8 @@ export const App: React.FC = () => {
   useEffect(() => {
     const initCatalog = async () => {
       try {
-        const res = await loadCatalogData(false);
+        const autoSync = localStorage.getItem('agentforge_auto_sync_startup') !== 'false';
+        const res = await loadCatalogData(autoSync);
         setSkillsCatalog(res.skills);
         setPluginsCatalog(res.plugins);
         setMcpCatalog(res.mcpServers);
@@ -250,6 +268,20 @@ export const App: React.FC = () => {
       }
     }
   }, []);
+
+  // Window Focus: Rescan capabilities when window regains focus if enabled
+  useEffect(() => {
+    const handleFocus = () => {
+      try {
+        const enabled = localStorage.getItem('agentforge_auto_rescan_focus');
+        if (enabled !== 'false') {
+          refreshCapabilities();
+        }
+      } catch {}
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [refreshCapabilities]);
 
   useEffect(() => {
     const detectAndLoadAgents = async () => {

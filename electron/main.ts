@@ -343,14 +343,25 @@ ipcMain.handle('app:openExternal', async (_event, url: string) => {
 ipcMain.handle('app:openPath', async (_event, targetPath: string) => {
   if (!targetPath) return false;
   try {
-    const resolved = resolveHome(targetPath);
+    let resolved: string;
+    if (targetPath === 'userData') {
+      resolved = app.getPath('userData');
+    } else if (targetPath === 'appData') {
+      resolved = path.join(app.getPath('appData'), 'agentforge');
+    } else {
+      resolved = resolveHome(targetPath);
+    }
     if (!fs.existsSync(resolved)) {
-      const parent = path.dirname(resolved);
-      if (fs.existsSync(parent)) {
-        await shell.openPath(parent);
-        return true;
+      try {
+        fs.mkdirSync(resolved, { recursive: true });
+      } catch {
+        const parent = path.dirname(resolved);
+        if (fs.existsSync(parent)) {
+          await shell.openPath(parent);
+          return true;
+        }
+        return false;
       }
-      return false;
     }
     const stat = fs.statSync(resolved);
     if (stat.isDirectory()) {

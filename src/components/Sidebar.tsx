@@ -76,6 +76,15 @@ const SidebarComponent: React.FC<SidebarProps> = ({
   const isCollapsed = isCollapsedProp !== undefined ? isCollapsedProp : internalCollapsed;
 
   const [tooltipState, setTooltipState] = React.useState<TooltipData | null>(null);
+  const [appVersion, setAppVersion] = React.useState<string>('0.1.0');
+
+  React.useEffect(() => {
+    if (window.electronAPI?.getAppVersion) {
+      window.electronAPI.getAppVersion().then((v) => {
+        if (v) setAppVersion(v);
+      }).catch(() => {});
+    }
+  }, []);
 
   const handleToggle = React.useCallback(() => {
     setTooltipState(null);
@@ -221,9 +230,9 @@ const SidebarComponent: React.FC<SidebarProps> = ({
       {/* Footer */}
       <div className="sidebar-footer">
         {!isCollapsed ? (
-          <span className="version-tag font-mono">v0.0.1</span>
+          <span className="version-tag font-mono">v{appVersion}</span>
         ) : (
-          <span className="version-tag collapsed font-mono">v0.1</span>
+          <span className="version-tag collapsed font-mono">v{appVersion.split('.').slice(0, 2).join('.')}</span>
         )}
       </div>
 
