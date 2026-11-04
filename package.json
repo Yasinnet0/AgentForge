@@ -39,6 +39,7 @@
   "build": {
     "appId": "com.agentforge.desktop",
     "productName": "AgentForge",
+    "icon": "build/icon.png",
     "forceCodeSigning": false,
     "directories": {
       "output": "release"
@@ -48,7 +49,8 @@
       "dist-electron/**/*"
     ],
     "win": {
-      "signAndEditExecutable": false,
+      "icon": "build/icon.ico",
+      "signAndEditExecutable": true,
       "target": [
         {
           "target": "nsis",
@@ -66,7 +68,13 @@
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico"
+    },
+    "portable": {
+      "artifactName": "${productName}-Portable-${version}.${ext}"
     }
   }
 }
