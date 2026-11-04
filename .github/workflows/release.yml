@@ -101,7 +101,6 @@ jobs:
             release/*.zip
             release/*.AppImage
             release/*.deb
-            release/*.blockmap
           if-no-files-found: ignore
 
   publish-release:
@@ -138,5 +137,4 @@ jobs:
             dist-release/*.zip
             dist-release/*.AppImage
             dist-release/*.deb
-            dist-release/*.blockmap
 
