@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef, useTransition } from 'react';
+import { ArrowUp } from 'lucide-react';
 import { TopBar } from './components/TopBar';
 import { Sidebar, NavTab } from './components/Sidebar';
 import { StatCards } from './components/StatCards';
 import { QuickActionsBar } from './components/QuickActionsBar';
 import { RecentlyInstalledPackages, InstalledPackage } from './components/RecentlyInstalledPackages';
-import { RightPanel } from './components/RightPanel';
 import { INITIAL_SUPPORTED_AGENTS } from './config/supportedAgents';
 import { 
   SupportedAgent, 
@@ -21,14 +21,22 @@ import { SkillsView } from './components/SkillsView';
 import { McpServersView } from './components/McpServersView';
 import { PluginsView } from './components/PluginsView';
 import { RulesBuilderView } from './components/RulesBuilderView';
-import {
-  Layers
-} from 'lucide-react';
+import { ComingSoonView } from './components/ComingSoonView';
+import { SecurityView } from './components/SecurityView';
+import { SettingsView } from './components/SettingsView';
+import { Tooltip } from './components/Tooltip';
 
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<NavTab>('overview');
   const [currentEnv, setCurrentEnv] = useState('Default');
   const [searchQuery, setSearchQuery] = useState('');
+  const [, startSearchTransition] = useTransition();
+
+  const handleSearchChange = useCallback((query: string) => {
+    startSearchTransition(() => {
+      setSearchQuery(query);
+    });
+  }, [startSearchTransition]);
   const [highlightTarget, setHighlightTarget] = useState<{ tab: NavTab; id: string } | null>(null);
   const [agents, setAgents] = useState<SupportedAgent[]>(INITIAL_SUPPORTED_AGENTS);
   const [visitedTabs, setVisitedTabs] = useState<Set<NavTab>>(() => new Set([activeTab]));
@@ -58,8 +66,61 @@ export const App: React.FC = () => {
   const [catalogSyncedAt, setCatalogSyncedAt] = useState<string | null>(null);
   const [activeAgentFilter, setActiveAgentFilter] = useState<string[]>([]);
   const [dependencyReport, setDependencyReport] = useState<DependencyReport | null>(null);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('agentforge_sidebar_collapsed') === 'true';
+    } catch {
+      return false;
+    }
+  });
 
-  const refreshDependencies = async (): Promise<void> => {
+  const mainContentRef = useRef<HTMLElement>(null);
+  const [showScrollTop, setShowScrollTop] = useState(false);
+
+  const handleMainScroll = useCallback((e: React.UIEvent<HTMLElement>) => {
+    setShowScrollTop(e.currentTarget.scrollTop > 240);
+  }, []);
+
+  const handleScrollToTop = useCallback(() => {
+    if (mainContentRef.current) {
+      mainContentRef.current.scrollTo({
+        top: 0,
+        behavior: 'smooth',
+      });
+    }
+  }, []);
+
+  const handleToggleSidebarCollapse = useCallback(() => {
+    setIsSidebarCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('agentforge_sidebar_collapsed', String(next));
+      } catch {}
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const isCtrlOrCmd = e.ctrlKey || e.metaKey;
+      const isB = e.key?.toLowerCase() === 'b' || e.code === 'KeyB';
+      const isBackslash = e.key === '\\' || e.code === 'Backslash';
+
+      if (isCtrlOrCmd && (isB || isBackslash)) {
+        const target = e.target as HTMLElement | null;
+        if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+          return;
+        }
+        e.preventDefault();
+        e.stopPropagation();
+        handleToggleSidebarCollapse();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [handleToggleSidebarCollapse]);
+
+  const refreshDependencies = useCallback(async (): Promise<void> => {
     if (window.electronAPI?.checkDependencies) {
       try {
         const rep = await window.electronAPI.checkDependencies();
@@ -68,13 +129,13 @@ export const App: React.FC = () => {
         console.warn('Failed to check dependencies:', err);
       }
     }
-  };
+  }, []);
 
   useEffect(() => {
     refreshDependencies();
-  }, []);
+  }, [refreshDependencies]);
 
-  const handleSyncCloudCatalog = async () => {
+  const handleSyncCloudCatalog = useCallback(async () => {
     setIsSyncingCatalog(true);
     try {
       const res = await loadCatalogData(true);
@@ -89,7 +150,7 @@ export const App: React.FC = () => {
     } finally {
       setIsSyncingCatalog(false);
     }
-  };
+  }, []);
 
   // Lifecycle
   useEffect(() => {
@@ -113,7 +174,7 @@ export const App: React.FC = () => {
     if (highlightTarget) {
       const timer = setTimeout(() => {
         setHighlightTarget(null);
-      }, 3500);
+      }, 2900);
       return () => clearTimeout(timer);
     }
   }, [highlightTarget]);
@@ -124,15 +185,15 @@ export const App: React.FC = () => {
     setHighlightTarget({ tab, id: itemId });
   };
 
-  const handleNavigateFromOverview = (tab: NavTab, itemId?: string) => {
+  const handleNavigateFromOverview = useCallback((tab: NavTab, itemId?: string) => {
     setActiveTab(tab);
     if (itemId) {
       setHighlightTarget({ tab, id: itemId });
     }
-  };
+  }, []);
 
   // Capability Scanning
-  const refreshCapabilities = async () => {
+  const refreshCapabilities = useCallback(async () => {
     if (window.electronAPI?.scanCapabilities) {
       try {
         const scanPayloads = INITIAL_SUPPORTED_AGENTS.map((a) => ({
@@ -172,6 +233,15 @@ export const App: React.FC = () => {
               ...agent,
               detected: info.detected,
               installedCounts: info.installedCounts,
+              paths: info.resolvedPaths
+                ? {
+                    baseDir: info.resolvedPaths.baseDir || agent.paths.baseDir,
+                    skillsDir: info.resolvedPaths.skillsDir || agent.paths.skillsDir,
+                    mcpConfigPath: info.resolvedPaths.mcpConfigPath || agent.paths.mcpConfigPath,
+                    rulesPath: info.resolvedPaths.rulesPath || agent.paths.rulesPath,
+                    pluginsDir: info.resolvedPaths.pluginsDir || agent.paths.pluginsDir,
+                  }
+                : agent.paths,
             };
           })
         );
@@ -179,11 +249,11 @@ export const App: React.FC = () => {
         console.warn('Failed to re-detect agents:', err);
       }
     }
-  };
+  }, []);
 
   useEffect(() => {
     const detectAndLoadAgents = async () => {
-      let detectionMap: Record<string, { detected: boolean; installedCounts: { skills: number; mcps: number; rules: number } }> = {};
+      let detectionMap: Record<string, { detected: boolean; installedCounts: { skills: number; mcps: number; rules: number }; resolvedPaths?: any }> = {};
 
       if (window.electronAPI?.detectAgents) {
         try {
@@ -225,6 +295,15 @@ export const App: React.FC = () => {
             detected: isDetected,
             selected: isSelected,
             installedCounts: counts,
+            paths: info?.resolvedPaths
+              ? {
+                  baseDir: info.resolvedPaths.baseDir || agent.paths.baseDir,
+                  skillsDir: info.resolvedPaths.skillsDir || agent.paths.skillsDir,
+                  mcpConfigPath: info.resolvedPaths.mcpConfigPath || agent.paths.mcpConfigPath,
+                  rulesPath: info.resolvedPaths.rulesPath || agent.paths.rulesPath,
+                  pluginsDir: info.resolvedPaths.pluginsDir || agent.paths.pluginsDir,
+                }
+              : agent.paths,
           };
         });
       });
@@ -302,14 +381,29 @@ export const App: React.FC = () => {
 
   const overviewPackages = useMemo<InstalledPackage[]>(() => {
     const list: InstalledPackage[] = [];
-    filteredMcps.slice(0, 5).forEach((m) => {
+
+    const formatRelativeTime = (time?: number) => {
+      if (!time || time <= 0) return 'Installed';
+      const diff = Date.now() - time;
+      if (diff < 0) return 'Installed';
+      const mins = Math.floor(diff / 60000);
+      const hours = Math.floor(diff / 3600000);
+      const days = Math.floor(diff / 86400000);
+      if (mins < 5) return 'Just now';
+      if (mins < 60) return `${mins}m ago`;
+      if (hours < 24) return `${hours}h ago`;
+      if (days < 7) return `${days}d ago`;
+      return new Date(time).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    };
+
+    filteredMcps.forEach((m) => {
       list.push({
         id: `mcp-${m.id}`,
         name: m.name,
         version: '1.0.0',
         type: 'MCP SERVER',
         source: m.pluginName ? 'OFFICIAL' : 'COMMUNITY',
-        installedDate: 'Installed',
+        installedDate: formatRelativeTime(m.mtimeMs),
         status: 'Active',
         rawType: 'mcp',
         sourcePath: m.sourcePath,
@@ -327,16 +421,18 @@ export const App: React.FC = () => {
         args: m.args,
         transport: m.transport,
         url: m.url,
+        mtimeMs: m.mtimeMs,
       });
     });
-    filteredPlugins.slice(0, 5).forEach((p) => {
+
+    filteredPlugins.forEach((p) => {
       list.push({
         id: `plugin-${p.id}`,
         name: p.name,
         version: p.version || '1.0.0',
-        type: 'SKILL BUNDLE',
+        type: 'PLUGIN',
         source: 'OFFICIAL',
-        installedDate: 'Installed',
+        installedDate: formatRelativeTime(p.mtimeMs),
         status: 'Active',
         rawType: 'plugin',
         sourcePath: p.sourcePath,
@@ -349,16 +445,18 @@ export const App: React.FC = () => {
         author: p.author,
         skillsCount: p.skillsCount,
         mcpsCount: p.mcpsCount,
+        mtimeMs: p.mtimeMs,
       });
     });
-    filteredSkills.slice(0, 5).forEach((s) => {
+
+    filteredSkills.forEach((s) => {
       list.push({
         id: `skill-${s.id}`,
         name: s.name,
         version: '1.0.0',
         type: 'SKILL',
         source: 'LOCAL',
-        installedDate: 'Installed',
+        installedDate: formatRelativeTime(s.mtimeMs),
         status: 'Active',
         rawType: 'skill',
         sourcePath: s.sourcePath,
@@ -370,8 +468,11 @@ export const App: React.FC = () => {
         description: s.description || 'Specialized agent instructions and workflows',
         hasScripts: s.hasScripts,
         hasReferences: s.hasReferences,
+        mtimeMs: s.mtimeMs,
       });
     });
+
+    list.sort((a, b) => (b.mtimeMs || 0) - (a.mtimeMs || 0));
     return list;
   }, [filteredMcps, filteredPlugins, filteredSkills]);
 
@@ -385,7 +486,7 @@ export const App: React.FC = () => {
         currentEnv={currentEnv}
         onEnvChange={handleEnvChange}
         searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
+        onSearchChange={handleSearchChange}
         activeTab={activeTab}
         onNavigateTab={setActiveTab}
         capabilities={capabilities}
@@ -406,10 +507,12 @@ export const App: React.FC = () => {
             skills: filteredSkills.length,
             plugins: filteredPlugins.length,
           }}
+          isCollapsed={isSidebarCollapsed}
+          onToggleCollapse={handleToggleSidebarCollapse}
         />
 
         {/* Main Content */}
-        <main className="main-content">
+        <main ref={mainContentRef} className="main-content" onScroll={handleMainScroll}>
           {visitedTabs.has('overview') && (
             <div
               className={`tab-pane-container ${activeTab === 'overview' ? 'active tab-pane-animated' : ''}`}
@@ -545,26 +648,52 @@ export const App: React.FC = () => {
             </div>
           )}
 
-          {['hooks', 'environments', 'snapshots', 'marketplace', 'security', 'settings'].includes(activeTab) && (
+          {visitedTabs.has('security') && (
+            <div
+              className={`tab-pane-container ${activeTab === 'security' ? 'active tab-pane-animated' : ''}`}
+              style={{ display: activeTab === 'security' ? 'block' : 'none' }}
+            >
+              <SecurityView onNavigate={setActiveTab} />
+            </div>
+          )}
+
+          {visitedTabs.has('settings') && (
+            <div
+              className={`tab-pane-container ${activeTab === 'settings' ? 'active tab-pane-animated' : ''}`}
+              style={{ display: activeTab === 'settings' ? 'block' : 'none' }}
+            >
+              <SettingsView
+                onNavigate={setActiveTab}
+                onRefreshCapabilities={refreshCapabilities}
+                onSyncCatalog={handleSyncCloudCatalog}
+                isSyncingCatalog={isSyncingCatalog}
+                catalogSyncedAt={catalogSyncedAt}
+                agents={agents}
+              />
+            </div>
+          )}
+
+          {['updates', 'hooks', 'environments'].includes(activeTab) && (
             <div className="tab-pane-container active tab-pane-animated">
-              <div className="secondary-view placeholder-tab">
-                <div className="placeholder-box">
-                  <div className="placeholder-icon-wrap">
-                    <Layers size={28} />
-                  </div>
-                  <h3>{activeTab.toUpperCase()}</h3>
-                  <p>Configured for current environment: <strong className="font-mono">{currentEnv}</strong></p>
-                  <button className="primary-action-btn" onClick={() => setActiveTab('overview')}>
-                    Return to Dashboard Overview
-                  </button>
-                </div>
-              </div>
+              <ComingSoonView tab={activeTab} onNavigate={setActiveTab} />
             </div>
           )}
         </main>
 
-        {/* Right Panel */}
-        <RightPanel />
+        {/* Scroll-to-Top Upward Floating Action */}
+        <div className={`scroll-to-top-container ${showScrollTop ? 'visible' : ''}`}>
+          <Tooltip content="Scroll to top" position="left">
+            <button
+              type="button"
+              className="scroll-to-top-btn"
+              onClick={handleScrollToTop}
+              aria-label="Scroll to top"
+            >
+              <ArrowUp size={16} />
+            </button>
+          </Tooltip>
+        </div>
+
       </div>
 
       <style>{`
@@ -582,29 +711,78 @@ export const App: React.FC = () => {
           flex: 1;
           height: calc(100vh - 48px);
           overflow: hidden;
+          position: relative;
+        }
+
+        .scroll-to-top-container {
+          position: absolute;
+          right: 28px;
+          bottom: 26px;
+          z-index: 50;
+          opacity: 0;
+          transform: translateY(12px) scale(0.92);
+          pointer-events: none;
+          transition: opacity 0.22s cubic-bezier(0.16, 1, 0.3, 1), transform 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .scroll-to-top-container.visible {
+          opacity: 1;
+          transform: translateY(0) scale(1);
+          pointer-events: auto;
+        }
+
+        .scroll-to-top-btn {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 38px;
+          height: 38px;
+          border-radius: 8px;
+          background: rgba(13, 20, 36, 0.94);
+          backdrop-filter: blur(14px);
+          border: 1px solid rgba(56, 189, 248, 0.3);
+          color: #38bdf8;
+          cursor: pointer;
+          box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5), 0 0 14px rgba(56, 189, 248, 0.12);
+          transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .scroll-to-top-btn:hover {
+          background: rgba(20, 32, 56, 0.98);
+          border-color: rgba(56, 189, 248, 0.65);
+          color: #7dd3fc;
+          transform: translateY(-2px);
+          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6), 0 0 18px rgba(56, 189, 248, 0.25);
+        }
+
+        .scroll-to-top-btn:active {
+          transform: translateY(0);
         }
 
         .main-content {
           flex: 1;
+          min-width: 0;
           overflow-y: auto;
           overflow-x: hidden;
           padding: 20px 24px 30px;
           background: #090d16;
+          box-sizing: border-box;
         }
 
         .tab-pane-container {
           width: 100%;
+          min-width: 0;
+          box-sizing: border-box;
         }
 
         .tab-pane-animated {
-          animation: tabShiftIn 0.16s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-          will-change: opacity, transform;
+          animation: tabShiftIn 0.14s cubic-bezier(0.16, 1, 0.3, 1) forwards;
         }
 
         @keyframes tabShiftIn {
           0% {
-            opacity: 0;
-            transform: translate3d(8px, 0, 0);
+            opacity: 0.9;
+            transform: translate3d(4px, 0, 0);
           }
           100% {
             opacity: 1;
@@ -615,6 +793,9 @@ export const App: React.FC = () => {
         .overview-view {
           display: flex;
           flex-direction: column;
+          width: 100%;
+          min-width: 0;
+          box-sizing: border-box;
         }
 
         .secondary-view {

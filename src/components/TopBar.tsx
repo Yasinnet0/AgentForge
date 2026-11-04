@@ -1,24 +1,24 @@
 import React, { useState, useEffect, useRef, useMemo, useDeferredValue } from 'react';
 import {
   Search,
-  Bell,
   Minus,
   Square,
   X,
-  Command,
   Bot,
   Server,
   Sparkles,
   Boxes,
-  CornerDownLeft
+  CornerDownLeft,
 } from 'lucide-react';
-import { 
-  SupportedAgent, 
+import {
+  SupportedAgent,
   AgentCapabilitiesPayload
 } from '../types/agent';
 import { CatalogSkill, CatalogPlugin, CatalogMcpServer } from '../types/catalog';
 import { AgentSelectorDropdown } from './AgentSelectorDropdown';
 import { NavTab } from './Sidebar';
+import { AGENT_ICON_MAP } from './AgentIcon';
+import { Tooltip } from './Tooltip';
 
 interface TopBarProps {
   currentEnv?: string;
@@ -81,7 +81,7 @@ interface SearchResultItem {
   tab: NavTab;
 }
 
-export const TopBar: React.FC<TopBarProps> = ({
+const TopBarComponent: React.FC<TopBarProps> = ({
   agents,
   onToggleAgent,
   onSelectOnly,
@@ -105,14 +105,17 @@ export const TopBar: React.FC<TopBarProps> = ({
   const topBarCenterRef = useRef<HTMLDivElement>(null);
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Sync external search
+  // Sync external search only when input is not actively focused by the user
   useEffect(() => {
-    setLocalInput(searchQuery);
+    if (document.activeElement === searchInputRef.current) {
+      return;
+    }
+    setLocalInput(searchQuery || '');
   }, [searchQuery]);
 
   useEffect(() => {
     if (window.electronAPI) {
-      window.electronAPI.isMaximized().then(setIsMaximized).catch(() => {});
+      window.electronAPI.isMaximized().then(setIsMaximized).catch(() => { });
       const unsubscribe = window.electronAPI.onMaximizeChange((maximized) => {
         setIsMaximized(maximized);
       });
@@ -161,13 +164,13 @@ export const TopBar: React.FC<TopBarProps> = ({
     setIsDropdownOpen(true);
     setSelectedIndex(0);
 
-    // Debounce reconciliation
+    // Debounce propagation to heavy background page views (250ms)
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
     }
     debounceTimerRef.current = setTimeout(() => {
       onSearchChange?.(val);
-    }, 150);
+    }, 250);
   };
 
   const handleMinimize = () => {
@@ -337,6 +340,12 @@ export const TopBar: React.FC<TopBarProps> = ({
     for (const a of indexedAgents) if (a.searchStr.includes(q)) aCount++;
     return { skills: sCount, mcps: mCount, plugins: pCount, agents: aCount };
   }, [deferredInput, indexedSkills, indexedMcps, indexedPlugins, indexedAgents]);
+
+  const totalRawMatches =
+    categoryCounts.skills +
+    categoryCounts.mcps +
+    categoryCounts.plugins +
+    categoryCounts.agents;
 
   // Search matches
   const searchResults = useMemo(() => {
@@ -512,8 +521,12 @@ export const TopBar: React.FC<TopBarProps> = ({
     <header className="topbar-container drag-region">
       {/* Left: Brand / Logo */}
       <div className="topbar-left no-drag">
-        <div className="brand-badge">
-          <span className="brand-icon">A</span>
+        <div
+          className="brand-badge clickable"
+          onClick={() => onNavigateTab && onNavigateTab('overview')}
+          title="AgentForge Dashboard Overview"
+        >
+          <img src="/icon.png" alt="AgentForge Logo" className="brand-logo-img" />
           <span className="brand-name">AgentForge</span>
         </div>
 
@@ -537,33 +550,41 @@ export const TopBar: React.FC<TopBarProps> = ({
               activeTab === 'skills'
                 ? 'Search active skills, descriptions, or plugins...'
                 : activeTab === 'mcp'
-                ? 'Search MCP servers, commands, or agents...'
-                : activeTab === 'plugins'
-                ? 'Search installed plugins, bundles, or agents...'
-                : activeTab === 'agents'
-                ? 'Search configured AI agents...'
-                : 'Search agents, skills, rules, MCP servers...'
+                  ? 'Search MCP servers, commands, or agents...'
+                  : activeTab === 'plugins'
+                    ? 'Search installed plugins, bundles, or agents...'
+                    : activeTab === 'agents'
+                      ? 'Search configured AI agents...'
+                      : 'Search agents, skills, rules, MCP servers...'
             }
             value={localInput}
             onFocus={() => {
               if (localInput.trim()) setIsDropdownOpen(true);
             }}
+            onBlur={() => {
+              if (debounceTimerRef.current) {
+                clearTimeout(debounceTimerRef.current);
+                onSearchChange?.(localInput);
+              }
+            }}
             onChange={(e) => handleInputChange(e.target.value)}
             onKeyDown={handleKeyDown}
           />
           {localInput ? (
-            <button
-              className="search-clear-btn"
-              onClick={handleClearSearch}
-              title="Clear search (Esc)"
-            >
-              <X size={13} />
-            </button>
+            <Tooltip content="Clear search" shortcut="Esc" position="bottom">
+              <button
+                type="button"
+                className="search-clear-btn"
+                onClick={handleClearSearch}
+                aria-label="Clear search"
+              >
+                <X size={13} />
+              </button>
+            </Tooltip>
           ) : (
             <div className="search-shortcut font-mono">
-              <Command size={11} />
-              <span>K</span>
-              <span className="shortcut-divider">/</span>
+              <kbd>Ctrl</kbd>
+              <kbd>K</kbd>
             </div>
           )}
         </div>
@@ -571,12 +592,101 @@ export const TopBar: React.FC<TopBarProps> = ({
         {/* Floating Search Results Dropdown Popover */}
         {isDropdownOpen && localInput.trim().length > 0 && (
           <div className="search-results-popover">
-            <div className="popover-header">
-              <span className="results-count font-mono">
-                {searchResults.totalCount} {searchResults.totalCount === 1 ? 'RESULT' : 'RESULTS'} FOUND
-                {categoryFilter !== 'all' && ` • FILTERED: ${categoryFilter.toUpperCase()}`}
-              </span>
-              <span className="results-scope font-mono">ACTIVE SEARCH</span>
+            {/* Popover Filter Bar Tabs */}
+            <div className="popover-filter-bar">
+              <div className="filter-tabs-group" role="tablist" aria-label="Search category filters">
+                <button
+                  type="button"
+                  className={`filter-tab-pill ${categoryFilter === 'all' ? 'active' : ''}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setCategoryFilter('all');
+                  }}
+                  title="Show all results"
+                >
+                  <span>All</span>
+                  <span className="tab-pill-count font-mono">{totalRawMatches}</span>
+                </button>
+
+                {categoryCounts.skills > 0 && (
+                  <button
+                    type="button"
+                    className={`filter-tab-pill ${categoryFilter === 'skills' ? 'active' : ''}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setCategoryFilter((prev) => (prev === 'skills' ? 'all' : 'skills'));
+                    }}
+                    title="Filter by Skills"
+                  >
+                    <Sparkles size={11} className="tab-icon" />
+                    <span>Skills</span>
+                    <span className="tab-pill-count font-mono">{categoryCounts.skills}</span>
+                  </button>
+                )}
+
+                {categoryCounts.mcps > 0 && (
+                  <button
+                    type="button"
+                    className={`filter-tab-pill ${categoryFilter === 'mcp' ? 'active' : ''}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setCategoryFilter((prev) => (prev === 'mcp' ? 'all' : 'mcp'));
+                    }}
+                    title="Filter by MCP Servers"
+                  >
+                    <Server size={11} className="tab-icon" />
+                    <span>MCPs</span>
+                    <span className="tab-pill-count font-mono">{categoryCounts.mcps}</span>
+                  </button>
+                )}
+
+                {categoryCounts.plugins > 0 && (
+                  <button
+                    type="button"
+                    className={`filter-tab-pill ${categoryFilter === 'plugins' ? 'active' : ''}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setCategoryFilter((prev) => (prev === 'plugins' ? 'all' : 'plugins'));
+                    }}
+                    title="Filter by Plugins"
+                  >
+                    <Boxes size={11} className="tab-icon" />
+                    <span>Plugins</span>
+                    <span className="tab-pill-count font-mono">{categoryCounts.plugins}</span>
+                  </button>
+                )}
+
+                {categoryCounts.agents > 0 && (
+                  <button
+                    type="button"
+                    className={`filter-tab-pill ${categoryFilter === 'agents' ? 'active' : ''}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setCategoryFilter((prev) => (prev === 'agents' ? 'all' : 'agents'));
+                    }}
+                    title="Filter by Agents"
+                  >
+                    <Bot size={11} className="tab-icon" />
+                    <span>Agents</span>
+                    <span className="tab-pill-count font-mono">{categoryCounts.agents}</span>
+                  </button>
+                )}
+              </div>
+
+              {categoryFilter !== 'all' && (
+                <button
+                  type="button"
+                  className="filter-clear-pill font-mono"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setCategoryFilter('all');
+                  }}
+                  title="Clear category filter and show all"
+                >
+                  <X size={10} />
+                  <span>Reset</span>
+                </button>
+              )}
             </div>
 
             {searchResults.totalCount === 0 ? (
@@ -585,9 +695,21 @@ export const TopBar: React.FC<TopBarProps> = ({
                 <div className="empty-search-title">No results matching "{localInput}"</div>
                 <div className="empty-search-subtitle">
                   {categoryFilter !== 'all'
-                    ? `No ${categoryFilter} match this query. Try resetting category filter or refining search.`
+                    ? `No ${categoryFilter} match this query.`
                     : 'Try searching by skill name, MCP command, agent name, or plugin keyword.'}
                 </div>
+                {categoryFilter !== 'all' && (
+                  <button
+                    type="button"
+                    className="empty-reset-btn font-mono"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setCategoryFilter('all');
+                    }}
+                  >
+                    Reset to All Categories
+                  </button>
+                )}
               </div>
             ) : (
               <div className="popover-results-scroll">
@@ -670,7 +792,7 @@ export const TopBar: React.FC<TopBarProps> = ({
                   <div className="results-section">
                     <div className="section-title">
                       <Boxes size={12} className="section-icon text-amber" />
-                      <span>PLUGINS & BUNDLES ({searchResults.plugins.length})</span>
+                      <span>PLUGINS ({searchResults.plugins.length})</span>
                     </div>
                     {searchResults.plugins.map((p) => {
                       const flatIndex = searchResults.flatItems.findIndex((x) => x.id === `plugin-${p.id}`);
@@ -706,12 +828,13 @@ export const TopBar: React.FC<TopBarProps> = ({
                 {(categoryFilter === 'all' || categoryFilter === 'agents') && searchResults.agents.length > 0 && (
                   <div className="results-section">
                     <div className="section-title">
-                      <Bot size={12} className="section-icon text-blue" />
+                      <Bot size={12} className="section-icon text-indigo" />
                       <span>AGENTS ({searchResults.agents.length})</span>
                     </div>
                     {searchResults.agents.map((a) => {
                       const flatIndex = searchResults.flatItems.findIndex((x) => x.id === `agent-${a.id}`);
                       const isItemActive = flatIndex === selectedIndex;
+                      const AgentIcon = AGENT_ICON_MAP[a.id] || AGENT_ICON_MAP[a.iconName] || Bot;
                       return (
                         <div
                           key={a.id}
@@ -720,7 +843,7 @@ export const TopBar: React.FC<TopBarProps> = ({
                           onMouseEnter={() => setSelectedIndex(flatIndex)}
                         >
                           <div className="item-icon-wrapper" style={{ color: a.color, background: `${a.color}15`, borderColor: `${a.color}35` }}>
-                            <Bot size={14} />
+                            <AgentIcon size={14} />
                           </div>
                           <div className="item-content">
                             <div className="item-title-row">
@@ -738,140 +861,97 @@ export const TopBar: React.FC<TopBarProps> = ({
               </div>
             )}
 
-            {/* Popover Footer with Category Filters & Shortcuts */}
+            {/* Popover Footer with Result Count & Keyboard Navigation */}
             <div className="popover-footer">
-              <div className="quick-tab-links">
-                <span className="filter-label font-mono">FILTER:</span>
-                {categoryCounts.skills > 0 && (
-                  <button
-                    className={`quick-tab-btn ${categoryFilter === 'skills' ? 'active' : ''}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setCategoryFilter((prev) => (prev === 'skills' ? 'all' : 'skills'));
-                    }}
-                    title={categoryFilter === 'skills' ? 'Filtered: Skills (Click to show all)' : 'Click to show only skills'}
-                  >
-                    Skills ({categoryCounts.skills})
-                  </button>
-                )}
-                {categoryCounts.mcps > 0 && (
-                  <button
-                    className={`quick-tab-btn ${categoryFilter === 'mcp' ? 'active' : ''}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setCategoryFilter((prev) => (prev === 'mcp' ? 'all' : 'mcp'));
-                    }}
-                    title={categoryFilter === 'mcp' ? 'Filtered: MCPs (Click to show all)' : 'Click to show only MCP servers'}
-                  >
-                    MCPs ({categoryCounts.mcps})
-                  </button>
-                )}
-                {categoryCounts.plugins > 0 && (
-                  <button
-                    className={`quick-tab-btn ${categoryFilter === 'plugins' ? 'active' : ''}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setCategoryFilter((prev) => (prev === 'plugins' ? 'all' : 'plugins'));
-                    }}
-                    title={categoryFilter === 'plugins' ? 'Filtered: Plugins (Click to show all)' : 'Click to show only plugins'}
-                  >
-                    Plugins ({categoryCounts.plugins})
-                  </button>
-                )}
-                {categoryCounts.agents > 0 && (
-                  <button
-                    className={`quick-tab-btn ${categoryFilter === 'agents' ? 'active' : ''}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setCategoryFilter((prev) => (prev === 'agents' ? 'all' : 'agents'));
-                    }}
-                    title={categoryFilter === 'agents' ? 'Filtered: Agents (Click to show all)' : 'Click to show only agents'}
-                  >
-                    Agents ({categoryCounts.agents})
-                  </button>
-                )}
-                {categoryFilter !== 'all' && (
-                  <button
-                    className="filter-reset-btn font-mono"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setCategoryFilter('all');
-                    }}
-                    title="Reset to show all categories"
-                  >
-                    Reset
-                  </button>
-                )}
+              <div className="footer-summary font-mono">
+                <span className="results-indicator-dot" />
+                <span>
+                  {searchResults.totalCount} {searchResults.totalCount === 1 ? 'match' : 'matches'}
+                  {categoryFilter !== 'all' && (
+                    <span className="filtered-scope-tag">in {categoryFilter}</span>
+                  )}
+                </span>
               </div>
-              <div className="footer-keys">
-                <span><kbd>↑</kbd><kbd>↓</kbd> navigate</span>
-                <span><kbd>↵</kbd> jump & highlight</span>
-                <span><kbd>esc</kbd> close</span>
+              <div className="footer-keys font-mono">
+                <span className="key-hint">
+                  <kbd>↑</kbd><kbd>↓</kbd>
+                  <span>Navigate</span>
+                </span>
+                <span className="key-hint">
+                  <kbd>↵</kbd>
+                  <span>Select</span>
+                </span>
+                <span className="key-hint">
+                  <kbd>Esc</kbd>
+                  <span>Close</span>
+                </span>
               </div>
             </div>
           </div>
         )}
       </div>
 
-      {/* Right: Status, Notifications & Window Controls */}
+      {/* Right: Window Controls */}
       <div className="topbar-right no-drag">
-        {/* Notification Bell */}
-        <button className="icon-button notification-btn" title="Notifications">
-          <Bell size={16} />
-        </button>
-
-        <div className="controls-divider"></div>
-
         {/* Custom Window Controls */}
         <div className="window-controls">
-          <button
-            className="window-control-btn minimize"
-            onClick={handleMinimize}
-            title="Minimize"
-          >
-            <Minus size={13} />
-          </button>
-          <button
-            className="window-control-btn maximize"
-            onClick={handleMaximize}
-            title={isMaximized ? "Restore Down" : "Maximize"}
-          >
-            {isMaximized ? (
-              <svg
-                width="11"
-                height="11"
-                viewBox="0 0 11 11"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  d="M3 1.5H9.5V8"
-                  stroke="currentColor"
-                  strokeWidth="1.1"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                <rect
-                  x="1.5"
-                  y="3"
-                  width="6.5"
-                  height="6.5"
-                  rx="0.5"
-                  stroke="currentColor"
-                  strokeWidth="1.1"
-                />
-              </svg>
-            ) : (
-              <Square size={11} />
-            )}
-          </button>
-          <button
-            className="window-control-btn close"
-            onClick={handleClose}
-            title="Close"
-          >
-            <X size={14} />
-          </button>
+          <Tooltip content="Minimize" position="bottom">
+            <button
+              type="button"
+              className="window-control-btn minimize"
+              onClick={handleMinimize}
+              aria-label="Minimize"
+            >
+              <Minus size={13} />
+            </button>
+          </Tooltip>
+          <Tooltip content={isMaximized ? "Restore down" : "Maximize"} position="bottom">
+            <button
+              type="button"
+              className="window-control-btn maximize"
+              onClick={handleMaximize}
+              aria-label={isMaximized ? "Restore Down" : "Maximize"}
+            >
+              {isMaximized ? (
+                <svg
+                  width="11"
+                  height="11"
+                  viewBox="0 0 11 11"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    d="M3 1.5H9.5V8"
+                    stroke="currentColor"
+                    strokeWidth="1.1"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <rect
+                    x="1.5"
+                    y="3"
+                    width="6.5"
+                    height="6.5"
+                    rx="0.5"
+                    stroke="currentColor"
+                    strokeWidth="1.1"
+                  />
+                </svg>
+              ) : (
+                <Square size={11} />
+              )}
+            </button>
+          </Tooltip>
+          <Tooltip content="Close window" position="bottom">
+            <button
+              type="button"
+              className="window-control-btn close"
+              onClick={handleClose}
+              aria-label="Close"
+            >
+              <X size={14} />
+            </button>
+          </Tooltip>
         </div>
       </div>
 
@@ -884,21 +964,51 @@ export const TopBar: React.FC<TopBarProps> = ({
           display: flex;
           align-items: center;
           justify-content: space-between;
-          padding: 0 10px 0 16px;
+          padding: 0 10px 0 14px;
           position: relative;
           z-index: 50;
+          gap: 12px;
+          min-width: 0;
         }
 
         .topbar-left {
           display: flex;
           align-items: center;
-          gap: 14px;
+          gap: 10px;
+          min-width: 0;
+          flex-shrink: 0;
+        }
+
+        @media (max-width: 768px) {
+          .brand-name {
+            display: none;
+          }
         }
 
         .brand-badge {
           display: flex;
           align-items: center;
           gap: 9px;
+        }
+
+        .brand-badge.clickable {
+          cursor: pointer;
+          user-select: none;
+        }
+
+        .brand-logo-img {
+          width: 26px;
+          height: 26px;
+          object-fit: contain;
+          filter: drop-shadow(0 2px 7px rgba(56, 189, 248, 0.45));
+          transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), filter 0.2s ease;
+          user-select: none;
+          -webkit-user-drag: none;
+        }
+
+        .brand-badge:hover .brand-logo-img {
+          transform: scale(1.1) rotate(-3deg);
+          filter: drop-shadow(0 3px 12px rgba(168, 85, 247, 0.65));
         }
 
         .brand-icon {
@@ -946,45 +1056,58 @@ export const TopBar: React.FC<TopBarProps> = ({
 
         .topbar-center {
           position: absolute;
-          left: 50%;
-          transform: translateX(-50%);
-          width: 480px;
-          max-width: calc(100% - 480px);
+          left: 0;
+          right: 0;
+          margin-left: auto;
+          margin-right: auto;
+          top: 6px;
+          height: 36px;
+          width: 100%;
+          max-width: 500px;
+          min-width: 140px;
+          pointer-events: auto;
+          z-index: 10;
+        }
+
+        @media (max-width: 1100px) {
+          .topbar-center {
+            max-width: 420px;
+          }
+        }
+
+        @media (max-width: 960px) {
+          .topbar-center {
+            max-width: 320px;
+          }
         }
 
         .search-bar-container {
           display: flex;
           align-items: center;
-          background: #131926;
-          border: 1px solid #202b3e;
+          height: 36px;
+          width: 100%;
+          box-sizing: border-box;
+          background: #111726;
+          border: 1px solid #1f2c42;
           border-radius: 8px;
-          padding: 5px 12px;
-          transition: all 0.18s ease;
+          padding: 0 12px;
+          transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+        }
+
+        .search-bar-container:hover {
+          border-color: #2b3d5b;
         }
 
         .search-bar-container:focus-within {
           border-color: #6366f1;
-          box-shadow: 0 0 0 1px #6366f1;
-          background: #161e30;
-          animation: search-focus-pulse 0.3s ease-out;
+          box-shadow: 0 0 0 1px #6366f1, 0 0 14px rgba(99, 102, 241, 0.18);
+          background: #131b2e;
         }
 
-        @keyframes search-focus-pulse {
-          0% {
-            transform: scale(1);
-          }
-
-          50% {
-            transform: scale(1.015);
-          }
-
-          100% {
-            transform: scale(1);
-          }
-        }
         .search-icon {
           color: #64748b;
           margin-right: 8px;
+          flex-shrink: 0;
         }
 
         .search-input {
@@ -995,6 +1118,7 @@ export const TopBar: React.FC<TopBarProps> = ({
           color: #f1f5f9;
           font-size: 12.5px;
           font-family: inherit;
+          min-width: 0;
         }
 
         .search-input::placeholder {
@@ -1005,12 +1129,30 @@ export const TopBar: React.FC<TopBarProps> = ({
           display: flex;
           align-items: center;
           gap: 3px;
-          background: #1c263c;
+          user-select: none;
+          flex-shrink: 0;
+        }
+
+        .search-shortcut kbd {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          height: 18px;
+          min-width: 16px;
+          padding: 0 5px;
+          font-size: 9.5px;
+          font-weight: 600;
           color: #7b8ea6;
-          padding: 2px 6px;
+          background: rgba(255, 255, 255, 0.05);
+          border: 1px solid rgba(255, 255, 255, 0.09);
           border-radius: 4px;
-          font-size: 10px;
-          border: 1px solid #2b3954;
+          line-height: 1;
+        }
+
+        @media (max-width: 950px) {
+          .search-shortcut {
+            display: none;
+          }
         }
 
         .search-clear-btn {
@@ -1019,6 +1161,18 @@ export const TopBar: React.FC<TopBarProps> = ({
           justify-content: center;
           background: transparent;
           border: none;
+          color: #7b8ea6;
+          padding: 3px;
+          border-radius: 4px;
+          cursor: pointer;
+          transition: all 0.15s ease;
+          flex-shrink: 0;
+        }
+
+        .search-clear-btn:hover {
+          color: #f1f5f9;
+          background: #1e2a42;
+        }
           color: #7b8ea6;
           padding: 2px;
           border-radius: 4px;
@@ -1063,50 +1217,12 @@ export const TopBar: React.FC<TopBarProps> = ({
           border-color: #334466;
         }
 
-        .notification-badge {
-          position: absolute;
-          top: -4px;
-          right: -4px;
-          background: #ef4444;
-          color: #ffffff;
-          font-size: 9.5px;
-          font-weight: 700;
-          width: 15px;
-          height: 15px;
-          border-radius: 50%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          border: 2px solid #0d121f;
+        .icon-button.active {
+          background: rgba(99, 102, 241, 0.18);
+          color: #a5b4fc;
+          border-color: rgba(99, 102, 241, 0.4);
         }
 
-        .primary-action-btn {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          background: linear-gradient(135deg, #7c3aed, #6366f1);
-          border: none;
-          color: #ffffff;
-          font-size: 12px;
-          font-weight: 600;
-          padding: 6px 14px;
-          border-radius: 7px;
-          cursor: pointer;
-          box-shadow: 0 2px 10px rgba(124, 58, 237, 0.35);
-          transition: all 0.15s ease;
-        }
-
-        .primary-action-btn:hover {
-          opacity: 0.92;
-          transform: translateY(-1px);
-        }
-
-        .controls-divider {
-          width: 1px;
-          height: 20px;
-          background: #202b3e;
-          margin: 0 4px;
-        }
 
         .window-controls {
           display: flex;
@@ -1141,50 +1257,142 @@ export const TopBar: React.FC<TopBarProps> = ({
         /* Search Results Popover Dropdown */
         .search-results-popover {
           position: absolute;
-          top: calc(100% + 8px);
+          top: calc(100% + 6px);
           left: 0;
           right: 0;
+          width: 100%;
+          box-sizing: border-box;
           background: #0d1322;
-          border: 1px solid #23324c;
-          border-radius: 10px;
-          box-shadow: 0 16px 40px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(99, 102, 241, 0.15);
+          border: 1px solid #1f2c42;
+          border-radius: 8px;
+          box-shadow: 0 16px 44px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(99, 102, 241, 0.12);
           z-index: 1000;
           overflow: hidden;
           display: flex;
           flex-direction: column;
-          animation: popoverSlideIn 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+          animation: popoverSlideIn 0.12s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+          -webkit-font-smoothing: antialiased;
+          -moz-osx-font-smoothing: grayscale;
+          text-rendering: optimizeLegibility;
         }
 
         @keyframes popoverSlideIn {
           from {
             opacity: 0;
-            transform: translateY(-6px) scale(0.99);
+            transform: translateY(-4px);
           }
           to {
             opacity: 1;
-            transform: translateY(0) scale(1);
+            transform: none;
           }
         }
 
-        .popover-header {
+        .popover-filter-bar {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          padding: 8px 14px;
+          height: 34px;
+          min-height: 34px;
+          max-height: 34px;
+          box-sizing: border-box;
+          padding: 0 10px;
           background: #090e18;
           border-bottom: 1px solid #1a2538;
+          gap: 8px;
+        }
+
+        .filter-tabs-group {
+          display: flex;
+          align-items: center;
+          gap: 5px;
+          height: 100%;
+        }
+
+        .filter-tab-pill {
+          height: 22px;
+          min-height: 22px;
+          max-height: 22px;
+          box-sizing: border-box;
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          padding: 0 8px;
+          background: #111724;
+          border: 1px solid #1d283c;
+          border-radius: 4px;
+          font-size: 11px;
+          font-weight: 500;
+          color: #8ea1b8;
+          cursor: pointer;
+          white-space: nowrap;
+          line-height: 1;
+          transition: all 0.12s ease;
+          user-select: none;
+        }
+
+        .filter-tab-pill:hover {
+          background: #182235;
+          border-color: #2b3b55;
+          color: #e2e8f0;
+        }
+
+        .filter-tab-pill.active {
+          background: rgba(99, 102, 241, 0.18);
+          border-color: #6366f1;
+          color: #c7d2fe;
+        }
+
+        .filter-tab-pill .tab-icon {
+          flex-shrink: 0;
+          opacity: 0.8;
+        }
+
+        .filter-tab-pill.active .tab-icon {
+          opacity: 1;
+          color: #a5b4fc;
+        }
+
+        .tab-pill-count {
           font-size: 10px;
+          font-weight: 600;
           color: #64748b;
-          font-weight: 700;
-          letter-spacing: 0.04em;
+          background: rgba(255, 255, 255, 0.04);
+          padding: 1px 4px;
+          border-radius: 3px;
+          line-height: 1;
         }
 
-        .results-count {
-          color: #93c5fd;
+        .filter-tab-pill.active .tab-pill-count {
+          color: #818cf8;
+          background: rgba(99, 102, 241, 0.2);
         }
 
-        .results-scope {
-          color: #64748b;
+        .filter-clear-pill {
+          height: 22px;
+          min-height: 22px;
+          max-height: 22px;
+          box-sizing: border-box;
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          padding: 0 7px;
+          background: rgba(239, 68, 68, 0.08);
+          border: 1px solid rgba(239, 68, 68, 0.25);
+          border-radius: 4px;
+          font-size: 10px;
+          font-weight: 600;
+          color: #f87171;
+          cursor: pointer;
+          white-space: nowrap;
+          line-height: 1;
+          transition: all 0.12s ease;
+          user-select: none;
+        }
+
+        .filter-clear-pill:hover {
+          background: rgba(239, 68, 68, 0.18);
+          border-color: #ef4444;
+          color: #ffffff;
         }
 
         .popover-empty {
@@ -1244,6 +1452,7 @@ export const TopBar: React.FC<TopBarProps> = ({
         .section-icon.text-purple { color: #c084fc; }
         .section-icon.text-amber { color: #fbbf24; }
         .section-icon.text-blue { color: #60a5fa; }
+        .section-icon.text-indigo { color: #818cf8; }
 
         .result-item {
           display: flex;
@@ -1256,7 +1465,7 @@ export const TopBar: React.FC<TopBarProps> = ({
           padding: 0 10px;
           border-radius: 6px;
           cursor: pointer;
-          transition: all 0.12s ease;
+          transition: background 0.12s ease, border-color 0.12s ease;
           border: 1px solid transparent;
           overflow: hidden;
         }
@@ -1295,8 +1504,8 @@ export const TopBar: React.FC<TopBarProps> = ({
 
         .icon-plugin {
           color: #fbbf24;
-          background: rgba(251, 191, 36, 0.12);
-          border-color: rgba(251, 191, 36, 0.25);
+          background: rgba(245, 158, 11, 0.12);
+          border-color: rgba(245, 158, 11, 0.25);
         }
 
         .item-content {
@@ -1425,119 +1634,107 @@ export const TopBar: React.FC<TopBarProps> = ({
           display: flex;
           align-items: center;
           justify-content: space-between;
-          height: 32px;
-          min-height: 32px;
-          max-height: 32px;
+          height: 28px;
+          min-height: 28px;
+          max-height: 28px;
           box-sizing: border-box;
           padding: 0 12px;
           background: #080c14;
           border-top: 1px solid #1a2538;
           font-size: 10px;
           color: #64748b;
+          user-select: none;
         }
 
-        .quick-tab-links {
-          display: flex;
+        .footer-summary {
+          display: inline-flex;
           align-items: center;
           gap: 6px;
-          height: 100%;
-        }
-
-        .quick-tab-btn {
-          height: 20px;
-          min-height: 20px;
-          max-height: 20px;
-          box-sizing: border-box;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          line-height: 1;
-          background: #121927;
-          border: 1px solid #202d42;
-          color: #93c5fd;
           font-size: 10px;
-          font-weight: 600;
-          padding: 0 7px;
-          border-radius: 4px;
-          cursor: pointer;
-          white-space: nowrap;
-          transition: all 0.12s ease;
-        }
-
-        .quick-tab-btn:hover {
-          background: #1b263b;
-          border-color: #3b5072;
-          color: #ffffff;
-        }
-
-        .quick-tab-btn.active {
-          background: #312e81 !important;
-          border-color: #a855f7 !important;
-          color: #f3e8ff !important;
-          box-shadow: 0 0 10px rgba(168, 85, 247, 0.4);
-        }
-
-        .filter-label {
-          font-size: 9px;
           color: #64748b;
-          letter-spacing: 0.05em;
-          font-weight: 700;
-          margin-right: 2px;
           line-height: 1;
-          display: inline-flex;
-          align-items: center;
         }
 
-        .filter-reset-btn {
-          height: 20px;
-          min-height: 20px;
-          max-height: 20px;
-          box-sizing: border-box;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          line-height: 1;
-          background: transparent;
-          border: 1px dashed #ef4444;
-          color: #f87171;
-          font-size: 9px;
+        .results-indicator-dot {
+          width: 5px;
+          height: 5px;
+          border-radius: 50%;
+          background: #10b981;
+          box-shadow: 0 0 6px rgba(16, 185, 129, 0.6);
+          flex-shrink: 0;
+        }
+
+        .filtered-scope-tag {
+          color: #818cf8;
+          margin-left: 4px;
           font-weight: 600;
-          padding: 0 6px;
-          border-radius: 4px;
-          cursor: pointer;
-          white-space: nowrap;
-          transition: all 0.12s ease;
-        }
-
-        .filter-reset-btn:hover {
-          background: rgba(239, 68, 68, 0.15);
-          color: #ffffff;
+          text-transform: uppercase;
+          font-size: 9px;
+          letter-spacing: 0.04em;
+          background: rgba(99, 102, 241, 0.14);
+          padding: 1px 4px;
+          border-radius: 3px;
         }
 
         .footer-keys {
           display: flex;
           align-items: center;
-          gap: 8px;
+          gap: 12px;
           line-height: 1;
         }
 
-        .footer-keys kbd {
+        .key-hint {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          font-size: 10px;
+          color: #64748b;
+          line-height: 1;
+        }
+
+        .key-hint kbd {
           display: inline-flex;
           align-items: center;
           justify-content: center;
           height: 16px;
+          min-width: 16px;
           box-sizing: border-box;
           background: #131b2a;
           border: 1px solid #233146;
           padding: 0 4px;
           border-radius: 3px;
           font-size: 9px;
-          color: #8ea1b8;
+          font-weight: 600;
+          color: #94a3b8;
           font-family: var(--font-mono);
-          margin-right: 2px;
           line-height: 1;
+        }
+
+        .empty-reset-btn {
+          margin-top: 6px;
+          height: 24px;
+          padding: 0 10px;
+          font-size: 11px;
+          font-weight: 500;
+          color: #a5b4fc;
+          background: rgba(99, 102, 241, 0.12);
+          border: 1px solid rgba(99, 102, 241, 0.3);
+          border-radius: 4px;
+          cursor: pointer;
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          transition: all 0.12s ease;
+        }
+
+        .empty-reset-btn:hover {
+          background: rgba(99, 102, 241, 0.22);
+          border-color: #818cf8;
+          color: #ffffff;
         }
       `}</style>
     </header>
   );
 };
+
+export const TopBar = React.memo(TopBarComponent);
