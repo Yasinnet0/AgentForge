@@ -164,9 +164,10 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         .agentforge-toast-card {
           pointer-events: auto;
           display: flex;
-          align-items: flex-start;
+          align-items: center;
           gap: 11px;
           padding: 10px 13px;
+          min-height: 44px;
           background: rgba(12, 16, 26, 0.94);
           backdrop-filter: blur(24px);
           -webkit-backdrop-filter: blur(24px);
@@ -235,7 +236,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           align-items: center;
           justify-content: center;
           flex-shrink: 0;
-          margin-top: 1px;
+          margin-top: 0;
         }
 
         /* Content */
@@ -243,6 +244,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           flex: 1;
           display: flex;
           flex-direction: column;
+          justify-content: center;
           gap: 2px;
           min-width: 0;
         }
@@ -252,14 +254,16 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           font-weight: 600;
           color: #f8fafc;
           letter-spacing: -0.01em;
+          line-height: 1.25;
         }
 
         .toast-message {
           font-size: 12.5px;
-          font-weight: 450;
+          font-weight: 500;
           color: #cbd5e1;
-          line-height: 1.42;
+          line-height: 1.35;
           word-break: break-word;
+          margin: 0;
         }
 
         /* Close Button */
@@ -268,7 +272,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           border: none;
           color: #64748b;
           padding: 4px;
-          margin: -2px -2px 0 0;
+          margin: 0;
           border-radius: 5px;
           cursor: pointer;
           display: flex;
@@ -276,6 +280,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           justify-content: center;
           transition: all 0.12s ease;
           flex-shrink: 0;
+          align-self: center;
         }
 
         .toast-close-btn:hover {

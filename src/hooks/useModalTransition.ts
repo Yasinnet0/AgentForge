@@ -79,6 +79,22 @@ export function useModalTransition(
     }, duration);
   }, [onClose, duration]);
 
+  // Global ESC key listener for any active modal using this hook
+  useEffect(() => {
+    if (!isRendered || isClosing) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        handleClose();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [isRendered, isClosing, handleClose]);
+
   return {
     isRendered,
     isClosing,
