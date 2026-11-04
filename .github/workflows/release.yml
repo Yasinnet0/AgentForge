@@ -1,0 +1,142 @@
+name: Release Desktop App
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'package.json'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  check-version:
+    name: Check Version & Release Eligibility
+    runs-on: ubuntu-latest
+    outputs:
+      should_release: ${{ steps.check.outputs.should_release }}
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Inspect Version vs Latest GitHub Release
+        id: check
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          CURRENT_VERSION=$(node -p "require('./package.json').version")
+          echo "Current package.json version: $CURRENT_VERSION"
+          
+          LATEST_TAG=$(gh release view --json tagName -q .tagName 2>/dev/null || echo "")
+          echo "Latest published release tag: '$LATEST_TAG'"
+          
+          TARGET_TAG="v$CURRENT_VERSION"
+          echo "Target tag: $TARGET_TAG"
+          
+          # Release if triggered manually, if no release exists yet, or if current version is different from latest tag
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ -z "$LATEST_TAG" ] || [ "$TARGET_TAG" != "$LATEST_TAG" ]; then
+            echo "Release required: $TARGET_TAG"
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+            echo "version=$TARGET_TAG" >> "$GITHUB_OUTPUT"
+          else
+            echo "Version $CURRENT_VERSION is already published ($LATEST_TAG). Skipping release."
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  build-binaries:
+    name: Build (${{ matrix.platform }})
+    needs: check-version
+    if: needs.check-version.outputs.should_release == 'true'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: Windows
+            os: windows-latest
+            build_cmd: npx electron-builder --win
+          - platform: macOS
+            os: macos-latest
+            build_cmd: npx electron-builder --mac
+          - platform: Linux
+            os: ubuntu-latest
+            build_cmd: npx electron-builder --linux
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build frontend and Electron bundle
+        run: |
+          npm run build
+          npm run build:electron
+
+      - name: Package desktop binaries
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+        run: ${{ matrix.build_cmd }}
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: binaries-${{ matrix.platform }}
+          path: |
+            release/*.exe
+            release/*.dmg
+            release/*.zip
+            release/*.AppImage
+            release/*.deb
+            release/*.blockmap
+          if-no-files-found: ignore
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: [check-version, build-binaries]
+    if: needs.check-version.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist-release
+          merge-multiple: true
+
+      - name: List artifacts to release
+        run: ls -la dist-release/
+
+      - name: Publish Release to GitHub
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ needs.check-version.outputs.version }}
+          name: AgentForge ${{ needs.check-version.outputs.version }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: |
+            dist-release/*.exe
+            dist-release/*.dmg
+            dist-release/*.zip
+            dist-release/*.AppImage
+            dist-release/*.deb
+            dist-release/*.blockmap
+
