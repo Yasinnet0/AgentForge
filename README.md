@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="./AgentForge.png" alt="AgentForge Logo" width="440" />
+<img src="./AgentForge.png" alt="AgentForge" width="760" />
 
 <p align="center">
   A local desktop application to manage, transfer, and configure tools, skills, MCP servers, and context rules across 12 AI coding assistants on your machine.
