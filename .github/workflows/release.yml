@@ -60,13 +60,13 @@ jobs:
         include:
           - platform: Windows
             os: windows-latest
-            build_cmd: npx electron-builder --win
+            build_cmd: npx electron-builder --win --publish never
           - platform: macOS
             os: macos-latest
-            build_cmd: npx electron-builder --mac
+            build_cmd: npx electron-builder --mac --publish never
           - platform: Linux
             os: ubuntu-latest
-            build_cmd: npx electron-builder --linux
+            build_cmd: npx electron-builder --linux --publish never
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
