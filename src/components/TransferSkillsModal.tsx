@@ -11,9 +11,12 @@ import {
   CheckSquare, 
   Square,
   Copy,
-  Scissors
+  Scissors,
+  ChevronDown,
 } from 'lucide-react';
 import { ScannedSkill, SupportedAgent } from '../types/agent';
+import { AGENT_ICON_MAP } from './AgentIcon';
+
 import { logActivity } from '../services/activityLogger';
 import { useModalTransition } from '../hooks/useModalTransition';
 
@@ -34,7 +37,9 @@ interface SkillCheckRowProps {
   slug: string;
   isChecked: boolean;
   alreadyInstalledTargets: string[];
-  onToggle: (slug: string) => void;
+  onMouseDownRow: (slug: string, currentChecked: boolean, e: React.MouseEvent) => void;
+  onMouseEnterRow: (slug: string) => void;
+  onKeyDownToggle: (slug: string) => void;
 }
 
 const SkillCheckRow = React.memo<SkillCheckRowProps>(({
@@ -42,12 +47,24 @@ const SkillCheckRow = React.memo<SkillCheckRowProps>(({
   slug,
   isChecked,
   alreadyInstalledTargets,
-  onToggle
+  onMouseDownRow,
+  onMouseEnterRow,
+  onKeyDownToggle
 }) => {
   return (
     <div
       className={`skill-check-row ${isChecked ? 'active' : ''}`}
-      onClick={() => onToggle(slug)}
+      tabIndex={0}
+      role="checkbox"
+      aria-checked={isChecked}
+      onMouseDown={(e) => onMouseDownRow(slug, isChecked, e)}
+      onMouseEnter={() => onMouseEnterRow(slug)}
+      onKeyDown={(e) => {
+        if (e.key === ' ' || e.key === 'Enter') {
+          e.preventDefault();
+          onKeyDownToggle(slug);
+        }
+      }}
     >
       <div className="check-box-wrap">
         {isChecked ? (
@@ -106,13 +123,61 @@ export const TransferSkillsModal: React.FC<TransferSkillsModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  // Combobox dropdown states
+  const [isSourceMenuOpen, setIsSourceMenuOpen] = useState(false);
+  const [isTargetMenuOpen, setIsTargetMenuOpen] = useState(false);
+  const [sourceSearchQuery, setSourceSearchQuery] = useState('');
+  const [targetSearchQuery, setTargetSearchQuery] = useState('');
+
+  const sourceMenuRef = useRef<HTMLDivElement>(null);
+  const targetMenuRef = useRef<HTMLDivElement>(null);
+  const sourceSearchInputRef = useRef<HTMLInputElement>(null);
+  const targetSearchInputRef = useRef<HTMLInputElement>(null);
+
   const prevIsOpenRef = useRef(false);
+
+  // Autofocus search inputs when menus open
+  useEffect(() => {
+    if (isSourceMenuOpen) {
+      const t = setTimeout(() => {
+        sourceSearchInputRef.current?.focus();
+      }, 40);
+      return () => clearTimeout(t);
+    }
+  }, [isSourceMenuOpen]);
+
+  useEffect(() => {
+    if (isTargetMenuOpen) {
+      const t = setTimeout(() => {
+        targetSearchInputRef.current?.focus();
+      }, 40);
+      return () => clearTimeout(t);
+    }
+  }, [isTargetMenuOpen]);
+
+  // Click outside to close combobox popovers
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (sourceMenuRef.current && !sourceMenuRef.current.contains(e.target as Node)) {
+        setIsSourceMenuOpen(false);
+      }
+      if (targetMenuRef.current && !targetMenuRef.current.contains(e.target as Node)) {
+        setIsTargetMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Effects
   useEffect(() => {
     if (isOpen && !prevIsOpenRef.current && availableAgents.length > 0) {
       setErrorMsg(null);
       setSearchQuery('');
+      setIsSourceMenuOpen(false);
+      setIsTargetMenuOpen(false);
+      setSourceSearchQuery('');
+      setTargetSearchQuery('');
 
       // Default source
       const defaultSource = initialSourceAgentId && availableAgents.some((a) => a.id === initialSourceAgentId)
@@ -141,17 +206,27 @@ export const TransferSkillsModal: React.FC<TransferSkillsModalProps> = ({
     prevIsOpenRef.current = isOpen;
   }, [isOpen, availableAgents, skills, initialSourceAgentId, initialSkillSlug, initialSelectedSlugs]);
 
-  // Keydown
+  // Keydown - Escape closes open combobox first, or modal
   useEffect(() => {
     if (!isRendered) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        if (isSourceMenuOpen) {
+          setIsSourceMenuOpen(false);
+          e.stopPropagation();
+          return;
+        }
+        if (isTargetMenuOpen) {
+          setIsTargetMenuOpen(false);
+          e.stopPropagation();
+          return;
+        }
         handleClose();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isRendered, handleClose]);
+  }, [isRendered, handleClose, isSourceMenuOpen, isTargetMenuOpen]);
 
   // Computed
   const sourceSkills = useMemo(() => {
@@ -204,8 +279,31 @@ export const TransferSkillsModal: React.FC<TransferSkillsModalProps> = ({
     return map;
   }, [currentTargetAgents, skills]);
 
+  // Computed
+  const potentialTargetAgents = useMemo(
+    () => availableAgents.filter((a) => a.id !== sourceAgentId),
+    [availableAgents, sourceAgentId]
+  );
+
+  const filteredSourceAgents = useMemo(() => {
+    if (!sourceSearchQuery.trim()) return availableAgents;
+    const q = sourceSearchQuery.toLowerCase().trim();
+    return availableAgents.filter(
+      (a) => a.name.toLowerCase().includes(q) || a.id.toLowerCase().includes(q)
+    );
+  }, [availableAgents, sourceSearchQuery]);
+
+  const filteredTargetAgents = useMemo(() => {
+    if (!targetSearchQuery.trim()) return potentialTargetAgents;
+    const q = targetSearchQuery.toLowerCase().trim();
+    return potentialTargetAgents.filter(
+      (a) => a.name.toLowerCase().includes(q) || a.id.toLowerCase().includes(q)
+    );
+  }, [potentialTargetAgents, targetSearchQuery]);
+
   // Handlers
   const handleSourceAgentChange = (newSourceId: string) => {
+    setSourceAgentId(newSourceId);
     setTargetAgentIds((prev) => prev.filter((id) => id !== newSourceId));
     const newSkills = skills.filter((s) => s.sourceAgentId === newSourceId);
     setSelectedSlugs(newSkills.map((s) => s.folderName || s.name));
@@ -217,10 +315,65 @@ export const TransferSkillsModal: React.FC<TransferSkillsModalProps> = ({
     );
   };
 
+  const handleToggleAllTargets = () => {
+    if (targetAgentIds.length === potentialTargetAgents.length) {
+      setTargetAgentIds([]);
+    } else {
+      setTargetAgentIds(potentialTargetAgents.map((a) => a.id));
+    }
+  };
+
   const toggleSkillSlug = useCallback((slug: string) => {
     setSelectedSlugs((prev) =>
       prev.includes(slug) ? prev.filter((s) => s !== slug) : [...prev, slug]
     );
+  }, []);
+
+  // Drag-to-select checkboxes (Telegram-style)
+  const isDraggingCheckboxesRef = useRef(false);
+  const dragTargetCheckStateRef = useRef<boolean>(true);
+
+  const handleRowMouseDown = useCallback((slug: string, currentChecked: boolean, e: React.MouseEvent) => {
+    if (e.button !== 0) return; // Only primary left-click
+    e.preventDefault();
+    window.getSelection()?.removeAllRanges();
+
+    isDraggingCheckboxesRef.current = true;
+    const nextState = !currentChecked;
+    dragTargetCheckStateRef.current = nextState;
+
+    setSelectedSlugs((prev) => {
+      if (nextState) {
+        return prev.includes(slug) ? prev : [...prev, slug];
+      } else {
+        return prev.filter((s) => s !== slug);
+      }
+    });
+  }, []);
+
+  const handleRowMouseEnter = useCallback((slug: string) => {
+    if (!isDraggingCheckboxesRef.current) return;
+    const targetState = dragTargetCheckStateRef.current;
+
+    setSelectedSlugs((prev) => {
+      if (targetState) {
+        return prev.includes(slug) ? prev : [...prev, slug];
+      } else {
+        return prev.filter((s) => s !== slug);
+      }
+    });
+  }, []);
+
+  useEffect(() => {
+    const handleGlobalMouseUp = () => {
+      isDraggingCheckboxesRef.current = false;
+    };
+    window.addEventListener('mouseup', handleGlobalMouseUp);
+    window.addEventListener('blur', handleGlobalMouseUp);
+    return () => {
+      window.removeEventListener('mouseup', handleGlobalMouseUp);
+      window.removeEventListener('blur', handleGlobalMouseUp);
+    };
   }, []);
 
   const isAllSelected = useMemo(() => {
@@ -332,85 +485,325 @@ export const TransferSkillsModal: React.FC<TransferSkillsModalProps> = ({
 
         <form onSubmit={handleSubmit} className="transfer-form">
           <div className="transfer-body">
-            {/* Top Config Row: Source & Target & Mode */}
-            <div className="config-grid">
-              {/* Source Agent */}
-              <div className="config-box">
-                <label className="config-label">
-                  <span>Transfer From</span>
-                  <span className="source-count font-mono">
-                    {sourceSkills.length} {sourceSkills.length === 1 ? 'skill' : 'skills'}
-                  </span>
-                </label>
-                <select
-                  className="config-select"
-                  value={sourceAgentId}
-                  onChange={(e) => handleSourceAgentChange(e.target.value)}
+            {/* Top Config Row: Source & Target & Mode in a compact single-row toolbar */}
+            <div className="transfer-config-bar">
+              {/* Source Agent Combobox */}
+              <div className="transfer-combobox-wrapper source-wrapper" ref={sourceMenuRef}>
+                <button
+                  type="button"
+                  className={`transfer-combobox-trigger ${isSourceMenuOpen ? 'open' : ''}`}
+                  onClick={() => {
+                    setIsSourceMenuOpen((prev) => !prev);
+                    setIsTargetMenuOpen(false);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown') {
+                      e.preventDefault();
+                      setIsSourceMenuOpen(true);
+                      setIsTargetMenuOpen(false);
+                    } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+                      setIsSourceMenuOpen(true);
+                      setIsTargetMenuOpen(false);
+                      setSourceSearchQuery(e.key);
+                    }
+                  }}
+                  aria-expanded={isSourceMenuOpen}
+                  title="Source agent"
                 >
-                  {availableAgents.map((ag) => {
-                    const skillCount = skills.filter((s) => s.sourceAgentId === ag.id).length;
-                    return (
-                      <option key={ag.id} value={ag.id}>
-                        {ag.name} ({skillCount} skills)
-                      </option>
-                    );
-                  })}
-                </select>
+                  <div className="transfer-combobox-trigger-left">
+                    {currentSourceAgent ? (
+                      <>
+                        <span
+                          className="transfer-combobox-dot"
+                          style={{ backgroundColor: currentSourceAgent.color || '#8b5cf6' }}
+                        />
+                        {React.createElement(AGENT_ICON_MAP[currentSourceAgent.id] || AGENT_ICON_MAP[currentSourceAgent.iconName] || Bot, {
+                          size: 12,
+                          style: { color: currentSourceAgent.color || '#8b5cf6' },
+                          className: 'transfer-combobox-icon'
+                        })}
+                      </>
+                    ) : (
+                      <Bot size={12} className="transfer-combobox-icon text-muted" />
+                    )}
+                    <span className="transfer-combobox-label">From:</span>
+                    <span className="transfer-combobox-value">{currentSourceAgent?.name || 'Select source'}</span>
+                  </div>
+
+                  <div className="transfer-combobox-trigger-right">
+                    <span className="transfer-combobox-count font-mono">
+                      {sourceSkills.length}
+                    </span>
+                    <ChevronDown
+                      size={11}
+                      className={`transfer-combobox-chevron ${isSourceMenuOpen ? 'open' : ''}`}
+                    />
+                  </div>
+                </button>
+
+                {isSourceMenuOpen && (
+                  <div className="transfer-dropdown-menu">
+                    <div className="transfer-dropdown-header">
+                      <span>Select Source Agent</span>
+                      <span className="transfer-dropdown-header-count font-mono">
+                        {availableAgents.length} available
+                      </span>
+                    </div>
+
+                    <div className="transfer-combobox-search-wrap">
+                      <Search size={12} className="transfer-combobox-search-icon" />
+                      <input
+                        ref={sourceSearchInputRef}
+                        type="text"
+                        className="transfer-combobox-search-input"
+                        placeholder="Search agent..."
+                        value={sourceSearchQuery}
+                        onChange={(e) => setSourceSearchQuery(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Escape') {
+                            setIsSourceMenuOpen(false);
+                          } else if (e.key === 'Enter') {
+                            const first = filteredSourceAgents[0];
+                            if (first) {
+                              handleSourceAgentChange(first.id);
+                              setIsSourceMenuOpen(false);
+                            }
+                          }
+                        }}
+                      />
+                      {sourceSearchQuery && (
+                        <button
+                          type="button"
+                          className="transfer-combobox-clear-btn"
+                          onClick={() => setSourceSearchQuery('')}
+                          title="Clear search"
+                        >
+                          <X size={10} />
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="transfer-dropdown-list">
+                      {filteredSourceAgents.map((ag) => {
+                        const isSelected = ag.id === sourceAgentId;
+                        const skillCount = skills.filter((s) => s.sourceAgentId === ag.id).length;
+                        const AgentIcon = AGENT_ICON_MAP[ag.id] || AGENT_ICON_MAP[ag.iconName] || Bot;
+                        return (
+                          <button
+                            type="button"
+                            key={ag.id}
+                            className={`transfer-dropdown-item ${isSelected ? 'selected' : ''}`}
+                            onClick={() => {
+                              handleSourceAgentChange(ag.id);
+                              setIsSourceMenuOpen(false);
+                            }}
+                          >
+                            <div className="transfer-dropdown-item-left">
+                              <span
+                                className="transfer-dropdown-item-dot"
+                                style={{ backgroundColor: ag.color || '#8b5cf6' }}
+                              />
+                              <AgentIcon size={12} style={{ color: ag.color || '#8b5cf6' }} />
+                              <span className="transfer-dropdown-item-name">{ag.name}</span>
+                            </div>
+                            <div className="transfer-dropdown-item-right">
+                              <span className="transfer-dropdown-item-count">{skillCount} skills</span>
+                              {isSelected && (
+                                <Check
+                                  size={12}
+                                  className="transfer-dropdown-item-check"
+                                  style={{ color: ag.color || '#a855f7' }}
+                                />
+                              )}
+                            </div>
+                          </button>
+                        );
+                      })}
+
+                      {filteredSourceAgents.length === 0 && (
+                        <div className="transfer-dropdown-empty">
+                          <span>No agents match "{sourceSearchQuery}"</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
 
-              {/* Target Agents */}
-              <div className="config-box">
-                <label className="config-label">
-                  <span>Transfer To (Target Agents)</span>
-                  <span className="label-sub">{currentTargetAgents.length} selected</span>
-                </label>
-                <div className="target-chips-wrap">
-                  {availableAgents
-                    .filter((ag) => ag.id !== sourceAgentId)
-                    .map((ag) => {
-                      const isChecked = targetAgentIds.includes(ag.id);
-                      return (
+              {/* Target Agents Combobox */}
+              <div className="transfer-combobox-wrapper target-wrapper" ref={targetMenuRef}>
+                <button
+                  type="button"
+                  className={`transfer-combobox-trigger ${isTargetMenuOpen ? 'open' : ''} ${
+                    currentTargetAgents.length > 0 ? 'active' : ''
+                  }`}
+                  onClick={() => {
+                    setIsTargetMenuOpen((prev) => !prev);
+                    setIsSourceMenuOpen(false);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown') {
+                      e.preventDefault();
+                      setIsTargetMenuOpen(true);
+                      setIsSourceMenuOpen(false);
+                    } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+                      setIsTargetMenuOpen(true);
+                      setIsSourceMenuOpen(false);
+                      setTargetSearchQuery(e.key);
+                    }
+                  }}
+                  aria-expanded={isTargetMenuOpen}
+                  title="Target agents"
+                >
+                  <div className="transfer-combobox-trigger-left">
+                    {currentTargetAgents.length === 1 ? (
+                      <>
+                        <span
+                          className="transfer-combobox-dot"
+                          style={{ backgroundColor: currentTargetAgents[0].color || '#8b5cf6' }}
+                        />
+                        {React.createElement(AGENT_ICON_MAP[currentTargetAgents[0].id] || AGENT_ICON_MAP[currentTargetAgents[0].iconName] || Bot, {
+                          size: 12,
+                          style: { color: currentTargetAgents[0].color || '#8b5cf6' },
+                          className: 'transfer-combobox-icon'
+                        })}
+                      </>
+                    ) : (
+                      <Bot
+                        size={12}
+                        className={`transfer-combobox-icon ${currentTargetAgents.length > 0 ? 'text-purple-400' : 'text-muted'}`}
+                      />
+                    )}
+                    <span className="transfer-combobox-label">To:</span>
+                    <span className="transfer-combobox-value">
+                      {currentTargetAgents.length === 0
+                        ? 'Select targets...'
+                        : currentTargetAgents.length === potentialTargetAgents.length && potentialTargetAgents.length > 0
+                        ? `All Targets (${currentTargetAgents.length})`
+                        : currentTargetAgents.map((a) => a.name).join(', ')}
+                    </span>
+                  </div>
+
+                  <div className="transfer-combobox-trigger-right">
+                    <span className="transfer-combobox-count font-mono">
+                      {targetAgentIds.length}/{potentialTargetAgents.length}
+                    </span>
+                    <ChevronDown
+                      size={11}
+                      className={`transfer-combobox-chevron ${isTargetMenuOpen ? 'open' : ''}`}
+                    />
+                  </div>
+                </button>
+
+                {isTargetMenuOpen && (
+                  <div className="transfer-dropdown-menu">
+                    <div className="transfer-dropdown-header">
+                      <span>Select Target Agents</span>
+                      {potentialTargetAgents.length > 0 && (
                         <button
-                          key={ag.id}
                           type="button"
-                          className={`target-chip-btn ${isChecked ? 'active' : ''}`}
-                          onClick={() => toggleTargetAgent(ag.id)}
+                          className="transfer-dropdown-action-btn"
+                          onClick={handleToggleAllTargets}
                         >
-                          <span
-                            className="target-chip-dot"
-                            style={{ backgroundColor: ag.color || '#3b82f6' }}
-                          />
-                          <span className="target-chip-name">{ag.name}</span>
-                          {isChecked && <Check size={11} className="target-chip-check" />}
+                          {targetAgentIds.length === potentialTargetAgents.length
+                            ? 'Deselect All'
+                            : 'Select All'}
                         </button>
-                      );
-                    })}
-                </div>
+                      )}
+                    </div>
+
+                    <div className="transfer-combobox-search-wrap">
+                      <Search size={12} className="transfer-combobox-search-icon" />
+                      <input
+                        ref={targetSearchInputRef}
+                        type="text"
+                        className="transfer-combobox-search-input"
+                        placeholder="Search target agent..."
+                        value={targetSearchQuery}
+                        onChange={(e) => setTargetSearchQuery(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Escape') {
+                            setIsTargetMenuOpen(false);
+                          } else if (e.key === 'Enter') {
+                            const first = filteredTargetAgents[0];
+                            if (first) {
+                              toggleTargetAgent(first.id);
+                            }
+                          }
+                        }}
+                      />
+                      {targetSearchQuery && (
+                        <button
+                          type="button"
+                          className="transfer-combobox-clear-btn"
+                          onClick={() => setTargetSearchQuery('')}
+                          title="Clear search"
+                        >
+                          <X size={10} />
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="transfer-dropdown-list">
+                      {filteredTargetAgents.map((ag) => {
+                        const isChecked = targetAgentIds.includes(ag.id);
+                        const skillCount = skills.filter((s) => s.sourceAgentId === ag.id).length;
+                        const AgentIcon = AGENT_ICON_MAP[ag.id] || AGENT_ICON_MAP[ag.iconName] || Bot;
+                        return (
+                          <button
+                            type="button"
+                            key={ag.id}
+                            className={`transfer-dropdown-item ${isChecked ? 'selected' : ''}`}
+                            onClick={() => toggleTargetAgent(ag.id)}
+                          >
+                            <div className="transfer-dropdown-item-left">
+                              <div className={`transfer-combobox-checkbox ${isChecked ? 'checked' : ''}`}>
+                                {isChecked && <Check size={10} />}
+                              </div>
+                              <span
+                                className="transfer-dropdown-item-dot"
+                                style={{ backgroundColor: ag.color || '#8b5cf6' }}
+                              />
+                              <AgentIcon size={12} style={{ color: ag.color || '#8b5cf6' }} />
+                              <span className="transfer-dropdown-item-name">{ag.name}</span>
+                            </div>
+                            <div className="transfer-dropdown-item-right">
+                              <span className="transfer-dropdown-item-count">{skillCount} skills</span>
+                            </div>
+                          </button>
+                        );
+                      })}
+
+                      {filteredTargetAgents.length === 0 && (
+                        <div className="transfer-dropdown-empty">
+                          <span>No target agents match "{targetSearchQuery}"</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Mode Toggle */}
-              <div className="config-box mode-box">
-                <label className="config-label">Operation</label>
-                <div className="mode-toggle-group">
-                  <button
-                    type="button"
-                    className={`mode-btn ${mode === 'copy' ? 'active' : ''}`}
-                    onClick={() => setMode('copy')}
-                    title="Keep original skill on source agent and duplicate to target"
-                  >
-                    <Copy size={12} />
-                    <span>Copy (Duplicate)</span>
-                  </button>
-                  <button
-                    type="button"
-                    className={`mode-btn ${mode === 'move' ? 'active' : ''}`}
-                    onClick={() => setMode('move')}
-                    title="Copy to target and remove from source agent"
-                  >
-                    <Scissors size={12} />
-                    <span>Move (Relocate)</span>
-                  </button>
-                </div>
+              <div className="mode-toggle-group">
+                <button
+                  type="button"
+                  className={`mode-btn ${mode === 'copy' ? 'active' : ''}`}
+                  onClick={() => setMode('copy')}
+                  title="Keep original skill on source agent and duplicate to target"
+                >
+                  <Copy size={11} />
+                  <span>Copy</span>
+                </button>
+                <button
+                  type="button"
+                  className={`mode-btn ${mode === 'move' ? 'active' : ''}`}
+                  onClick={() => setMode('move')}
+                  title="Copy to target and remove from source agent"
+                >
+                  <Scissors size={11} />
+                  <span>Move</span>
+                </button>
               </div>
             </div>
 
@@ -479,7 +872,9 @@ export const TransferSkillsModal: React.FC<TransferSkillsModalProps> = ({
                         slug={slug}
                         isChecked={isChecked}
                         alreadyInstalledTargets={alreadyInstalledTargets}
-                        onToggle={toggleSkillSlug}
+                        onMouseDownRow={handleRowMouseDown}
+                        onMouseEnterRow={handleRowMouseEnter}
+                        onKeyDownToggle={toggleSkillSlug}
                       />
                     );
                   })
@@ -609,8 +1004,8 @@ export const TransferSkillsModal: React.FC<TransferSkillsModalProps> = ({
             z-index: 100001;
             box-sizing: border-box;
             -webkit-app-region: no-drag !important;
-            user-select: text !important;
-            -webkit-user-select: text !important;
+            user-select: none;
+            -webkit-user-select: none;
           }
 
           .transfer-modal-card.is-closing {
@@ -706,123 +1101,462 @@ export const TransferSkillsModal: React.FC<TransferSkillsModalProps> = ({
             overflow: hidden;
           }
 
-          /* Config Grid */
-          .config-grid {
+          /* Compact Toolbar Config Bar */
+          .transfer-config-bar {
             display: grid;
             grid-template-columns: 1fr 1.3fr auto;
-            gap: 14px;
-            background: #0c1220;
-            border: 1px solid #19243a;
-            border-radius: 8px;
-            padding: 12px 14px;
+            gap: 10px;
+            align-items: center;
             flex-shrink: 0;
+            position: relative;
+            z-index: 30;
           }
 
-          .config-box {
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-            min-width: 0;
+          /* Transfer Combobox Controls */
+          .transfer-combobox-wrapper {
+            position: relative;
+            width: 100%;
           }
 
-          .config-label {
+          .transfer-combobox-wrapper.source-wrapper {
+            z-index: 35;
+          }
+
+          .transfer-combobox-wrapper.target-wrapper {
+            z-index: 34;
+          }
+
+          .transfer-combobox-trigger {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            font-size: 11px;
-            font-weight: 600;
-            color: #94a3b8;
-          }
-
-          .source-count {
-            color: #a78bfa;
-            font-size: 10.5px;
-          }
-
-          .label-sub {
-            color: #64748b;
-            font-size: 10px;
-          }
-
-          .config-select {
-            background: #090e18;
-            border: 1px solid #1c273c;
-            border-radius: 6px;
-            color: #e2e8f0;
-            font-size: 11.5px;
-            padding: 6px 10px;
-            outline: none;
+            gap: 6px;
             width: 100%;
+            height: 30px;
+            min-height: 30px;
+            max-height: 30px;
+            padding: 0 10px;
+            background: rgba(20, 28, 45, 0.7);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 6px;
+            color: #94a3b8;
+            font-size: 11.5px;
             cursor: pointer;
+            transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+            box-sizing: border-box;
+            user-select: none;
+            white-space: nowrap;
+            text-align: left;
           }
 
-          .target-chips-wrap {
+          .transfer-combobox-trigger:hover {
+            background: rgba(27, 38, 62, 0.9);
+            border-color: rgba(255, 255, 255, 0.16);
+            color: #f8fafc;
+          }
+
+          .transfer-combobox-trigger.open {
+            border-color: rgba(168, 85, 247, 0.55);
+            background: rgba(20, 28, 48, 0.98);
+            box-shadow: 0 0 0 1px rgba(168, 85, 247, 0.25);
+          }
+
+          .transfer-combobox-trigger.active {
+            border-color: rgba(168, 85, 247, 0.35);
+            background: rgba(168, 85, 247, 0.12);
+            color: #f8fafc;
+          }
+
+          .transfer-combobox-trigger-left {
             display: flex;
-            flex-wrap: wrap;
-            gap: 5px;
-          }
-
-          .target-chip-btn {
-            display: inline-flex;
             align-items: center;
-            gap: 5px;
-            padding: 4px 8px;
-            border-radius: 5px;
-            background: #090e18;
-            border: 1px solid #1c273c;
-            color: #8899ac;
-            font-size: 11px;
-            font-weight: 500;
-            cursor: pointer;
-            transition: background-color 0.1s ease, border-color 0.1s ease, color 0.1s ease;
+            gap: 6px;
+            min-width: 0;
+            flex: 1;
+            overflow: hidden;
           }
 
-          .target-chip-btn.active {
-            background: rgba(147, 51, 234, 0.15);
-            border-color: #9333ea;
-            color: #f1f5f9;
+          .transfer-combobox-trigger-right {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-shrink: 0;
           }
 
-          .target-chip-dot {
+          .transfer-combobox-dot {
             width: 6px;
             height: 6px;
             border-radius: 50%;
+            flex-shrink: 0;
           }
 
-          .target-chip-check {
+          .transfer-combobox-icon {
+            flex-shrink: 0;
+          }
+
+          .transfer-combobox-label {
+            font-size: 11px;
+            font-weight: 500;
+            color: #64748b;
+            letter-spacing: 0.01em;
+            flex-shrink: 0;
+          }
+
+          .transfer-combobox-value {
+            font-size: 11.5px;
+            font-weight: 500;
+            color: #e2e8f0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+          }
+
+          .transfer-combobox-trigger.active .transfer-combobox-value {
+            color: #ffffff;
+          }
+
+          .transfer-combobox-placeholder {
+            font-size: 11.5px;
+            color: #64748b;
+            font-style: italic;
+          }
+
+          .transfer-combobox-count {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 18px;
+            height: 16px;
+            padding: 0 4.5px;
+            font-size: 9.5px;
+            font-family: var(--font-mono, monospace);
+            font-weight: 600;
+            line-height: 1;
+            border-radius: 4px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            color: #7f91a7;
+            flex-shrink: 0;
+            user-select: none;
+            box-sizing: border-box;
+          }
+
+          .transfer-combobox-chevron {
+            color: #64748b;
+            transition: transform 0.18s ease;
+            flex-shrink: 0;
+          }
+
+          .transfer-combobox-chevron.open {
+            transform: rotate(180deg);
             color: #c084fc;
+          }
+
+          /* Floating Combobox Popover */
+          .transfer-dropdown-menu {
+            position: absolute;
+            top: calc(100% + 5px);
+            left: 0;
+            right: 0;
+            width: 100%;
+            min-width: 250px;
+            background: #0d1322;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            box-shadow: 0 18px 40px -4px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.05);
+            padding: 6px;
+            z-index: 1000;
+            backdrop-filter: blur(16px);
+            animation: transferDropdownFadeIn 0.14s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            box-sizing: border-box;
+          }
+
+          @keyframes transferDropdownFadeIn {
+            from {
+              opacity: 0;
+              transform: translateY(-4px);
+            }
+            to {
+              opacity: 1;
+              transform: translateY(0);
+            }
+          }
+
+          .transfer-dropdown-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 4px 8px 6px;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: #64748b;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+            margin-bottom: 5px;
+          }
+
+          .transfer-dropdown-header-count {
+            font-size: 9.5px;
+            color: #64748b;
+            text-transform: none;
+          }
+
+          .transfer-dropdown-action-btn {
+            background: transparent;
+            border: none;
+            color: #c084fc;
+            font-size: 10px;
+            font-weight: 600;
+            cursor: pointer;
+            padding: 0;
+            transition: color 0.12s ease;
+          }
+
+          .transfer-dropdown-action-btn:hover {
+            color: #e9d5ff;
+            text-decoration: underline;
+          }
+
+          .transfer-combobox-search-wrap {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            height: 28px;
+            padding: 0 8px;
+            margin-bottom: 5px;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 5px;
+            transition: all 0.15s ease;
+            box-sizing: border-box;
+          }
+
+          .transfer-combobox-search-wrap:focus-within {
+            background: rgba(255, 255, 255, 0.07);
+            border-color: rgba(168, 85, 247, 0.55);
+            box-shadow: 0 0 0 1px rgba(168, 85, 247, 0.25);
+          }
+
+          .transfer-combobox-search-icon {
+            color: #64748b;
+            flex-shrink: 0;
+          }
+
+          .transfer-combobox-search-input {
+            flex: 1;
+            min-width: 0;
+            background: transparent;
+            border: none;
+            outline: none;
+            color: #f1f5f9;
+            font-size: 11px;
+            font-family: inherit;
+            padding: 0;
+          }
+
+          .transfer-combobox-search-input::placeholder {
+            color: #64748b;
+            font-size: 11px;
+          }
+
+          .transfer-combobox-clear-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 14px;
+            height: 14px;
+            padding: 0;
+            background: rgba(255, 255, 255, 0.08);
+            border: none;
+            border-radius: 3px;
+            color: #94a3b8;
+            cursor: pointer;
+            transition: all 0.1s ease;
+            flex-shrink: 0;
+          }
+
+          .transfer-combobox-clear-btn:hover {
+            background: rgba(239, 68, 68, 0.25);
+            color: #f87171;
+          }
+
+          .transfer-dropdown-list {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            max-height: 220px;
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding-right: 2px;
+          }
+
+          .transfer-dropdown-list::-webkit-scrollbar {
+            width: 4px;
+          }
+
+          .transfer-dropdown-list::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.18);
+            border-radius: 4px;
+          }
+
+          .transfer-dropdown-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            height: 30px;
+            padding: 0 8px;
+            border-radius: 5px;
+            background: transparent;
+            border: 1px solid transparent;
+            cursor: pointer;
+            transition: all 0.12s ease;
+            width: 100%;
+            box-sizing: border-box;
+            text-align: left;
+          }
+
+          .transfer-dropdown-item:hover {
+            background: rgba(255, 255, 255, 0.06);
+            color: #ffffff;
+          }
+
+          .transfer-dropdown-item.selected {
+            background: rgba(168, 85, 247, 0.12);
+            border-color: rgba(168, 85, 247, 0.28);
+            color: #ffffff;
+          }
+
+          .transfer-dropdown-item-left {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            min-width: 0;
+            flex: 1;
+          }
+
+          .transfer-combobox-checkbox {
+            width: 13px;
+            height: 13px;
+            border-radius: 3px;
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            background: rgba(255, 255, 255, 0.04);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #ffffff;
+            flex-shrink: 0;
+            transition: all 0.12s ease;
+          }
+
+          .transfer-combobox-checkbox.checked {
+            background: #9333ea;
+            border-color: #a855f7;
+          }
+
+          .transfer-dropdown-item-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            flex-shrink: 0;
+          }
+
+          .transfer-dropdown-item-name {
+            font-size: 11.5px;
+            font-weight: 500;
+            color: #cbd5e1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+          }
+
+          .transfer-dropdown-item.selected .transfer-dropdown-item-name {
+            color: #ffffff;
+            font-weight: 600;
+          }
+
+          .transfer-dropdown-item-right {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-shrink: 0;
+          }
+
+          .transfer-dropdown-item-count {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 19px;
+            height: 16px;
+            padding: 0 4.5px;
+            font-size: 9.5px;
+            font-family: var(--font-mono, monospace);
+            font-weight: 600;
+            line-height: 1;
+            border-radius: 4px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            color: #7f91a7;
+            flex-shrink: 0;
+            user-select: none;
+            box-sizing: border-box;
+          }
+
+          .transfer-dropdown-item:hover .transfer-dropdown-item-count {
+            background: rgba(255, 255, 255, 0.1);
+            color: #f1f5f9;
+          }
+
+          .transfer-dropdown-empty {
+            padding: 16px 8px;
+            text-align: center;
+            color: #64748b;
+            font-size: 11px;
+            font-style: italic;
           }
 
           /* Mode Toggle */
           .mode-toggle-group {
-            display: flex;
+            display: inline-flex;
             align-items: center;
-            background: #090e18;
-            border: 1px solid #1c273c;
+            background: rgba(20, 28, 45, 0.7);
+            border: 1px solid rgba(255, 255, 255, 0.08);
             border-radius: 6px;
             padding: 2px;
             gap: 2px;
+            height: 30px;
+            min-height: 30px;
+            max-height: 30px;
+            box-sizing: border-box;
           }
 
           .mode-btn {
             display: flex;
             align-items: center;
-            gap: 5px;
-            padding: 5px 10px;
+            gap: 4px;
+            padding: 0 8px;
+            height: 24px;
             border-radius: 4px;
             background: transparent;
-            border: none;
+            border: 1px solid transparent;
             color: #64748b;
             font-size: 11px;
-            font-weight: 600;
+            font-weight: 500;
             cursor: pointer;
-            transition: background-color 0.1s ease, color 0.1s ease;
+            transition: all 0.12s ease;
             white-space: nowrap;
           }
 
+          .mode-btn:hover {
+            color: #cbd5e1;
+          }
+
           .mode-btn.active {
-            background: #172133;
+            background: rgba(168, 85, 247, 0.18);
+            border-color: rgba(168, 85, 247, 0.35);
             color: #c084fc;
+            font-weight: 600;
           }
 
           /* Selection Container */
@@ -927,6 +1661,8 @@ export const TransferSkillsModal: React.FC<TransferSkillsModalProps> = ({
             padding: 6px;
             gap: 4px;
             -webkit-overflow-scrolling: touch;
+            user-select: none !important;
+            -webkit-user-select: none !important;
           }
 
           .skills-checklist::-webkit-scrollbar {
@@ -949,6 +1685,18 @@ export const TransferSkillsModal: React.FC<TransferSkillsModalProps> = ({
             cursor: pointer;
             contain: layout style;
             transition: background-color 0.08s ease, border-color 0.08s ease;
+            user-select: none !important;
+            -webkit-user-select: none !important;
+          }
+
+          .skill-check-row:focus-visible {
+            outline: 2px solid #a855f7;
+            outline-offset: 1px;
+          }
+
+          .skill-check-row * {
+            user-select: none !important;
+            -webkit-user-select: none !important;
           }
 
           .skill-check-row:hover {

@@ -24,12 +24,13 @@ import {
   Tag,
   ShieldCheck,
   Download,
-  Edit3
+  Edit3,
 } from 'lucide-react';
 import { ScannedSkill, ScannedMcpServer, SupportedAgent, InstalledPluginDetails } from '../types/agent';
 import { RULE_PRESETS } from '../data/rulePresets';
 import { logActivity } from '../services/activityLogger';
 import { useModalTransition } from '../hooks/useModalTransition';
+import { AGENT_ICON_MAP } from './AgentIcon';
 
 interface ForgePluginModalProps {
   isOpen: boolean;
@@ -984,17 +985,25 @@ export const ForgePluginModal: React.FC<ForgePluginModalProps> = ({
                               </div>
                               <p className="picker-desc-text">{s.description || 'No description provided'}</p>
                               <div className="picker-meta-row">
-                                <span
-                                  className="source-agent-pill"
-                                  style={{
-                                    color: s.sourceAgentColor || '#a855f7',
-                                    borderColor: `${s.sourceAgentColor || '#a855f7'}33`,
-                                    background: `${s.sourceAgentColor || '#a855f7'}15`
-                                  }}
-                                >
-                                  <Bot size={10} />
-                                  <span>{s.sourceAgentName}</span>
-                                </span>
+                                {(() => {
+                                  const sourceAg = agents.find((a) => a.id === s.sourceAgentId);
+                                  const agColor = sourceAg?.color || s.sourceAgentColor || '#8b5cf6';
+                                  const agIconKey = sourceAg?.id || sourceAg?.iconName || s.sourceAgentIcon || 'Bot';
+                                  const AgentIcon = AGENT_ICON_MAP[agIconKey] || Bot;
+                                  return (
+                                    <span
+                                      className="source-agent-pill"
+                                      style={{
+                                        color: agColor,
+                                        borderColor: `${agColor}33`,
+                                        background: `${agColor}15`
+                                      }}
+                                    >
+                                      <AgentIcon size={10} />
+                                      <span>{s.sourceAgentName}</span>
+                                    </span>
+                                  );
+                                })()}
                                 {s.hasScripts && (
                                   <span className="feature-pill font-mono">Scripts</span>
                                 )}
@@ -1061,17 +1070,25 @@ export const ForgePluginModal: React.FC<ForgePluginModalProps> = ({
                                 </code>
                               </div>
                               <div className="picker-meta-row">
-                                <span
-                                  className="source-agent-pill"
-                                  style={{
-                                    color: m.sourceAgentColor || '#38bdf8',
-                                    borderColor: `${m.sourceAgentColor || '#38bdf8'}33`,
-                                    background: `${m.sourceAgentColor || '#38bdf8'}15`
-                                  }}
-                                >
-                                  <Bot size={10} />
-                                  <span>{m.sourceAgentName}</span>
-                                </span>
+                                {(() => {
+                                  const sourceAg = agents.find((a) => a.id === m.sourceAgentId);
+                                  const agColor = sourceAg?.color || m.sourceAgentColor || '#38bdf8';
+                                  const agIconKey = sourceAg?.id || sourceAg?.iconName || m.sourceAgentIcon || 'Bot';
+                                  const AgentIcon = AGENT_ICON_MAP[agIconKey] || Bot;
+                                  return (
+                                    <span
+                                      className="source-agent-pill"
+                                      style={{
+                                        color: agColor,
+                                        borderColor: `${agColor}33`,
+                                        background: `${agColor}15`
+                                      }}
+                                    >
+                                      <AgentIcon size={10} />
+                                      <span>{m.sourceAgentName}</span>
+                                    </span>
+                                  );
+                                })()}
                                 {m.envKeys && m.envKeys.length > 0 && (
                                   <span className="feature-pill font-mono">
                                     {m.envKeys.length} ENV key{m.envKeys.length === 1 ? '' : 's'}

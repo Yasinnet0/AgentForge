@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { 
   X, 
@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { DependencyReport } from '../types/dependencies';
 import { KNOWN_DEPENDENCIES_META, getCurrentPlatform, getInstallSnippetForPlatform } from '../utils/dependencyResolver';
+import { useModalTransition } from '../hooks/useModalTransition';
 
 interface DependencyInstallDrawerProps {
   isOpen: boolean;
@@ -35,12 +36,43 @@ export const DependencyInstallDrawer: React.FC<DependencyInstallDrawerProps> = (
   report,
   onRefreshReport,
 }) => {
+  const { isRendered, isClosing, handleClose } = useModalTransition(isOpen, onClose, 200);
+
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [selectedPlatforms, setSelectedPlatforms] = useState<Record<string, PlatformTab>>({});
   const [isRefreshing, setIsRefreshing] = useState(false);
   const userPlatform = getCurrentPlatform();
 
-  if (!isOpen) return null;
+  // Cache last known values to prevent layout flicker during exit transition
+  const lastTargetNameRef = useRef(targetName);
+  const lastRequiredBinariesRef = useRef(requiredBinaries);
+
+  if (targetName) {
+    lastTargetNameRef.current = targetName;
+  }
+  if (requiredBinaries && requiredBinaries.length > 0) {
+    lastRequiredBinariesRef.current = requiredBinaries;
+  }
+
+  const effectiveTargetName = targetName || lastTargetNameRef.current;
+  const effectiveRequiredBinaries =
+    requiredBinaries && requiredBinaries.length > 0
+      ? requiredBinaries
+      : lastRequiredBinariesRef.current;
+
+  // Escape key handler for smooth closing
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        handleClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, handleClose]);
+
+  if (!isRendered) return null;
 
   const handleCopy = async (key: string, text: string) => {
     try {
@@ -52,10 +84,10 @@ export const DependencyInstallDrawer: React.FC<DependencyInstallDrawerProps> = (
     }
   };
 
-  const missingList = requiredBinaries.filter(
+  const missingList = effectiveRequiredBinaries.filter(
     (bin) => !report?.[bin]?.installed
   );
-  const isAllReady = requiredBinaries.length > 0 && missingList.length === 0;
+  const isAllReady = effectiveRequiredBinaries.length > 0 && missingList.length === 0;
 
   const handleCopyAllMissing = async () => {
     const commands = missingList.map((bin) => {
@@ -76,8 +108,8 @@ export const DependencyInstallDrawer: React.FC<DependencyInstallDrawerProps> = (
   };
 
   return createPortal(
-    <div className="dep-drawer-backdrop" onClick={onClose}>
-      <div className="dep-drawer-panel" onClick={(e) => e.stopPropagation()}>
+    <div className={`dep-drawer-backdrop ${isClosing ? 'is-closing' : ''}`} onClick={handleClose}>
+      <div className={`dep-drawer-panel ${isClosing ? 'is-closing' : ''}`} onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="dep-drawer-header">
           <div className="header-left">
@@ -87,11 +119,11 @@ export const DependencyInstallDrawer: React.FC<DependencyInstallDrawerProps> = (
             <div>
               <h3 className="drawer-title">Prerequisite System Binaries</h3>
               <p className="drawer-subtitle font-mono">
-                Required for: <span className="target-name">{targetName}</span>
+                Required for: <span className="target-name">{effectiveTargetName}</span>
               </p>
             </div>
           </div>
-          <button className="drawer-close-btn" onClick={onClose} aria-label="Close Drawer">
+          <button className="drawer-close-btn" onClick={handleClose} aria-label="Close Drawer">
             <X size={16} />
           </button>
         </div>
@@ -128,7 +160,7 @@ export const DependencyInstallDrawer: React.FC<DependencyInstallDrawerProps> = (
 
         {/* Dependency Cards List */}
         <div className="dep-cards-list">
-          {requiredBinaries.map((bin) => {
+          {effectiveRequiredBinaries.map((bin) => {
             const check = report?.[bin];
             const meta = KNOWN_DEPENDENCIES_META[bin] || {
               binary: bin,
@@ -251,7 +283,7 @@ export const DependencyInstallDrawer: React.FC<DependencyInstallDrawerProps> = (
             <RefreshCw size={13} className={isRefreshing ? 'spin' : ''} />
             <span>Re-check System PATH</span>
           </button>
-          <button className="done-btn" onClick={onClose}>
+          <button className="done-btn" onClick={handleClose}>
             Done
           </button>
         </div>
@@ -269,12 +301,23 @@ export const DependencyInstallDrawer: React.FC<DependencyInstallDrawerProps> = (
           z-index: 10000;
           display: flex;
           justify-content: flex-end;
-          animation: depFadeIn 0.18s ease-out forwards;
+          animation: depFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+          will-change: opacity;
+        }
+
+        .dep-drawer-backdrop.is-closing {
+          animation: depFadeOut 0.2s cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
+          pointer-events: none !important;
         }
 
         @keyframes depFadeIn {
           from { opacity: 0; }
           to { opacity: 1; }
+        }
+
+        @keyframes depFadeOut {
+          from { opacity: 1; }
+          to { opacity: 0; }
         }
 
         .dep-drawer-panel {
@@ -287,11 +330,34 @@ export const DependencyInstallDrawer: React.FC<DependencyInstallDrawerProps> = (
           display: flex;
           flex-direction: column;
           animation: depSlideIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+          will-change: transform, opacity;
+        }
+
+        .dep-drawer-panel.is-closing {
+          animation: depSlideOut 0.2s cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
+          pointer-events: none !important;
         }
 
         @keyframes depSlideIn {
-          from { transform: translateX(100%); }
-          to { transform: translateX(0); }
+          from {
+            transform: translate3d(100%, 0, 0);
+            opacity: 0.6;
+          }
+          to {
+            transform: translate3d(0, 0, 0);
+            opacity: 1;
+          }
+        }
+
+        @keyframes depSlideOut {
+          from {
+            transform: translate3d(0, 0, 0);
+            opacity: 1;
+          }
+          to {
+            transform: translate3d(100%, 0, 0);
+            opacity: 0.2;
+          }
         }
 
         .dep-drawer-header {
@@ -692,8 +758,8 @@ export const DependencyInstallDrawer: React.FC<DependencyInstallDrawerProps> = (
         }
 
         .done-btn:hover {
-          background: #60a5fa;
-          border-color: #60a5fa;
+          background: #7dd3fc;
+          border-color: #7dd3fc;
         }
       `}</style>
     </div>,

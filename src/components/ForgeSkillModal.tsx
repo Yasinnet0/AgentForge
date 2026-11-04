@@ -499,7 +499,7 @@ ${instructions.trim()}
                         >
                           <span
                             className="agent-chip-dot"
-                            style={{ backgroundColor: agent.color || '#3b82f6' }}
+                            style={{ backgroundColor: agent.color || '#8b5cf6' }}
                           />
                           <span className="agent-chip-text">{agent.name}</span>
                           {isChecked && <Check size={11} className="agent-chip-check" />}
@@ -1222,7 +1222,7 @@ ${instructions.trim()}
           }
 
           .template-select:hover, .template-select:focus {
-            border-color: #3b82f6;
+            border-color: rgba(168, 85, 247, 0.45);
           }
 
           .obsidian-mode-switch {
@@ -1293,7 +1293,7 @@ ${instructions.trim()}
 
           .raw-copy-btn:hover {
             background: #172236;
-            border-color: #3b82f6;
+            border-color: rgba(168, 85, 247, 0.4);
             color: #e2e8f0;
           }
 
