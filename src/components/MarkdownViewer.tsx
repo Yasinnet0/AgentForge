@@ -438,8 +438,8 @@ export const MarkdownViewer: React.FC<MarkdownViewerProps> = ({
           font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
           font-size: 13px;
           line-height: 1.6;
-          user-select: text !important;
-          -webkit-user-select: text !important;
+          user-select: none;
+          -webkit-user-select: none;
         }
 
         .skill-meta-strip {
@@ -450,6 +450,8 @@ export const MarkdownViewer: React.FC<MarkdownViewerProps> = ({
           padding-bottom: 8px;
           border-bottom: 1px solid rgba(255, 255, 255, 0.07);
           margin-bottom: 4px;
+          user-select: none;
+          -webkit-user-select: none;
         }
 
         .meta-pill-slug {

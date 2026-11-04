@@ -3,12 +3,6 @@ import { createPortal } from 'react-dom';
 import { 
   Sparkles, 
   Bot, 
-  Terminal, 
-  Cpu, 
-  Boxes, 
-  Compass, 
-  Server, 
-  Layers,
   Save, 
   RotateCcw, 
   FolderOpen, 
@@ -25,7 +19,8 @@ import {
   ChevronDown,
   MoreVertical,
   Shield,
-  Filter
+  Filter,
+  Copy
 } from 'lucide-react';
 import { SupportedAgent, RuleSection, RuleDirective, RulePreset } from '../types/agent';
 import { RULE_PRESETS, DEFAULT_RULES_TEMPLATE } from '../data/rulePresets';
@@ -33,6 +28,7 @@ import { logActivity } from '../services/activityLogger';
 import { MarkdownViewer, renderInlineMarkdown } from './MarkdownViewer';
 import { useModalTransition } from '../hooks/useModalTransition';
 import { useToast } from '../context/ToastContext';
+import { AGENT_ICON_MAP } from './AgentIcon';
 
 interface RulesBuilderViewProps {
   selectedAgents: SupportedAgent[];
@@ -40,17 +36,6 @@ interface RulesBuilderViewProps {
   searchQuery?: string;
   onRefreshCapabilities?: () => Promise<void>;
 }
-
-const AGENT_ICON_MAP: Record<string, React.ElementType> = {
-  Sparkles,
-  Bot,
-  Terminal,
-  Cpu,
-  Boxes,
-  Compass,
-  Server,
-  Layers,
-};
 
 const PRESET_CATEGORIES: Array<{ id: string; label: string }> = [
   { id: 'all', label: 'All Categories' },
@@ -62,7 +47,6 @@ const PRESET_CATEGORIES: Array<{ id: string; label: string }> = [
 ];
 
 type ViewMode = 'visual' | 'markdown';
-type ScopeMode = 'global' | 'workspace';
 
 // Markdown Parsing
 function parseMarkdownToSections(markdown: string): RuleSection[] {
@@ -114,51 +98,83 @@ function parseMarkdownToSections(markdown: string): RuleSection[] {
         enabled: true,
       };
 
-      if (currentSection) {
-        currentSection.directives.push(directive);
-      } else {
-        if (sections.length === 0) {
-          currentSection = {
-            id: 'section-general',
-            title: 'General Directives',
-            directives: [],
-          };
-          sections.push(currentSection);
-        }
-        sections[0].directives.push(directive);
+      if (!currentSection) {
+        currentSection = {
+          id: `section-${sectionIndex++}`,
+          title: 'General Directives',
+          directives: [],
+        };
+        sections.push(currentSection);
       }
+
+      currentSection.directives.push(directive);
     }
   }
 
   return sections;
 }
 
-// Markdown serialization
-function generateMarkdownFromSections(
-  preamble: string,
-  sections: RuleSection[]
-): string {
-  let md = preamble.trim() ? `${preamble.trim()}\n\n` : '# Agent Behavioral Directives\n\n';
+// Markdown Generation
+function generateMarkdownFromSections(preamble: string, sections: RuleSection[]): string {
+  const lines: string[] = [];
+
+  if (preamble && preamble.trim()) {
+    lines.push(preamble.trim());
+    lines.push('');
+  }
 
   for (const section of sections) {
-    md += `## ${section.title}\n`;
-    for (const dir of section.directives) {
-      if (dir.enabled) {
-        if (dir.title && dir.title !== 'Directive') {
-          if (dir.content) {
-            md += `- **${dir.title}:** ${dir.content}\n`;
-          } else {
-            md += `- **${dir.title}**\n`;
-          }
+    lines.push(`## ${section.title}`);
+    lines.push('');
+    for (const d of section.directives) {
+      if (d.enabled) {
+        if (d.content) {
+          lines.push(`- **${d.title}:** ${d.content}`);
         } else {
-          md += `- ${dir.content}\n`;
+          lines.push(`- **${d.title}**`);
         }
       }
     }
-    md += '\n';
+    lines.push('');
   }
 
-  return md.trim() + '\n';
+  return lines.join('\n').trim() + '\n';
+}
+
+// Normalization and equality utilities for accurate dirty state
+function normalizeRulesContent(str: string): string {
+  if (!str) return '';
+  return str
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .replace(/[ \t]+$/gm, '')
+    .trim();
+}
+
+function areRuleSectionsEqual(
+  a: RuleSection[] | null | undefined,
+  b: RuleSection[] | null | undefined
+): boolean {
+  if (!a || !b) return false;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    const secA = a[i];
+    const secB = b[i];
+    if (secA.title.trim() !== secB.title.trim()) return false;
+    if (secA.directives.length !== secB.directives.length) return false;
+    for (let j = 0; j < secA.directives.length; j++) {
+      const dirA = secA.directives[j];
+      const dirB = secB.directives[j];
+      if (
+        dirA.enabled !== dirB.enabled ||
+        dirA.title.trim() !== dirB.title.trim() ||
+        dirA.content.trim() !== dirB.content.trim()
+      ) {
+        return false;
+      }
+    }
+  }
+  return true;
 }
 
 export const RulesBuilderView: React.FC<RulesBuilderViewProps> = ({
@@ -167,38 +183,47 @@ export const RulesBuilderView: React.FC<RulesBuilderViewProps> = ({
   searchQuery: externalSearchQuery = '',
   onRefreshCapabilities,
 }) => {
-  // State
+  const toast = useToast();
+
+  // Primary State
   const [activeAgentId, setActiveAgentId] = useState<string>(() => {
-    return selectedAgents[0]?.id || allAgents[0]?.id || 'antigravity';
+    return selectedAgents[0]?.id || 'antigravity';
   });
-  const [scope, setScope] = useState<ScopeMode>('global');
-  const [syncBothGeminiFiles, setSyncBothGeminiFiles] = useState<boolean>(true);
-  const [syncToAllSelected, setSyncToAllSelected] = useState<boolean>(false);
+
   const [viewMode, setViewMode] = useState<ViewMode>('visual');
+
+  const [sections, setSections] = useState<RuleSection[]>([]);
+  const [markdownContent, setMarkdownContent] = useState<string>('');
+  const [docPreamble, setDocPreamble] = useState<string>('# Agent Behavioral Directives');
+  const [originalLoadedContent, setOriginalLoadedContent] = useState<string>('');
+  const originalSectionsRef = useRef<RuleSection[] | null>(null);
+  const originalContentRef = useRef<string>('');
+
   const [activeSectionId, setActiveSectionId] = useState<string>('all');
   const [localSearch, setLocalSearch] = useState<string>('');
-  const [isAgentMenuOpen, setIsAgentMenuOpen] = useState<boolean>(false);
-  const [isMoreMenuOpen, setIsMoreMenuOpen] = useState<boolean>(false);
-  const agentMenuRef = useRef<HTMLDivElement>(null);
-  const moreMenuRef = useRef<HTMLDivElement>(null);
 
-  const [markdownContent, setMarkdownContent] = useState<string>(DEFAULT_RULES_TEMPLATE);
-  const [originalLoadedContent, setOriginalLoadedContent] = useState<string>(DEFAULT_RULES_TEMPLATE);
-  const [sections, setSections] = useState<RuleSection[]>(() =>
-    parseMarkdownToSections(DEFAULT_RULES_TEMPLATE)
-  );
-  const [docPreamble, setDocPreamble] = useState<string>('# Agent Behavioral Directives');
-
+  // Editing State
   const [editingDirectiveId, setEditingDirectiveId] = useState<string | null>(null);
   const [editDraftTitle, setEditDraftTitle] = useState<string>('');
   const [editDraftContent, setEditDraftContent] = useState<string>('');
 
+  // UI Menus & Toggles
+  const [isAgentMenuOpen, setIsAgentMenuOpen] = useState<boolean>(false);
+  const [isMoreMenuOpen, setIsMoreMenuOpen] = useState<boolean>(false);
+  const [syncBothGeminiFiles, setSyncBothGeminiFiles] = useState<boolean>(true);
+  const [syncToAllSelected, setSyncToAllSelected] = useState<boolean>(false);
+
+  const agentMenuRef = useRef<HTMLDivElement>(null);
+  const moreMenuRef = useRef<HTMLDivElement>(null);
+
+  // Status
   const [isLoadingFile, setIsLoadingFile] = useState<boolean>(false);
   const [isSaving, setIsSaving] = useState<boolean>(false);
-  const toast = useToast();
   const [lastSavedTime, setLastSavedTime] = useState<string | null>(null);
   const [resolvedFilePath, setResolvedFilePath] = useState<string>('');
+  const [copiedPath, setCopiedPath] = useState<boolean>(false);
 
+  // Presets Modal
   const [isPresetModalOpen, setIsPresetModalOpen] = useState<boolean>(false);
   const {
     isRendered: isPresetModalRendered,
@@ -210,10 +235,50 @@ export const RulesBuilderView: React.FC<RulesBuilderViewProps> = ({
   const [isPresetCategoryOpen, setIsPresetCategoryOpen] = useState<boolean>(false);
   const presetCategoryRef = useRef<HTMLDivElement>(null);
 
+  // Adding Section
   const [isAddingSection, setIsAddingSection] = useState<boolean>(false);
   const [newSectionTitle, setNewSectionTitle] = useState<string>('');
 
-  // Effects
+  // Comprehensive Escape key handling for edit mode, section addition, and open dropdowns
+  useEffect(() => {
+    const handleWindowKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (editingDirectiveId) {
+          e.preventDefault();
+          e.stopPropagation();
+          setEditingDirectiveId(null);
+          return;
+        }
+        if (isAddingSection) {
+          e.preventDefault();
+          e.stopPropagation();
+          setIsAddingSection(false);
+          setNewSectionTitle('');
+          return;
+        }
+        if (isAgentMenuOpen) {
+          e.preventDefault();
+          setIsAgentMenuOpen(false);
+          return;
+        }
+        if (isMoreMenuOpen) {
+          e.preventDefault();
+          setIsMoreMenuOpen(false);
+          return;
+        }
+        if (isPresetCategoryOpen) {
+          e.preventDefault();
+          setIsPresetCategoryOpen(false);
+          return;
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleWindowKeyDown, true);
+    return () => window.removeEventListener('keydown', handleWindowKeyDown, true);
+  }, [editingDirectiveId, isAddingSection, isAgentMenuOpen, isMoreMenuOpen, isPresetCategoryOpen]);
+
+  // Presets modal Escape key
   useEffect(() => {
     if (!isPresetModalRendered) return;
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -259,10 +324,28 @@ export const RulesBuilderView: React.FC<RulesBuilderViewProps> = ({
     return allAgents.find((a) => a.id === activeAgentId) || allAgents[0];
   }, [allAgents, activeAgentId]);
 
-  // Computed
+  // Computed Values
   const isDirty = useMemo(() => {
-    return markdownContent.trim() !== originalLoadedContent.trim();
-  }, [markdownContent, originalLoadedContent]);
+    // If the visual sections match the original loaded sections exactly,
+    // ensure visual toggles that return to baseline don't falsely trigger unsaved
+    if (originalSectionsRef.current && areRuleSectionsEqual(sections, originalSectionsRef.current)) {
+      const currentNorm = normalizeRulesContent(markdownContent);
+      const originalNorm = normalizeRulesContent(originalLoadedContent);
+      if (currentNorm === originalNorm) {
+        return false;
+      }
+      const canonicalGenerated = normalizeRulesContent(
+        generateMarkdownFromSections(docPreamble, sections)
+      );
+      if (currentNorm === canonicalGenerated) {
+        return false;
+      }
+    }
+
+    const currentNorm = normalizeRulesContent(markdownContent);
+    const originalNorm = normalizeRulesContent(originalLoadedContent);
+    return currentNorm !== originalNorm;
+  }, [markdownContent, originalLoadedContent, sections, docPreamble]);
 
   const totalDirectivesCount = useMemo(() => {
     return sections.reduce((sum, s) => sum + s.directives.length, 0);
@@ -273,13 +356,14 @@ export const RulesBuilderView: React.FC<RulesBuilderViewProps> = ({
   }, [sections]);
 
   const currentRulesPath = useMemo(() => {
-    if (scope === 'workspace') {
-      if (currentAgent?.id === 'claude-code') return './CLAUDE.md';
-      if (currentAgent?.id === 'cursor') return './.cursorrules';
-      return './AGENTS.md';
-    }
     return currentAgent?.paths?.rulesPath || '~/.gemini/config/AGENTS.md';
-  }, [scope, currentAgent]);
+  }, [currentAgent]);
+
+  const currentFileName = useMemo(() => {
+    const p = resolvedFilePath || currentRulesPath;
+    const parts = p.split(/[/\\]/);
+    return parts[parts.length - 1] || 'AGENTS.md';
+  }, [resolvedFilePath, currentRulesPath]);
 
   // File Handlers
   const loadRulesFromDisk = useCallback(async () => {
@@ -296,6 +380,7 @@ export const RulesBuilderView: React.FC<RulesBuilderViewProps> = ({
       if (res.exists && res.content.trim()) {
         setMarkdownContent(res.content);
         setOriginalLoadedContent(res.content);
+        originalContentRef.current = res.content;
 
         const firstHeadingIdx = res.content.indexOf('## ');
         if (firstHeadingIdx > 0) {
@@ -306,12 +391,16 @@ export const RulesBuilderView: React.FC<RulesBuilderViewProps> = ({
 
         const parsed = parseMarkdownToSections(res.content);
         setSections(parsed);
+        originalSectionsRef.current = JSON.parse(JSON.stringify(parsed));
       } else {
         const fallback = DEFAULT_RULES_TEMPLATE;
         setMarkdownContent(fallback);
         setOriginalLoadedContent(fallback);
+        originalContentRef.current = fallback;
         setDocPreamble('# Agent Behavioral Directives');
-        setSections(parseMarkdownToSections(fallback));
+        const parsed = parseMarkdownToSections(fallback);
+        setSections(parsed);
+        originalSectionsRef.current = JSON.parse(JSON.stringify(parsed));
       }
     } catch (err: any) {
       console.warn('Failed to load rules file:', err);
@@ -328,8 +417,13 @@ export const RulesBuilderView: React.FC<RulesBuilderViewProps> = ({
   // Directive Actions
   const updateVisualSections = (newSections: RuleSection[]) => {
     setSections(newSections);
-    const newMd = generateMarkdownFromSections(docPreamble, newSections);
-    setMarkdownContent(newMd);
+    // If sections have returned to exact initial loaded state, restore original raw content
+    if (originalSectionsRef.current && areRuleSectionsEqual(newSections, originalSectionsRef.current)) {
+      setMarkdownContent(originalContentRef.current);
+    } else {
+      const newMd = generateMarkdownFromSections(docPreamble, newSections);
+      setMarkdownContent(newMd);
+    }
   };
 
   const handleToggleDirective = (sectionId: string, directiveId: string) => {
@@ -439,7 +533,6 @@ export const RulesBuilderView: React.FC<RulesBuilderViewProps> = ({
     toast.success(`Section "${newSec.title}" created.`);
   };
 
-  // Delete section
   const handleDeleteSection = (sectionId: string, title: string) => {
     const updated = sections.filter((sec) => sec.id !== sectionId);
     updateVisualSections(updated);
@@ -452,7 +545,7 @@ export const RulesBuilderView: React.FC<RulesBuilderViewProps> = ({
   // Presets & Templates
   const handleApplyPreset = (preset: RulePreset) => {
     const targetSectionTitle = preset.title;
-    let sectionExists = sections.find((s) => s.title.toLowerCase() === targetSectionTitle.toLowerCase());
+    const sectionExists = sections.find((s) => s.title.toLowerCase() === targetSectionTitle.toLowerCase());
 
     let updated: RuleSection[];
     if (sectionExists) {
@@ -465,7 +558,7 @@ export const RulesBuilderView: React.FC<RulesBuilderViewProps> = ({
       }));
 
       updated = sections.map((sec) =>
-        sec.id === sectionExists!.id
+        sec.id === sectionExists.id
           ? { ...sec, directives: [...sec.directives, ...newDirs] }
           : sec
       );
@@ -518,7 +611,7 @@ export const RulesBuilderView: React.FC<RulesBuilderViewProps> = ({
     const targets = syncToAllSelected
       ? selectedAgents.map((ag) => ({
           agentId: ag.id,
-          rulesPath: scope === 'workspace' ? './AGENTS.md' : ag.paths.rulesPath,
+          rulesPath: ag.paths.rulesPath,
         }))
       : [
           {
@@ -538,6 +631,8 @@ export const RulesBuilderView: React.FC<RulesBuilderViewProps> = ({
         const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         setLastSavedTime(timeStr);
         setOriginalLoadedContent(markdownContent);
+        originalContentRef.current = markdownContent;
+        originalSectionsRef.current = JSON.parse(JSON.stringify(sections));
 
         const targetNames = targets.map((t) => {
           const ag = allAgents.find((a) => a.id === t.agentId);
@@ -578,6 +673,19 @@ export const RulesBuilderView: React.FC<RulesBuilderViewProps> = ({
     setIsMoreMenuOpen(false);
   };
 
+  const handleCopyPath = async () => {
+    const p = resolvedFilePath || currentRulesPath;
+    if (!p) return;
+    try {
+      await navigator.clipboard.writeText(p);
+      setCopiedPath(true);
+      toast.success('Copied rules file path to clipboard');
+      setTimeout(() => setCopiedPath(false), 2000);
+    } catch {
+      toast.error('Failed to copy file path');
+    }
+  };
+
   // Search & Filtering
   const filteredPresets = useMemo(() => {
     return RULE_PRESETS.filter((p) => {
@@ -611,229 +719,224 @@ export const RulesBuilderView: React.FC<RulesBuilderViewProps> = ({
     return list;
   }, [sections, activeSectionId, activeSearch]);
 
-  const CurrentAgentIcon = AGENT_ICON_MAP[currentAgent?.iconName] || Bot;
+  const CurrentAgentIcon = AGENT_ICON_MAP[currentAgent?.id || ''] || AGENT_ICON_MAP[currentAgent?.iconName || ''] || Bot;
 
   return (
-    <div className="clean-rules-container">
-      {/* Single Consolidated Header Card */}
-      <div className="clean-header-card">
-        {/* Top Control Bar */}
-        <div className="header-primary-row">
-          <div className="header-identity">
-            <h2 className="header-title">Context Rules</h2>
-
-            {/* Compact Target Agent Selector Dropdown */}
-            <div className="agent-select-wrapper" ref={agentMenuRef}>
-              <button
-                type="button"
-                className="agent-menu-trigger"
-                onClick={() => setIsAgentMenuOpen(!isAgentMenuOpen)}
-                title="Change target AI agent"
-              >
-                <CurrentAgentIcon size={13} style={{ color: currentAgent.color }} />
-                <span className="agent-name font-mono">{currentAgent.name}</span>
-                <ChevronDown size={11} className={`chevron-icon ${isAgentMenuOpen ? 'open' : ''}`} />
-              </button>
-
-              {isAgentMenuOpen && (
-                <div className="rules-agent-dropdown-menu">
-                  <div className="menu-header font-mono">TARGET AGENTS</div>
-                  {allAgents.map((ag) => {
-                    const AgIcon = AGENT_ICON_MAP[ag.iconName] || Bot;
-                    const isSelected = ag.id === activeAgentId;
-                    return (
-                      <button
-                        key={ag.id}
-                        type="button"
-                        className={`menu-agent-item ${isSelected ? 'active' : ''}`}
-                        onClick={() => {
-                          setActiveAgentId(ag.id);
-                          setIsAgentMenuOpen(false);
-                        }}
-                      >
-                        <AgIcon size={13} style={{ color: ag.color }} />
-                        <span className="flex-1 text-left">{ag.name}</span>
-                        {isSelected && <Check size={12} className="text-purple-400" />}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            {/* Scope Toggle */}
-            <div className="clean-scope-toggle">
-              <button
-                type="button"
-                className={`scope-btn ${scope === 'global' ? 'active' : ''}`}
-                onClick={() => setScope('global')}
-              >
-                Global
-              </button>
-              <button
-                type="button"
-                className={`scope-btn ${scope === 'workspace' ? 'active' : ''}`}
-                onClick={() => setScope('workspace')}
-              >
-                Workspace
-              </button>
-            </div>
-
-            {/* Status Indicators */}
+    <div className="rules-view-container">
+      {/* 1. Header Card - Title, Badges & Actions */}
+      <div className="rules-view-header">
+        <div className="header-info">
+          <div className="title-line">
+            <h2 className="view-title">Context Rules & Directives</h2>
+            <span className="count-pill font-mono">{activeDirectivesCount} ACTIVE</span>
+            <span className="catalog-pill font-mono">{sections.length} SECTIONS</span>
             {isDirty ? (
-              <span className="clean-status-tag dirty font-mono">UNSAVED</span>
+              <span className="status-pill-clean partial font-mono" title="Unsaved changes in directives editor">
+                <span className="status-dot partial" />
+                <span>UNSAVED</span>
+              </span>
             ) : lastSavedTime ? (
-              <span className="clean-status-tag saved font-mono">SAVED {lastSavedTime}</span>
+              <span className="status-pill-clean installed font-mono" title={`Last deployed at ${lastSavedTime}`}>
+                <span className="status-dot installed" />
+                <span>DEPLOYED {lastSavedTime}</span>
+              </span>
             ) : null}
           </div>
-
-          {/* Right Header Actions */}
-          <div className="header-primary-actions">
-            {/* View Mode Toggle */}
-            <div className="clean-mode-toggle">
-              <button
-                type="button"
-                className={`mode-btn ${viewMode === 'visual' ? 'active' : ''}`}
-                onClick={() => setViewMode('visual')}
-                title="Structured visual policy editor"
-              >
-                <Sliders size={11} />
-                <span>Blocks</span>
-              </button>
-              <button
-                type="button"
-                className={`mode-btn ${viewMode === 'markdown' ? 'active' : ''}`}
-                onClick={() => setViewMode('markdown')}
-                title="Split markdown code editor"
-              >
-                <FileText size={11} />
-                <span>Markdown</span>
-              </button>
-            </div>
-
-            {/* Preset Library Button */}
-            <button
-              type="button"
-              className="clean-secondary-btn"
-              onClick={() => setIsPresetModalOpen(true)}
-              title="Open preset directives library"
-            >
-              <Sparkles size={12} className="text-purple-400" />
-              <span>Presets</span>
-            </button>
-
-            {/* Primary Save & Deploy Button */}
-            <button
-              type="button"
-              className="clean-primary-btn"
-              onClick={handleSaveRules}
-              disabled={isSaving || isLoadingFile}
-              title="Save and deploy directives to disk"
-            >
-              {isSaving ? <Loader2 size={12} className="spin" /> : <Save size={12} />}
-              <span>{isSaving ? 'Deploying...' : 'Save & Deploy'}</span>
-            </button>
-
-            {/* More Options Dropdown */}
-            <div className="more-menu-wrapper" ref={moreMenuRef}>
-              <button
-                type="button"
-                className="clean-icon-btn"
-                onClick={() => setIsMoreMenuOpen(!isMoreMenuOpen)}
-                title="More settings & actions"
-              >
-                <MoreVertical size={13} />
-              </button>
-
-              {isMoreMenuOpen && (
-                <div className="clean-dropdown-menu">
-                  <div className="menu-header font-mono">DEPLOYMENT OPTIONS</div>
-                  {activeAgentId === 'antigravity' && (
-                    <label className="menu-checkbox-item font-mono">
-                      <input
-                        type="checkbox"
-                        checked={syncBothGeminiFiles}
-                        onChange={(e) => setSyncBothGeminiFiles(e.target.checked)}
-                      />
-                      <span>Sync GEMINI.md file</span>
-                    </label>
-                  )}
-                  <label className="menu-checkbox-item font-mono">
-                    <input
-                      type="checkbox"
-                      checked={syncToAllSelected}
-                      onChange={(e) => setSyncToAllSelected(e.target.checked)}
-                    />
-                    <span>Deploy to all ({selectedAgents.length}) agents</span>
-                  </label>
-                  <div className="menu-divider" />
-                  <button
-                    type="button"
-                    className="menu-action-btn"
-                    onClick={handleOpenInExplorer}
-                  >
-                    <FolderOpen size={12} />
-                    <span>Reveal in File Explorer</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="menu-action-btn danger"
-                    onClick={handleReset}
-                  >
-                    <RotateCcw size={12} />
-                    <span>Reset to Default Template</span>
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
+          <p className="view-desc">
+            Define system directives, coding standards, and operational guidelines executed by your AI agents.
+          </p>
         </div>
 
-        {/* Quiet Meta Sub-Row */}
-        <div className="header-meta-row">
-          <div className="meta-left font-mono">
-            <span className="file-target-tag">TARGET:</span>
-            <span className="file-path-text" title={resolvedFilePath || currentRulesPath}>
-              {resolvedFilePath || currentRulesPath}
-            </span>
-            <span className="bullet-sep">·</span>
-            <span className="stats-pill">{activeDirectivesCount} active rules</span>
-            <span className="bullet-sep">·</span>
-            <span className="stats-pill">{sections.length} sections</span>
-          </div>
+        <div className="header-actions-wrap">
+          {/* Preset Library Button */}
+          <button
+            type="button"
+            className="rules-secondary-btn"
+            onClick={() => setIsPresetModalOpen(true)}
+            title="Browse curated directive templates and best-practice rules"
+          >
+            <Sparkles size={13} className="text-purple-400" />
+            <span>Browse Presets</span>
+          </button>
 
-          <div className="meta-right">
-            <div className="clean-search-box">
-              <Search size={11} className="search-icon" />
-              <input
-                type="text"
-                placeholder="Filter rules..."
-                value={localSearch}
-                onChange={(e) => setLocalSearch(e.target.value)}
-              />
-              {localSearch && (
-                <button onClick={() => setLocalSearch('')} className="clear-search-btn">
-                  <X size={10} />
+          {/* Primary Save & Deploy Button */}
+          <button
+            type="button"
+            className={`rules-primary-btn ${isDirty ? 'has-unsaved' : ''}`}
+            onClick={handleSaveRules}
+            disabled={isSaving || !isDirty}
+            title={isDirty ? 'Save and deploy directives to active agent' : 'All directives saved to disk'}
+          >
+            {isSaving ? <Loader2 size={13} className="spin" /> : <Save size={13} />}
+            <span>{isSaving ? 'Deploying...' : 'Save & Deploy'}</span>
+          </button>
+
+          {/* More Options Dropdown */}
+          <div className="more-menu-wrapper" ref={moreMenuRef}>
+            <button
+              type="button"
+              className="rules-icon-btn"
+              onClick={() => setIsMoreMenuOpen((prev) => !prev)}
+              title="Deployment options and file management"
+            >
+              <MoreVertical size={14} />
+            </button>
+
+            {isMoreMenuOpen && (
+              <div className="rules-dropdown-menu">
+                <div className="menu-header font-mono">DEPLOYMENT SETTINGS</div>
+                {activeAgentId === 'antigravity' && (
+                  <label className="menu-checkbox-item">
+                    <input
+                      type="checkbox"
+                      checked={syncBothGeminiFiles}
+                      onChange={(e) => setSyncBothGeminiFiles(e.target.checked)}
+                    />
+                    <span>Sync GEMINI.md file</span>
+                  </label>
+                )}
+                <label className="menu-checkbox-item">
+                  <input
+                    type="checkbox"
+                    checked={syncToAllSelected}
+                    onChange={(e) => setSyncToAllSelected(e.target.checked)}
+                  />
+                  <span>Deploy to all ({selectedAgents.length}) agents</span>
+                </label>
+                <div className="menu-divider" />
+                <button type="button" className="menu-action-btn" onClick={handleOpenInExplorer}>
+                  <FolderOpen size={12} />
+                  <span>Reveal in File Explorer</span>
                 </button>
-              )}
-            </div>
+                <button type="button" className="menu-action-btn danger" onClick={handleReset}>
+                  <RotateCcw size={12} />
+                  <span>Reset to Default Template</span>
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Main Content Layout */}
+      {/* 2. Sleek Filter & Mode Toolbar Row */}
+      <div className="rules-toolbar-row">
+        {/* Left: Scope, View Mode & Agent Selection */}
+        <div className="toolbar-left-group">
+          {/* Target Agent Selector Dropdown */}
+          <div className="agent-select-wrapper" ref={agentMenuRef}>
+            <button
+              type="button"
+              className="agent-filter-chip"
+              onClick={() => setIsAgentMenuOpen((prev) => !prev)}
+              title="Select target AI agent for directives"
+            >
+              <CurrentAgentIcon size={13} style={{ color: currentAgent?.color || '#a855f7' }} />
+              <span className="agent-chip-name">{currentAgent?.name || 'Agent'}</span>
+              <ChevronDown size={11} className={`chevron-icon ${isAgentMenuOpen ? 'open' : ''}`} />
+            </button>
+
+            {isAgentMenuOpen && (
+              <div className="agent-dropdown-menu">
+                <div className="menu-header font-mono">SELECT TARGET AGENT</div>
+                {allAgents.map((ag) => {
+                  const AgIcon = AGENT_ICON_MAP[ag.id] || AGENT_ICON_MAP[ag.iconName] || Bot;
+                  const isSelected = ag.id === activeAgentId;
+                  return (
+                    <button
+                      key={ag.id}
+                      type="button"
+                      className={`agent-menu-item ${isSelected ? 'selected' : ''}`}
+                      onClick={() => {
+                        setActiveAgentId(ag.id);
+                        setIsAgentMenuOpen(false);
+                      }}
+                    >
+                      <AgIcon size={13} style={{ color: ag.color }} />
+                      <span className="agent-item-name">{ag.name}</span>
+                      {isSelected && <Check size={11} className="agent-item-check" />}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="toolbar-divider" />
+
+          {/* View Mode Segmented Control */}
+          <div className="segmented-controls">
+            <button
+              type="button"
+              className={`segment-btn ${viewMode === 'visual' ? 'active' : ''}`}
+              onClick={() => setViewMode('visual')}
+            >
+              <Sliders size={11} />
+              <span>Blocks</span>
+            </button>
+            <button
+              type="button"
+              className={`segment-btn ${viewMode === 'markdown' ? 'active' : ''}`}
+              onClick={() => setViewMode('markdown')}
+            >
+              <FileText size={11} />
+              <span>Markdown</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Right: Target File Chip & Search Box */}
+        <div className="toolbar-right-group">
+          <div
+            className="target-file-chip font-mono"
+            title={`Rules file: ${resolvedFilePath || currentRulesPath}`}
+          >
+            <FileText size={11} className="file-chip-icon text-purple-400" />
+            <span className="file-chip-name">{currentFileName}</span>
+            <button
+              type="button"
+              className="file-copy-btn"
+              onClick={handleCopyPath}
+              title="Copy file path to clipboard"
+            >
+              {copiedPath ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
+            </button>
+          </div>
+
+          <div className="rules-search-box">
+            <Search size={12} className="rules-search-icon" />
+            <input
+              type="text"
+              placeholder="Filter rules..."
+              value={localSearch}
+              onChange={(e) => setLocalSearch(e.target.value)}
+            />
+            {localSearch && (
+              <button
+                type="button"
+                onClick={() => setLocalSearch('')}
+                className="rules-search-clear"
+                title="Clear search"
+              >
+                <X size={11} />
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* 3. Main Content Layout */}
       {isLoadingFile ? (
         <div className="clean-loading-state">
           <Loader2 size={24} className="spin text-purple-400" />
           <p className="font-mono">Loading directives from disk...</p>
         </div>
       ) : viewMode === 'visual' ? (
-        /* Spacious Master-Detail Layout */
+        /* Master-Detail Layout */
         <div className="master-detail-layout">
           {/* Left Sections Sidebar */}
           <aside className="sections-sidebar">
             <div className="sidebar-top">
-              <span className="sidebar-title font-mono">DIRECTIVE SECTIONS</span>
+              <span className="sidebar-title font-mono">SECTIONS</span>
               <button
                 type="button"
                 className="add-sec-quick-btn"
@@ -851,6 +954,7 @@ export const RulesBuilderView: React.FC<RulesBuilderViewProps> = ({
                 className={`section-nav-item ${activeSectionId === 'all' ? 'active' : ''}`}
                 onClick={() => setActiveSectionId('all')}
               >
+                <span className="nav-item-idx font-mono">ALL</span>
                 <span className="nav-item-title">All Sections</span>
                 <span className="nav-item-count font-mono">{totalDirectivesCount}</span>
               </button>
@@ -865,8 +969,12 @@ export const RulesBuilderView: React.FC<RulesBuilderViewProps> = ({
                     className={`section-nav-item ${isActive ? 'active' : ''}`}
                     onClick={() => setActiveSectionId(sec.id)}
                   >
-                    <span className="nav-item-idx font-mono">{idx + 1}</span>
-                    <span className="nav-item-title">{sec.title}</span>
+                    <span className="nav-item-idx font-mono">
+                      {String(idx + 1).padStart(2, '0')}
+                    </span>
+                    <span className="nav-item-title" title={sec.title}>
+                      {sec.title}
+                    </span>
                     <span className="nav-item-count font-mono">{activeCount}</span>
                     <button
                       type="button"
@@ -892,11 +1000,26 @@ export const RulesBuilderView: React.FC<RulesBuilderViewProps> = ({
                   placeholder="Section title..."
                   value={newSectionTitle}
                   onChange={(e) => setNewSectionTitle(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setIsAddingSection(false);
+                      setNewSectionTitle('');
+                    }
+                  }}
                   autoFocus
                 />
                 <div className="form-btns">
                   <button type="submit" className="done-btn">Add</button>
-                  <button type="button" onClick={() => setIsAddingSection(false)} className="cancel-btn">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsAddingSection(false);
+                      setNewSectionTitle('');
+                    }}
+                    className="cancel-btn"
+                  >
                     Cancel
                   </button>
                 </div>
@@ -917,7 +1040,7 @@ export const RulesBuilderView: React.FC<RulesBuilderViewProps> = ({
           <main className="directives-canvas">
             {visibleSections.map((sec) => (
               <div key={sec.id} className="section-block">
-                {/* Clean Section Heading */}
+                {/* Section Header */}
                 <div className="section-block-header">
                   <div className="header-left">
                     <h3 className="section-block-title">{sec.title}</h3>
@@ -930,13 +1053,14 @@ export const RulesBuilderView: React.FC<RulesBuilderViewProps> = ({
                     type="button"
                     className="add-rule-btn"
                     onClick={() => handleAddDirectiveToSection(sec.id)}
+                    title="Add directive rule to this section"
                   >
                     <Plus size={11} />
                     <span>Add Rule</span>
                   </button>
                 </div>
 
-                {/* Directives List */}
+                {/* Directives Items List */}
                 <div className="directives-items-list">
                   {sec.directives.map((dir) => {
                     const isEditing = editingDirectiveId === dir.id;
@@ -945,40 +1069,64 @@ export const RulesBuilderView: React.FC<RulesBuilderViewProps> = ({
                       /* Focused Clean Editor Form */
                       return (
                         <div key={dir.id} className="clean-directive-editor">
-                          <div className="editor-row">
+                          <div className="editor-input-wrap">
                             <input
                               type="text"
                               className="editor-title-input"
                               value={editDraftTitle}
                               onChange={(e) => setEditDraftTitle(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Escape') {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  handleCancelEdit();
+                                } else if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  handleSaveEdit(sec.id, dir.id);
+                                }
+                              }}
                               placeholder="Rule title / label (e.g. Zero Fluff)"
                               autoFocus
                             />
-                            <div className="editor-actions">
-                              <button
-                                type="button"
-                                className="editor-save-btn"
-                                onClick={() => handleSaveEdit(sec.id, dir.id)}
-                              >
-                                <Check size={11} />
-                                <span>Done</span>
-                              </button>
-                              <button
-                                type="button"
-                                className="editor-cancel-btn"
-                                onClick={handleCancelEdit}
-                              >
-                                Cancel
-                              </button>
-                            </div>
                           </div>
+
                           <textarea
                             className="editor-content-textarea"
                             rows={3}
                             value={editDraftContent}
                             onChange={(e) => setEditDraftContent(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Escape') {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleCancelEdit();
+                              } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                                e.preventDefault();
+                                handleSaveEdit(sec.id, dir.id);
+                              }
+                            }}
                             placeholder="Specify clear, actionable instructions or constraints..."
                           />
+
+                          <div className="editor-footer-actions">
+                            <button
+                              type="button"
+                              className="editor-cancel-btn"
+                              onClick={handleCancelEdit}
+                              title="Cancel"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              type="button"
+                              className="editor-save-btn"
+                              onClick={() => handleSaveEdit(sec.id, dir.id)}
+                              title="Save directive"
+                            >
+                              <Check size={11} />
+                              <span>Save Directive</span>
+                            </button>
+                          </div>
                         </div>
                       );
                     }
@@ -989,14 +1137,14 @@ export const RulesBuilderView: React.FC<RulesBuilderViewProps> = ({
                         key={dir.id}
                         className={`clean-directive-row ${dir.enabled ? 'active' : 'disabled'}`}
                       >
-                        {/* Minimal Toggle */}
+                        {/* Tactile Toggle Checkbox */}
                         <button
                           type="button"
                           className={`clean-toggle-checkbox ${dir.enabled ? 'checked' : ''}`}
                           onClick={() => handleToggleDirective(sec.id, dir.id)}
-                          title={dir.enabled ? 'Click to disable' : 'Click to enable'}
+                          title={dir.enabled ? 'Click to disable rule' : 'Click to enable rule'}
                         >
-                          {dir.enabled && <Check size={10} />}
+                          {dir.enabled && <Check size={10} strokeWidth={2.5} />}
                         </button>
 
                         {/* Content */}
@@ -1063,7 +1211,7 @@ export const RulesBuilderView: React.FC<RulesBuilderViewProps> = ({
                 <div className="empty-actions-row">
                   <button
                     type="button"
-                    className="clean-primary-btn"
+                    className="rules-primary-btn"
                     onClick={() => setIsPresetModalOpen(true)}
                   >
                     <Sparkles size={12} />
@@ -1071,7 +1219,7 @@ export const RulesBuilderView: React.FC<RulesBuilderViewProps> = ({
                   </button>
                   <button
                     type="button"
-                    className="clean-secondary-btn"
+                    className="rules-secondary-btn"
                     onClick={() => setIsAddingSection(true)}
                   >
                     <Plus size={12} />
@@ -1198,71 +1346,90 @@ export const RulesBuilderView: React.FC<RulesBuilderViewProps> = ({
                   <div key={preset.id} className="preset-card">
                     <div className="preset-card-top">
                       <div>
-                        <span className="preset-cat-tag font-mono">{preset.category.toUpperCase()}</span>
-                        <h4 className="preset-title">{preset.title}</h4>
-                        <p className="preset-desc">{preset.summary}</p>
+                        <h4 className="preset-card-title">{preset.title}</h4>
+                        <p className="preset-card-summary">{preset.summary}</p>
                       </div>
+                      <span className="preset-cat-badge font-mono">{preset.category}</span>
+                    </div>
+
+                    <div className="preset-card-preview">
+                      {preset.directives.slice(0, 3).map((d, i) => (
+                        <div key={i} className="preview-rule font-mono">
+                          <span className="rule-dot" />
+                          <span className="rule-t">{d.title}:</span>
+                          <span className="rule-c">{d.content}</span>
+                        </div>
+                      ))}
+                      {preset.directives.length > 3 && (
+                        <div className="preview-more font-mono">
+                          +{preset.directives.length - 3} more directives...
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="preset-card-footer">
+                      <span className="preset-rules-count font-mono">
+                        {preset.directives.length} directives
+                      </span>
                       <button
                         type="button"
-                        className="inject-btn"
+                        className="inject-preset-btn"
                         onClick={() => handleApplyPreset(preset)}
                       >
                         <Plus size={11} />
-                        <span>Inject</span>
+                        <span>Inject Preset</span>
                       </button>
-                    </div>
-
-                    <div className="preset-preview font-mono">
-                      {preset.directives.map((d, i) => (
-                        <div key={i} className="preview-line">
-                          <span className="line-bold">• {d.title}:</span>
-                          <span className="line-desc">{renderInlineMarkdown(d.content)}</span>
-                        </div>
-                      ))}
                     </div>
                   </div>
                 ))}
+
+                {filteredPresets.length === 0 && (
+                  <div className="dialog-empty font-mono">No presets matching your search.</div>
+                )}
               </div>
             </div>
           </div>,
           document.body
         )}
 
-      {/* Scoped Minimalist Styles */}
+      {/* Embedded High-Polish Styling */}
       <style>{`
-        .clean-rules-container {
+        .rules-view-container {
           display: flex;
           flex-direction: column;
           gap: 12px;
           width: 100%;
+          min-width: 0;
+          padding-bottom: 24px;
         }
 
-        /* Single Consolidated Header Card */
-        .clean-header-card {
-          background: #111726;
+        /* 1. View Header */
+        .rules-view-header {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 16px;
+          padding: 14px 18px;
+          background: #0f1523;
           border: 1px solid #1c2638;
           border-radius: 8px;
-          padding: 12px 16px;
-          display: flex;
-          flex-direction: column;
-          gap: 10px;
         }
 
-        .header-primary-row {
+        .header-info {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+          min-width: 0;
+        }
+
+        .title-line {
           display: flex;
           align-items: center;
-          justify-content: space-between;
-          gap: 12px;
+          gap: 8px;
           flex-wrap: wrap;
         }
 
-        .header-identity {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-        }
-
-        .header-title {
+        .view-title {
           font-size: 15px;
           font-weight: 700;
           color: #f8fafc;
@@ -1270,254 +1437,158 @@ export const RulesBuilderView: React.FC<RulesBuilderViewProps> = ({
           letter-spacing: -0.01em;
         }
 
-        /* Agent Select Dropdown */
-        .agent-select-wrapper {
-          position: relative;
+        .count-pill {
+          font-size: 10px;
+          font-weight: 700;
+          padding: 2px 7px;
+          border-radius: 4px;
+          background: rgba(124, 58, 237, 0.15);
+          border: 1px solid rgba(124, 58, 237, 0.35);
+          color: #c084fc;
         }
 
-        .agent-menu-trigger {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          gap: 6px;
+        .catalog-pill {
+          font-size: 10px;
+          font-weight: 700;
+          padding: 2px 7px;
+          border-radius: 4px;
           background: #141c2c;
           border: 1px solid #223048;
-          color: #f1f5f9;
-          font-size: 11px;
-          font-weight: 600;
-          padding: 0 10px;
-          height: 28px;
-          border-radius: 5px;
-          cursor: pointer;
-          transition: all 0.12s ease;
-          box-sizing: border-box;
-        }
-
-        .agent-menu-trigger:hover {
-          background: #1c263c;
-          border-color: #334466;
-        }
-
-        .chevron-icon {
-          color: #64748b;
-          transition: transform 0.15s ease;
-        }
-
-        .chevron-icon.open {
-          transform: rotate(180deg);
-        }
-
-        .rules-agent-dropdown-menu {
-          position: absolute;
-          top: calc(100% + 4px);
-          left: 0;
-          width: 170px;
-          background: #0f1523;
-          border: 1px solid #223048;
-          border-radius: 6px;
-          padding: 4px;
-          z-index: 100;
-          box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
-        }
-
-        .menu-header {
-          font-size: 9px;
-          color: #64748b;
-          font-weight: 700;
-          padding: 4px 6px;
-          letter-spacing: 0.04em;
-        }
-
-        .menu-agent-item {
-          width: 100%;
-          display: flex;
-          align-items: center;
-          gap: 7px;
-          padding: 5px 8px;
-          border-radius: 4px;
-          border: none;
-          background: transparent;
           color: #94a3b8;
-          font-size: 11.5px;
-          font-weight: 500;
-          cursor: pointer;
-          transition: all 0.1s ease;
         }
 
-        .menu-agent-item:hover {
-          background: #192236;
-          color: #f8fafc;
-        }
-
-        .menu-agent-item.active {
-          color: #ffffff;
-          background: rgba(124, 58, 237, 0.12);
-        }
-
-        /* Scope Toggle */
-        .clean-scope-toggle {
-          display: flex;
-          align-items: center;
-          height: 28px;
-          background: #0b0f19;
-          border: 1px solid #1c2638;
-          border-radius: 5px;
-          padding: 2px;
-          box-sizing: border-box;
-        }
-
-        .scope-btn {
-          background: transparent;
-          border: none;
-          color: #728298;
-          font-size: 10.5px;
-          font-weight: 600;
-          padding: 0 8px;
-          height: 22px;
-          border-radius: 3px;
-          cursor: pointer;
+        .status-pill-clean {
           display: inline-flex;
           align-items: center;
-          justify-content: center;
-          transition: all 0.12s ease;
-          box-sizing: border-box;
-        }
-
-        .scope-btn.active {
-          background: #1a2436;
-          color: #f1f5f9;
-        }
-
-        /* Status Tags */
-        .clean-status-tag {
+          gap: 5px;
           font-size: 9.5px;
           font-weight: 700;
-          padding: 1.5px 6px;
-          border-radius: 3px;
+          padding: 2px 7px;
+          border-radius: 4px;
         }
 
-        .clean-status-tag.dirty {
-          background: rgba(245, 158, 11, 0.1);
+        .status-pill-clean.partial {
+          background: rgba(245, 158, 11, 0.12);
           color: #f59e0b;
-          border: 1px solid rgba(245, 158, 11, 0.25);
+          border: 1px solid rgba(245, 158, 11, 0.3);
         }
 
-        .clean-status-tag.saved {
-          background: rgba(16, 185, 129, 0.1);
+        .status-pill-clean.installed {
+          background: rgba(16, 185, 129, 0.12);
           color: #34d399;
-          border: 1px solid rgba(16, 185, 129, 0.25);
+          border: 1px solid rgba(16, 185, 129, 0.3);
         }
 
-        /* Header Actions */
-        .header-primary-actions {
+        .status-dot {
+          width: 5px;
+          height: 5px;
+          border-radius: 50%;
+        }
+
+        .status-dot.partial {
+          background: #f59e0b;
+          box-shadow: 0 0 6px #f59e0b;
+        }
+
+        .status-dot.installed {
+          background: #34d399;
+          box-shadow: 0 0 6px #34d399;
+        }
+
+        .view-desc {
+          font-size: 12px;
+          color: #728298;
+          margin: 0;
+          line-height: 1.45;
+        }
+
+        .header-actions-wrap {
           display: flex;
           align-items: center;
           gap: 8px;
+          flex-shrink: 0;
         }
 
-        .clean-mode-toggle {
-          display: flex;
-          align-items: center;
-          height: 28px;
-          background: #0b0f19;
-          border: 1px solid #1c2638;
-          border-radius: 5px;
-          padding: 2px;
-          box-sizing: border-box;
-        }
-
-        .clean-mode-toggle .mode-btn {
+        .rules-secondary-btn {
           display: inline-flex;
           align-items: center;
-          justify-content: center;
-          gap: 4px;
-          background: transparent;
-          border: none;
-          color: #728298;
-          font-size: 10.5px;
-          font-weight: 600;
-          padding: 0 8px;
-          height: 22px;
-          border-radius: 3px;
-          cursor: pointer;
-          transition: all 0.12s ease;
-          box-sizing: border-box;
-        }
-
-        .clean-mode-toggle .mode-btn.active {
-          background: #1a2436;
-          color: #f1f5f9;
-        }
-
-        .clean-secondary-btn {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          gap: 5px;
+          gap: 6px;
           background: #141c2c;
           border: 1px solid #223048;
           color: #cbd5e1;
-          font-size: 11px;
+          font-size: 11.5px;
           font-weight: 600;
           padding: 0 12px;
-          height: 28px;
-          border-radius: 5px;
+          height: 30px;
+          border-radius: 6px;
           cursor: pointer;
           transition: all 0.12s ease;
           white-space: nowrap;
-          box-sizing: border-box;
         }
 
-        .clean-secondary-btn:hover {
+        .rules-secondary-btn:hover {
           background: #1c263c;
           color: #ffffff;
+          border-color: #2e3e5c;
         }
 
-        .clean-primary-btn {
+        .rules-primary-btn {
           display: inline-flex;
           align-items: center;
-          justify-content: center;
-          gap: 5px;
+          gap: 6px;
           background: linear-gradient(135deg, #7c3aed, #6366f1);
-          border: 1px solid rgba(124, 58, 237, 0.35);
+          border: 1px solid rgba(124, 58, 237, 0.4);
           color: #ffffff;
-          font-size: 11px;
+          font-size: 11.5px;
           font-weight: 600;
-          padding: 0 12px;
-          height: 28px;
-          border-radius: 5px;
+          padding: 0 14px;
+          height: 30px;
+          border-radius: 6px;
           cursor: pointer;
           transition: all 0.12s ease;
           white-space: nowrap;
-          box-sizing: border-box;
           box-shadow: 0 2px 8px rgba(124, 58, 237, 0.25);
         }
 
-        .clean-primary-btn:hover:not(:disabled) {
+        .rules-primary-btn:hover:not(:disabled) {
           filter: brightness(1.1);
-          box-shadow: 0 3px 12px rgba(124, 58, 237, 0.4);
+          box-shadow: 0 4px 14px rgba(124, 58, 237, 0.4);
         }
 
-        .clean-primary-btn:disabled {
+        .rules-primary-btn:disabled {
           opacity: 0.55;
           cursor: not-allowed;
+          box-shadow: none;
         }
 
-        .clean-icon-btn {
-          width: 28px;
-          height: 28px;
+        .rules-primary-btn.has-unsaved {
+          animation: pulseGlow 2.5s infinite;
+        }
+
+        @keyframes pulseGlow {
+          0%, 100% {
+            box-shadow: 0 2px 8px rgba(124, 58, 237, 0.3);
+          }
+          50% {
+            box-shadow: 0 3px 16px rgba(124, 58, 237, 0.55);
+          }
+        }
+
+        .rules-icon-btn {
+          width: 30px;
+          height: 30px;
           display: inline-flex;
           align-items: center;
           justify-content: center;
           background: #141c2c;
           border: 1px solid #223048;
           color: #8fa0b5;
-          border-radius: 5px;
+          border-radius: 6px;
           cursor: pointer;
-          box-sizing: border-box;
+          transition: all 0.12s ease;
         }
 
-        .clean-icon-btn:hover {
+        .rules-icon-btn:hover {
           background: #1c263c;
           color: #ffffff;
         }
@@ -1526,27 +1597,40 @@ export const RulesBuilderView: React.FC<RulesBuilderViewProps> = ({
           position: relative;
         }
 
-        .clean-dropdown-menu {
+        .rules-dropdown-menu {
           position: absolute;
-          top: calc(100% + 4px);
+          top: calc(100% + 5px);
           right: 0;
-          width: 210px;
+          width: 220px;
           background: #0f1523;
           border: 1px solid #223048;
-          border-radius: 6px;
+          border-radius: 7px;
           padding: 6px;
           z-index: 100;
-          box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+          box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
+        }
+
+        .menu-header {
+          font-size: 9.5px;
+          font-weight: 700;
+          color: #64748b;
+          padding: 4px 8px 6px;
+          letter-spacing: 0.05em;
         }
 
         .menu-checkbox-item {
           display: flex;
           align-items: center;
-          gap: 6px;
-          padding: 5px 6px;
-          font-size: 10.5px;
+          gap: 7px;
+          padding: 6px 8px;
+          font-size: 11px;
           color: #cbd5e1;
           cursor: pointer;
+          border-radius: 4px;
+        }
+
+        .menu-checkbox-item:hover {
+          background: #162034;
         }
 
         .menu-checkbox-item input {
@@ -1563,8 +1647,8 @@ export const RulesBuilderView: React.FC<RulesBuilderViewProps> = ({
           width: 100%;
           display: flex;
           align-items: center;
-          gap: 6px;
-          padding: 5px 6px;
+          gap: 7px;
+          padding: 6px 8px;
           border: none;
           background: transparent;
           color: #8fa0b5;
@@ -1572,97 +1656,271 @@ export const RulesBuilderView: React.FC<RulesBuilderViewProps> = ({
           border-radius: 4px;
           cursor: pointer;
           text-align: left;
+          transition: all 0.1s ease;
         }
 
         .menu-action-btn:hover {
-          background: #182236;
+          background: #162034;
           color: #f1f5f9;
         }
 
         .menu-action-btn.danger:hover {
           color: #f87171;
-          background: rgba(239, 68, 68, 0.1);
+          background: rgba(239, 68, 68, 0.12);
         }
 
-        /* Meta Sub-Row */
-        .header-meta-row {
+        /* 2. Toolbar Row */
+        .rules-toolbar-row {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          border-top: 1px solid rgba(255, 255, 255, 0.04);
-          padding-top: 8px;
           gap: 12px;
+          padding: 8px 14px;
+          background: #0c101c;
+          border: 1px solid #1c2638;
+          border-radius: 8px;
+          flex-wrap: wrap;
         }
 
-        .meta-left {
+        .toolbar-left-group {
           display: flex;
           align-items: center;
+          gap: 8px;
+          flex-wrap: wrap;
+        }
+
+        .toolbar-right-group {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          flex-shrink: 0;
+        }
+
+        .toolbar-divider {
+          width: 1px;
+          height: 18px;
+          background: #1c2638;
+          margin: 0 2px;
+        }
+
+        /* Target Agent Selector */
+        .agent-select-wrapper {
+          position: relative;
+        }
+
+        .agent-filter-chip {
+          display: inline-flex;
+          align-items: center;
           gap: 6px;
-          font-size: 10.5px;
-          color: #64748b;
-          overflow: hidden;
+          background: #111726;
+          border: 1px solid #1e293b;
+          border-radius: 6px;
+          padding: 0 10px;
+          height: 28px;
+          color: #f1f5f9;
+          font-size: 11.5px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.12s ease;
         }
 
-        .file-target-tag {
-          font-weight: 700;
-          color: #728298;
+        .agent-filter-chip:hover {
+          background: #182236;
+          border-color: #2b3b55;
         }
 
-        .file-path-text {
-          color: #94a3b8;
+        .agent-chip-name {
+          max-width: 130px;
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
         }
 
-        .bullet-sep {
-          color: #334460;
-        }
-
-        .stats-pill {
-          color: #818cf8;
-        }
-
-        .clean-search-box {
-          position: relative;
-        }
-
-        .clean-search-box input {
-          background: #0b0f19;
-          border: 1px solid #1c2638;
-          border-radius: 4px;
-          padding: 3px 20px 3px 22px;
-          color: #cbd5e1;
-          font-size: 11px;
-          width: 140px;
-          outline: none;
-        }
-
-        .clean-search-box input:focus {
-          border-color: #7c3aed;
-          width: 170px;
-        }
-
-        .clean-search-box .search-icon {
-          position: absolute;
-          left: 6px;
-          top: 50%;
-          transform: translateY(-50%);
+        .chevron-icon {
           color: #64748b;
+          transition: transform 0.15s ease;
         }
 
-        .clear-search-btn {
+        .chevron-icon.open {
+          transform: rotate(180deg);
+        }
+
+        .agent-dropdown-menu {
           position: absolute;
-          right: 5px;
-          top: 50%;
-          transform: translateY(-50%);
+          top: calc(100% + 5px);
+          left: 0;
+          width: 200px;
+          background: #0f1523;
+          border: 1px solid #223048;
+          border-radius: 7px;
+          padding: 5px;
+          z-index: 100;
+          box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+        }
+
+        .agent-menu-item {
+          width: 100%;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 6px 8px;
+          border: none;
+          background: transparent;
+          color: #94a3b8;
+          font-size: 11.5px;
+          font-weight: 500;
+          border-radius: 4px;
+          cursor: pointer;
+          text-align: left;
+          transition: all 0.1s ease;
+        }
+
+        .agent-menu-item:hover {
+          background: #162034;
+          color: #f1f5f9;
+        }
+
+        .agent-menu-item.selected {
+          background: rgba(124, 58, 237, 0.15);
+          color: #ffffff;
+          font-weight: 600;
+        }
+
+        .agent-item-name {
+          flex: 1;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .agent-item-check {
+          color: #c084fc;
+        }
+
+        /* Segmented Controls */
+        .segmented-controls {
+          display: inline-flex;
+          align-items: center;
+          background: #111726;
+          border: 1px solid #1c2638;
+          border-radius: 6px;
+          padding: 2px;
+          gap: 2px;
+        }
+
+        .segment-btn {
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          background: transparent;
+          border: none;
+          color: #728298;
+          font-size: 11px;
+          font-weight: 600;
+          padding: 0 10px;
+          height: 24px;
+          border-radius: 4px;
+          cursor: pointer;
+          transition: all 0.12s ease;
+          white-space: nowrap;
+        }
+
+        .segment-btn:hover {
+          color: #cbd5e1;
+        }
+
+        .segment-btn.active {
+          background: #1e293b;
+          color: #ffffff;
+          box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        /* Target File Chip */
+        .target-file-chip {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          background: #111726;
+          border: 1px solid #1c2638;
+          border-radius: 6px;
+          padding: 0 8px;
+          height: 28px;
+          font-size: 11px;
+          color: #94a3b8;
+        }
+
+        .file-chip-name {
+          color: #cbd5e1;
+          font-weight: 600;
+        }
+
+        .file-copy-btn {
           background: transparent;
           border: none;
           color: #64748b;
           cursor: pointer;
+          padding: 2px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 3px;
         }
 
-        /* Master-Detail Layout */
+        .file-copy-btn:hover {
+          color: #ffffff;
+          background: #1c2638;
+        }
+
+        /* Search Box */
+        .rules-search-box {
+          position: relative;
+          display: flex;
+          align-items: center;
+        }
+
+        .rules-search-icon {
+          position: absolute;
+          left: 8px;
+          color: #64748b;
+          pointer-events: none;
+        }
+
+        .rules-search-box input {
+          background: #111726;
+          border: 1px solid #1c2638;
+          border-radius: 6px;
+          padding: 0 24px 0 26px;
+          color: #e2e8f0;
+          font-size: 11.5px;
+          height: 28px;
+          width: 150px;
+          outline: none;
+          transition: width 0.15s ease, border-color 0.15s ease;
+        }
+
+        .rules-search-box input:focus {
+          border-color: #7c3aed;
+          width: 180px;
+        }
+
+        .rules-search-clear {
+          position: absolute;
+          right: 6px;
+          background: transparent;
+          border: none;
+          color: #64748b;
+          cursor: pointer;
+          padding: 2px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .rules-search-clear:hover {
+          color: #cbd5e1;
+        }
+
+        /* 3. Master-Detail Layout */
         .master-detail-layout {
           display: flex;
           gap: 14px;
@@ -1673,7 +1931,7 @@ export const RulesBuilderView: React.FC<RulesBuilderViewProps> = ({
         /* Left Sections Sidebar */
         .sections-sidebar {
           width: 220px;
-          background: #111726;
+          background: #0f1523;
           border: 1px solid #1c2638;
           border-radius: 8px;
           padding: 10px;
@@ -1694,7 +1952,7 @@ export const RulesBuilderView: React.FC<RulesBuilderViewProps> = ({
           font-size: 9.5px;
           font-weight: 700;
           color: #64748b;
-          letter-spacing: 0.04em;
+          letter-spacing: 0.05em;
         }
 
         .add-sec-quick-btn {
@@ -1703,6 +1961,9 @@ export const RulesBuilderView: React.FC<RulesBuilderViewProps> = ({
           color: #8fa0b5;
           cursor: pointer;
           padding: 2px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
         }
 
         .add-sec-quick-btn:hover {
@@ -1746,7 +2007,7 @@ export const RulesBuilderView: React.FC<RulesBuilderViewProps> = ({
         .nav-item-idx {
           font-size: 9.5px;
           color: #64748b;
-          width: 12px;
+          width: 16px;
         }
 
         .nav-item-title {
@@ -1761,7 +2022,7 @@ export const RulesBuilderView: React.FC<RulesBuilderViewProps> = ({
           font-size: 9.5px;
           color: #64748b;
           background: rgba(255, 255, 255, 0.04);
-          padding: 1px 4px;
+          padding: 1px 5px;
           border-radius: 3px;
         }
 
@@ -1840,7 +2101,6 @@ export const RulesBuilderView: React.FC<RulesBuilderViewProps> = ({
           height: 22px;
           border-radius: 3px;
           cursor: pointer;
-          box-sizing: border-box;
         }
 
         .form-btns .cancel-btn {
@@ -1856,7 +2116,6 @@ export const RulesBuilderView: React.FC<RulesBuilderViewProps> = ({
           height: 22px;
           border-radius: 3px;
           cursor: pointer;
-          box-sizing: border-box;
         }
 
         /* Right Directives Canvas */
@@ -1869,21 +2128,21 @@ export const RulesBuilderView: React.FC<RulesBuilderViewProps> = ({
         }
 
         .section-block {
-          background: #111726;
+          background: #0f1523;
           border: 1px solid #1c2638;
           border-radius: 8px;
-          padding: 12px 16px;
+          padding: 14px 16px;
           display: flex;
           flex-direction: column;
-          gap: 10px;
+          gap: 12px;
         }
 
         .section-block-header {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-          padding-bottom: 8px;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+          padding-bottom: 10px;
         }
 
         .header-left {
@@ -1893,61 +2152,63 @@ export const RulesBuilderView: React.FC<RulesBuilderViewProps> = ({
         }
 
         .section-block-title {
-          font-size: 13px;
+          font-size: 13.5px;
           font-weight: 700;
           color: #f1f5f9;
           margin: 0;
         }
 
         .section-count-tag {
-          font-size: 9.5px;
+          font-size: 10px;
           color: #64748b;
+          background: rgba(255, 255, 255, 0.04);
+          padding: 2px 6px;
+          border-radius: 4px;
         }
 
         .add-rule-btn {
           display: inline-flex;
           align-items: center;
-          justify-content: center;
-          gap: 4px;
+          gap: 5px;
           background: #141c2c;
-          border: 1px solid #1f2b42;
+          border: 1px solid #223048;
           color: #8fa0b5;
-          font-size: 10.5px;
+          font-size: 11px;
           font-weight: 600;
-          padding: 0 8px;
-          height: 24px;
-          border-radius: 4px;
+          padding: 0 10px;
+          height: 26px;
+          border-radius: 5px;
           cursor: pointer;
           transition: all 0.12s ease;
-          box-sizing: border-box;
         }
 
         .add-rule-btn:hover {
           background: #1c263c;
           color: #ffffff;
+          border-color: #2e3e5c;
         }
 
         .directives-items-list {
           display: flex;
           flex-direction: column;
-          gap: 6px;
+          gap: 8px;
         }
 
         /* Clean Directive Row */
         .clean-directive-row {
           display: flex;
           align-items: flex-start;
-          gap: 10px;
-          padding: 8px 10px;
+          gap: 12px;
+          padding: 10px 12px;
           border-radius: 6px;
-          background: #0d121f;
-          border: 1px solid #172134;
-          transition: all 0.1s ease;
+          background: #090d16;
+          border: 1px solid #182236;
+          transition: all 0.12s ease;
         }
 
         .clean-directive-row:hover {
-          background: #111828;
-          border-color: #233148;
+          background: #0e1422;
+          border-color: #25334d;
         }
 
         .clean-directive-row.disabled {
@@ -1955,10 +2216,10 @@ export const RulesBuilderView: React.FC<RulesBuilderViewProps> = ({
         }
 
         .clean-toggle-checkbox {
-          width: 14px;
-          height: 14px;
-          border-radius: 3px;
-          background: transparent;
+          width: 16px;
+          height: 16px;
+          border-radius: 4px;
+          background: #111726;
           border: 1px solid #2d3d58;
           display: flex;
           align-items: center;
@@ -1967,6 +2228,7 @@ export const RulesBuilderView: React.FC<RulesBuilderViewProps> = ({
           margin-top: 2px;
           flex-shrink: 0;
           color: transparent;
+          transition: all 0.12s ease;
         }
 
         .clean-toggle-checkbox.checked {
@@ -1978,7 +2240,7 @@ export const RulesBuilderView: React.FC<RulesBuilderViewProps> = ({
         .directive-text-area {
           flex: 1;
           font-size: 12px;
-          line-height: 1.5;
+          line-height: 1.55;
           cursor: pointer;
         }
 
@@ -1989,7 +2251,7 @@ export const RulesBuilderView: React.FC<RulesBuilderViewProps> = ({
 
         .directive-sep {
           color: #64748b;
-          margin-right: 5px;
+          margin: 0 5px;
         }
 
         .directive-body {
@@ -2016,7 +2278,7 @@ export const RulesBuilderView: React.FC<RulesBuilderViewProps> = ({
         .row-hover-actions {
           display: flex;
           align-items: center;
-          gap: 3px;
+          gap: 4px;
           opacity: 0;
           transition: opacity 0.12s ease;
         }
@@ -2026,8 +2288,8 @@ export const RulesBuilderView: React.FC<RulesBuilderViewProps> = ({
         }
 
         .row-tool-btn {
-          width: 22px;
-          height: 22px;
+          width: 24px;
+          height: 24px;
           display: inline-flex;
           align-items: center;
           justify-content: center;
@@ -2037,6 +2299,7 @@ export const RulesBuilderView: React.FC<RulesBuilderViewProps> = ({
           border-radius: 4px;
           cursor: pointer;
           padding: 0;
+          transition: all 0.1s ease;
         }
 
         .row-tool-btn:hover {
@@ -2047,174 +2310,205 @@ export const RulesBuilderView: React.FC<RulesBuilderViewProps> = ({
         .row-tool-btn.danger:hover {
           color: #f87171;
           background: rgba(239, 68, 68, 0.15);
+          border-color: rgba(239, 68, 68, 0.3);
         }
 
         /* Clean Directive Editor */
         .clean-directive-editor {
-          background: #141c2c;
+          background: #111827;
           border: 1px solid #7c3aed;
           border-radius: 6px;
-          padding: 10px;
+          padding: 12px;
           display: flex;
           flex-direction: column;
-          gap: 6px;
+          gap: 10px;
+          box-shadow: 0 4px 16px rgba(124, 58, 237, 0.15);
         }
 
-        .editor-row {
+        .editor-input-wrap {
           display: flex;
           align-items: center;
-          justify-content: space-between;
-          gap: 10px;
         }
 
         .editor-title-input {
-          flex: 1;
-          background: #0d121f;
+          width: 100%;
+          background: #090d16;
           border: 1px solid #28374f;
-          border-radius: 4px;
-          padding: 4px 8px;
+          border-radius: 5px;
+          padding: 6px 10px;
           color: #ffffff;
-          font-size: 11.5px;
+          font-size: 12px;
           font-weight: 600;
           outline: none;
+          transition: border-color 0.12s ease;
         }
 
         .editor-title-input:focus {
           border-color: #8b5cf6;
+          box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.2);
         }
 
-        .editor-actions {
+        .editor-content-textarea {
+          width: 100%;
+          background: #090d16;
+          border: 1px solid #28374f;
+          border-radius: 5px;
+          padding: 8px 10px;
+          color: #e2e8f0;
+          font-size: 12px;
+          line-height: 1.5;
+          resize: vertical;
+          outline: none;
+          box-sizing: border-box;
+          transition: border-color 0.12s ease;
+        }
+
+        .editor-content-textarea:focus {
+          border-color: #8b5cf6;
+          box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.2);
+        }
+
+        .editor-footer-actions {
           display: flex;
           align-items: center;
-          gap: 4px;
-        }
-
-        .editor-save-btn {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          gap: 3px;
-          background: #7c3aed;
-          border: 1px solid #7c3aed;
-          color: #ffffff;
-          font-size: 10.5px;
-          font-weight: 600;
-          padding: 0 8px;
-          height: 24px;
-          border-radius: 4px;
-          cursor: pointer;
-          box-sizing: border-box;
+          justify-content: flex-end;
+          gap: 8px;
         }
 
         .editor-cancel-btn {
           display: inline-flex;
           align-items: center;
-          justify-content: center;
+          gap: 6px;
           background: transparent;
           border: 1px solid #28374f;
-          color: #8fa0b5;
-          font-size: 10.5px;
+          color: #94a3b8;
+          font-size: 11px;
           font-weight: 500;
-          padding: 0 8px;
-          height: 24px;
-          border-radius: 4px;
+          padding: 0 10px;
+          height: 26px;
+          border-radius: 5px;
           cursor: pointer;
-          box-sizing: border-box;
+          transition: all 0.1s ease;
         }
 
-        .editor-content-textarea {
-          width: 100%;
-          background: #0d121f;
-          border: 1px solid #28374f;
-          border-radius: 4px;
-          padding: 6px 8px;
-          color: #e2e8f0;
-          font-size: 11.5px;
-          line-height: 1.45;
-          resize: vertical;
-          outline: none;
-          box-sizing: border-box;
+        .editor-cancel-btn:hover {
+          background: #1c2638;
+          color: #ffffff;
         }
 
-        .editor-content-textarea:focus {
-          border-color: #8b5cf6;
+        .editor-save-btn {
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          background: #7c3aed;
+          border: 1px solid #7c3aed;
+          color: #ffffff;
+          font-size: 11px;
+          font-weight: 600;
+          padding: 0 12px;
+          height: 26px;
+          border-radius: 5px;
+          cursor: pointer;
+          transition: all 0.12s ease;
+        }
+
+        .editor-save-btn:hover {
+          background: #6d28d9;
+          border-color: #6d28d9;
         }
 
         .empty-section-row {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          padding: 8px 10px;
+          padding: 8px 12px;
           color: #64748b;
-          font-size: 11px;
-          background: rgba(0, 0, 0, 0.1);
-          border-radius: 4px;
+          font-size: 11.5px;
+          background: rgba(0, 0, 0, 0.15);
+          border-radius: 5px;
+          border: 1px dashed #1c2638;
         }
 
         .empty-add-action {
           background: transparent;
           border: none;
-          color: #a78bfa;
+          color: #c084fc;
           font-size: 11px;
           font-weight: 600;
           cursor: pointer;
         }
 
-        .clean-empty-state {
-          padding: 60px 20px;
-          text-align: center;
+        .empty-add-action:hover {
+          text-decoration: underline;
+        }
+
+        /* Clean Loading & Empty States */
+        .clean-loading-state {
           display: flex;
           flex-direction: column;
           align-items: center;
-          gap: 10px;
-          background: #0b0f19;
-          border: 1px dashed #1c2638;
-          border-radius: 8px;
-          color: #64748b;
+          justify-content: center;
+          gap: 12px;
+          padding: 60px 20px;
+          color: #8fa0b5;
           font-size: 12px;
         }
 
-        .clean-empty-state .empty-shield-icon {
-          color: #475569;
-          margin-bottom: 2px;
+        .clean-empty-state {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 12px;
+          padding: 60px 20px;
+          text-align: center;
+          background: #0f1523;
+          border: 1px dashed #1c2638;
+          border-radius: 8px;
         }
 
-        .clean-empty-state .empty-heading {
+        .empty-shield-icon {
+          color: #7c3aed;
+          opacity: 0.7;
+        }
+
+        .empty-heading {
           font-size: 14px;
-          font-weight: 600;
-          color: #e2e8f0;
+          font-weight: 700;
+          color: #f1f5f9;
           margin: 0;
         }
 
-        .clean-empty-state .empty-sub {
-          font-size: 11.5px;
+        .empty-sub {
+          font-size: 12px;
           color: #64748b;
           max-width: 440px;
           margin: 0;
           line-height: 1.5;
         }
 
-        .clean-empty-state .empty-actions-row {
+        .empty-actions-row {
           display: flex;
           align-items: center;
           gap: 8px;
           margin-top: 6px;
         }
 
-        /* Split Markdown */
+        /* Split Markdown Mode */
         .clean-split-editor {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
+          display: flex;
           gap: 12px;
-          min-height: 520px;
+          min-height: 480px;
+          width: 100%;
         }
 
         .editor-half, .preview-half {
-          background: #111726;
-          border: 1px solid #1c2638;
-          border-radius: 8px;
+          flex: 1;
           display: flex;
           flex-direction: column;
+          background: #0f1523;
+          border: 1px solid #1c2638;
+          border-radius: 8px;
           overflow: hidden;
         }
 
@@ -2222,113 +2516,96 @@ export const RulesBuilderView: React.FC<RulesBuilderViewProps> = ({
           display: flex;
           align-items: center;
           justify-content: space-between;
-          padding: 6px 12px;
-          background: #0d121f;
+          padding: 8px 12px;
+          background: #0b0f19;
           border-bottom: 1px solid #1c2638;
-          font-size: 10.5px;
+          font-size: 10px;
+          font-weight: 700;
         }
 
         .split-textarea {
           flex: 1;
           width: 100%;
-          min-height: 480px;
-          background: #090d16;
+          min-height: 420px;
+          background: transparent;
           border: none;
           padding: 12px;
           color: #e2e8f0;
-          font-size: 11.5px;
+          font-size: 12px;
           line-height: 1.6;
           resize: none;
           outline: none;
-          box-sizing: border-box;
         }
 
         .split-preview-body {
           flex: 1;
-          padding: 14px;
+          padding: 12px;
           overflow-y: auto;
-          background: #0a0e18;
-          display: flex;
-          flex-direction: column;
-          gap: 6px;
+          color: #cbd5e1;
+          font-size: 12px;
+          line-height: 1.6;
         }
 
-
-
-        /* Preset Modal */
-        @keyframes modalOverlayFadeIn {
-          0% { opacity: 0; }
-          100% { opacity: 1; }
-        }
-        @keyframes modalOverlayFadeOut {
-          0% { opacity: 1; }
-          100% { opacity: 0; }
-        }
-        @keyframes modalCardScaleIn {
-          0% {
-            opacity: 0;
-            transform: translate3d(0, 22px, 0) scale(0.95);
-          }
-          100% {
-            opacity: 1;
-            transform: translate3d(0, 0, 0) scale(1);
-          }
-        }
-        @keyframes modalCardScaleOut {
-          0% {
-            opacity: 1;
-            transform: translate3d(0, 0, 0) scale(1);
-          }
-          100% {
-            opacity: 0;
-            transform: translate3d(0, 14px, 0) scale(0.96);
-          }
-        }
-
+        /* Presets Modal */
         .preset-backdrop {
           position: fixed;
-          top: 0; left: 0; right: 0; bottom: 0;
-          background: rgba(3, 7, 18, 0.82);
-          backdrop-filter: blur(8px);
-          -webkit-backdrop-filter: blur(8px);
+          inset: 0;
+          background: rgba(0, 0, 0, 0.7);
+          backdrop-filter: blur(4px);
           display: flex;
           align-items: center;
           justify-content: center;
-          z-index: 9999;
-          padding: 24px;
-          animation: modalOverlayFadeIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+          z-index: 1000;
+          animation: modalFadeIn 0.15s ease-out forwards;
         }
 
         .preset-backdrop.is-closing {
-          animation: modalOverlayFadeOut 0.16s cubic-bezier(0.4, 0, 1, 1) forwards !important;
-          pointer-events: none !important;
+          animation: modalFadeOut 0.14s ease-in forwards;
+        }
+
+        @keyframes modalFadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+
+        @keyframes modalFadeOut {
+          from { opacity: 1; }
+          to { opacity: 0; }
         }
 
         .preset-dialog {
-          width: 100%;
-          max-width: 720px;
-          max-height: 80vh;
+          width: 640px;
+          max-width: 90vw;
+          max-height: 82vh;
           background: #0f1523;
-          border: 1px solid #1c2638;
+          border: 1px solid #233148;
           border-radius: 10px;
           display: flex;
           flex-direction: column;
+          box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7);
+          animation: modalZoomIn 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
           overflow: hidden;
-          box-shadow: 0 20px 50px rgba(0, 0, 0, 0.85);
-          animation: modalCardScaleIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
         }
 
         .preset-dialog.is-closing {
-          animation: modalCardScaleOut 0.16s cubic-bezier(0.4, 0, 1, 1) forwards !important;
-          pointer-events: none !important;
+          animation: modalZoomOut 0.14s ease-in forwards;
+        }
+
+        @keyframes modalZoomIn {
+          from { transform: scale(0.96); opacity: 0; }
+          to { transform: scale(1); opacity: 1; }
+        }
+
+        @keyframes modalZoomOut {
+          from { transform: scale(1); opacity: 1; }
+          to { transform: scale(0.96); opacity: 0; }
         }
 
         .dialog-header {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          padding: 12px 18px;
-          background: #111726;
+          padding: 14px 18px;
           border-bottom: 1px solid #1c2638;
         }
 
@@ -2341,46 +2618,39 @@ export const RulesBuilderView: React.FC<RulesBuilderViewProps> = ({
         .dialog-title {
           font-size: 14px;
           font-weight: 700;
-          color: #f8fafc;
+          color: #ffffff;
           margin: 0;
         }
 
         .dialog-close-btn {
-          border: none;
           background: transparent;
+          border: none;
           color: #64748b;
           cursor: pointer;
+          padding: 4px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 4px;
         }
 
         .dialog-close-btn:hover {
           color: #ffffff;
+          background: #1c2638;
         }
 
         .dialog-filters {
           display: flex;
           align-items: center;
-          justify-content: space-between;
-          padding: 8px 16px;
-          background: #0b101c;
-          border-bottom: 1px solid #162032;
-          gap: 10px;
+          gap: 8px;
+          padding: 10px 18px;
+          background: #0b0f19;
+          border-bottom: 1px solid #1c2638;
         }
 
         .dialog-search {
           position: relative;
           flex: 1;
-        }
-
-        .dialog-search input {
-          width: 100%;
-          background: #141c2c;
-          border: 1px solid #1f2b42;
-          border-radius: 4px;
-          padding: 4px 10px 4px 26px;
-          color: #ffffff;
-          font-size: 11px;
-          outline: none;
-          box-sizing: border-box;
         }
 
         .dialog-search .search-icon {
@@ -2391,133 +2661,91 @@ export const RulesBuilderView: React.FC<RulesBuilderViewProps> = ({
           color: #64748b;
         }
 
-        /* Category Filter Dropdown */
+        .dialog-search input {
+          width: 100%;
+          background: #111726;
+          border: 1px solid #1c2638;
+          border-radius: 5px;
+          padding: 5px 10px 5px 26px;
+          color: #cbd5e1;
+          font-size: 11.5px;
+          outline: none;
+        }
+
+        .dialog-search input:focus {
+          border-color: #7c3aed;
+        }
+
         .dialog-category-dropdown-wrap {
           position: relative;
-          flex-shrink: 0;
         }
 
         .category-dropdown-trigger {
-          height: 28px;
-          padding: 0 10px;
           display: inline-flex;
           align-items: center;
           gap: 6px;
-          background: #141c2c;
-          border: 1px solid #1f2b42;
+          background: #111726;
+          border: 1px solid #1c2638;
           border-radius: 5px;
-          color: #8fa0b5;
+          padding: 0 10px;
+          height: 28px;
+          color: #94a3b8;
           font-size: 11px;
           font-weight: 500;
           cursor: pointer;
-          transition: all 0.15s ease;
-          box-sizing: border-box;
         }
 
-        .category-dropdown-trigger:hover,
-        .category-dropdown-trigger.open {
-          background: #192338;
-          border-color: #6366f1;
-          color: #f1f5f9;
-        }
-
+        .category-dropdown-trigger.open,
         .category-dropdown-trigger.active {
-          color: #cbd5e1;
-          border-color: #4338ca;
+          color: #ffffff;
+          border-color: #7c3aed;
         }
 
-        .category-dropdown-trigger .filter-icon {
-          color: #818cf8;
-          flex-shrink: 0;
-        }
-
-        .category-dropdown-trigger .category-trigger-text {
-          white-space: nowrap;
-        }
-
-        .category-dropdown-trigger .chevron-icon {
-          color: #64748b;
-          transition: transform 0.15s ease;
-          flex-shrink: 0;
-        }
-
-        .category-dropdown-trigger .chevron-icon.open {
-          transform: rotate(180deg);
+        .filter-icon {
+          color: #c084fc;
         }
 
         .dialog-category-menu {
           position: absolute;
           top: calc(100% + 4px);
           right: 0;
-          width: 190px;
-          background: #0d1322;
-          border: 1px solid #1f2b42;
+          width: 180px;
+          background: #0f1523;
+          border: 1px solid #223048;
           border-radius: 6px;
-          padding: 5px;
-          box-shadow: 0 12px 32px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.05);
-          z-index: 1000;
-          display: flex;
-          flex-direction: column;
-          gap: 2px;
-        }
-
-        .dialog-category-menu .menu-header {
-          padding: 4px 8px;
-          font-size: 9.5px;
-          font-weight: 700;
-          letter-spacing: 0.05em;
-          color: #64748b;
-          border-bottom: 1px solid #162032;
-          margin-bottom: 3px;
+          padding: 4px;
+          z-index: 100;
+          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
         }
 
         .category-menu-item {
+          width: 100%;
           display: flex;
           align-items: center;
-          gap: 6px;
-          padding: 6px 8px;
-          border-radius: 4px;
-          background: transparent;
+          justify-content: space-between;
+          padding: 5px 8px;
           border: none;
-          color: #94a3b8;
+          background: transparent;
+          color: #8fa0b5;
           font-size: 11px;
+          border-radius: 4px;
           cursor: pointer;
-          transition: all 0.12s ease;
-          text-align: left;
-          width: 100%;
-          box-sizing: border-box;
         }
 
         .category-menu-item:hover {
-          background: #172238;
-          color: #f1f5f9;
+          background: #162034;
+          color: #ffffff;
         }
 
         .category-menu-item.active {
-          background: rgba(99, 102, 241, 0.12);
-          color: #c084fc;
+          background: rgba(124, 58, 237, 0.15);
+          color: #ffffff;
           font-weight: 600;
-        }
-
-        .category-item-label {
-          flex: 1;
         }
 
         .category-item-count {
           font-size: 9.5px;
           color: #64748b;
-          background: #090d16;
-          padding: 1px 5px;
-          border-radius: 3px;
-        }
-
-        .category-menu-item.active .category-item-count {
-          color: #a78bfa;
-          background: rgba(124, 58, 237, 0.2);
-        }
-
-        .category-check {
-          flex-shrink: 0;
         }
 
         .dialog-cards-list {
@@ -2526,14 +2754,17 @@ export const RulesBuilderView: React.FC<RulesBuilderViewProps> = ({
           padding: 14px 18px;
           display: flex;
           flex-direction: column;
-          gap: 10px;
+          gap: 12px;
         }
 
         .preset-card {
           background: #111726;
           border: 1px solid #1c2638;
-          border-radius: 6px;
-          padding: 10px 12px;
+          border-radius: 7px;
+          padding: 12px;
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
         }
 
         .preset-card-top {
@@ -2541,86 +2772,123 @@ export const RulesBuilderView: React.FC<RulesBuilderViewProps> = ({
           align-items: flex-start;
           justify-content: space-between;
           gap: 10px;
-          margin-bottom: 6px;
         }
 
-        .preset-cat-tag {
-          font-size: 8.5px;
+        .preset-card-title {
+          font-size: 12.5px;
           font-weight: 700;
-          color: #c084fc;
-          background: rgba(168, 85, 247, 0.1);
-          padding: 1px 4px;
-          border-radius: 2px;
-          display: inline-block;
-          padding: 1.5px 5px;
-          border-radius: 3px;
-          background: rgba(255, 255, 255, 0.05);
-          color: #8fa0b5;
-          border: 1px solid rgba(255, 255, 255, 0.08);
-        }
-
-        .preset-desc {
-          font-size: 11px;
-          color: #8899ac;
+          color: #f1f5f9;
           margin: 0;
         }
 
-        .inject-btn {
-          display: inline-flex;
-          align-items: center;
-          gap: 4px;
-          padding: 4px 10px;
-          background: #141c2c;
-          border: 1px solid #223048;
-          color: #e2e8f0;
-          border-radius: 4px;
-          font-size: 10.5px;
-          font-weight: 600;
-          cursor: pointer;
-          flex-shrink: 0;
-          transition: all 0.12s ease;
+        .preset-card-summary {
+          font-size: 11px;
+          color: #728298;
+          margin: 3px 0 0;
+          line-height: 1.4;
         }
 
-        .inject-btn:hover {
-          background: linear-gradient(135deg, #5b21b6, #4c1d95);
-          border-color: rgba(124, 58, 237, 0.35);
-          color: #ffffff;
-          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3), 0 0 6px rgba(109, 40, 217, 0.2);
+        .preset-cat-badge {
+          font-size: 9.5px;
+          background: rgba(124, 58, 237, 0.12);
+          border: 1px solid rgba(124, 58, 237, 0.3);
+          color: #c084fc;
+          padding: 2px 6px;
+          border-radius: 4px;
+          white-space: nowrap;
         }
 
-        .preset-preview {
-          background: rgba(0, 0, 0, 0.2);
-          border-radius: 4px;
-          padding: 6px 8px;
+        .preset-card-preview {
+          background: #0b0f19;
+          border: 1px solid #172134;
+          border-radius: 5px;
+          padding: 8px 10px;
           display: flex;
           flex-direction: column;
-          gap: 2px;
+          gap: 4px;
         }
 
-        .preview-line {
-          font-size: 9.5px;
+        .preview-rule {
           display: flex;
-          gap: 5px;
-        }
-
-        .line-bold {
-          color: #cbd5e1;
-          font-weight: 700;
-          flex-shrink: 0;
-        }
-
-        .line-desc {
-          color: #8fa0b5;
+          align-items: center;
+          gap: 6px;
+          font-size: 10.5px;
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
         }
 
-        .spin {
-          animation: spin 1s linear infinite;
+        .rule-dot {
+          width: 4px;
+          height: 4px;
+          border-radius: 50%;
+          background: #7c3aed;
+          flex-shrink: 0;
         }
 
-        @keyframes spin {
+        .rule-t {
+          font-weight: 700;
+          color: #cbd5e1;
+        }
+
+        .rule-c {
+          color: #64748b;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .preview-more {
+          font-size: 9.5px;
+          color: #64748b;
+          padding-top: 2px;
+        }
+
+        .preset-card-footer {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding-top: 4px;
+        }
+
+        .preset-rules-count {
+          font-size: 10.5px;
+          color: #64748b;
+        }
+
+        .inject-preset-btn {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          background: #7c3aed;
+          border: 1px solid #7c3aed;
+          color: #ffffff;
+          font-size: 11px;
+          font-weight: 600;
+          padding: 0 10px;
+          height: 24px;
+          border-radius: 4px;
+          cursor: pointer;
+          transition: all 0.12s ease;
+        }
+
+        .inject-preset-btn:hover {
+          background: #6d28d9;
+          border-color: #6d28d9;
+        }
+
+        .dialog-empty {
+          text-align: center;
+          padding: 40px 10px;
+          color: #64748b;
+          font-size: 12px;
+        }
+
+        .spin {
+          animation: spinAnimation 1s linear infinite;
+        }
+
+        @keyframes spinAnimation {
           from { transform: rotate(0deg); }
           to { transform: rotate(360deg); }
         }
