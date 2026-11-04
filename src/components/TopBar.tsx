@@ -19,6 +19,7 @@ import { AgentSelectorDropdown } from './AgentSelectorDropdown';
 import { NavTab } from './Sidebar';
 import { AGENT_ICON_MAP } from './AgentIcon';
 import { Tooltip } from './Tooltip';
+import appLogo from '../assets/icon.png';
 
 interface TopBarProps {
   currentEnv?: string;
@@ -526,7 +527,7 @@ const TopBarComponent: React.FC<TopBarProps> = ({
           onClick={() => onNavigateTab && onNavigateTab('overview')}
           title="AgentForge Dashboard Overview"
         >
-          <img src="/icon.png" alt="AgentForge Logo" className="brand-logo-img" />
+          <img src={appLogo} alt="AgentForge Logo" className="brand-logo-img" />
           <span className="brand-name">AgentForge</span>
         </div>
 

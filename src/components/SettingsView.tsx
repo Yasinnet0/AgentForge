@@ -16,6 +16,7 @@ import { useToast } from '../context/ToastContext';
 import { clearActivities, getActivities } from '../services/activityLogger';
 import { SupportedAgent } from '../types/agent';
 import { INITIAL_SUPPORTED_AGENTS } from '../config/supportedAgents';
+import appLogo from '../assets/icon.png';
 
 export interface SettingsViewProps {
   onNavigate?: (tab: NavTab) => void;
@@ -546,7 +547,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         <div className="about-top-row">
           <div className="about-brand-wrap">
             <div className="about-logo-box">
-              <img src="/icon.png" alt="AgentForge Logo" className="about-logo-img" />
+              <img src={appLogo} alt="AgentForge Logo" className="about-logo-img" />
             </div>
             <div>
               <div className="about-title-row">

@@ -119,28 +119,36 @@ function saveWindowState(win: BrowserWindow) {
 }
 
 function getAppIconPath(): string {
-  if (process.platform === 'win32') {
-    const icoCandidates = [
-      path.join(__dirname, '../build/icon.ico'),
-      path.join(__dirname, '../public/icon.ico'),
-      path.join(__dirname, '../dist/icon.ico'),
-      path.join(__dirname, 'icon.ico'),
-    ];
-    for (const c of icoCandidates) {
-      if (fs.existsSync(c)) return c;
-    }
+  const isWin = process.platform === 'win32';
+  const iconName = isWin ? 'icon.ico' : 'icon.png';
+  const fallbackPng = 'icon.png';
+
+  const searchDirs = [
+    process.resourcesPath,
+    path.join(process.resourcesPath, 'build'),
+    app.getAppPath(),
+    path.join(app.getAppPath(), 'build'),
+    path.join(app.getAppPath(), 'dist'),
+    path.join(app.getAppPath(), 'public'),
+    __dirname,
+    path.join(__dirname, '..'),
+    path.join(__dirname, '../build'),
+    path.join(__dirname, '../public'),
+    path.join(__dirname, '../dist'),
+  ];
+
+  for (const dir of searchDirs) {
+    if (!dir) continue;
+    const fullPath = path.join(dir, iconName);
+    if (fs.existsSync(fullPath)) return fullPath;
   }
 
-  const pngCandidates = [
-    path.join(__dirname, '../build/icon.png'),
-    path.join(__dirname, '../public/icon.png'),
-    path.join(__dirname, '../dist/icon.png'),
-    path.join(__dirname, '../AgentForge.png'),
-    path.join(__dirname, 'icon.png'),
-  ];
-  for (const c of pngCandidates) {
-    if (fs.existsSync(c)) return c;
+  for (const dir of searchDirs) {
+    if (!dir) continue;
+    const fullPath = path.join(dir, fallbackPng);
+    if (fs.existsSync(fullPath)) return fullPath;
   }
+
   return '';
 }
 
