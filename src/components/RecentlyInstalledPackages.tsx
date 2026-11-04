@@ -19,6 +19,7 @@ import {
   Server,
   Globe,
   RotateCcw,
+  Terminal,
 } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
 import { SupportedAgent } from '../types/agent';
@@ -105,6 +106,7 @@ export const RecentlyInstalledPackagesComponent: React.FC<RecentlyInstalledPacka
   const activePackageForDetails = selectedPackageForDetails || lastSelectedPkgRef.current;
 
   const [copiedPathId, setCopiedPathId] = useState<string | null>(null);
+  const [copiedCmdId, setCopiedCmdId] = useState<string | null>(null);
   const [isUninstalling, setIsUninstalling] = useState<string | null>(null);
   const [isReinstalling, setIsReinstalling] = useState<string | null>(null);
   const [confirmUninstallId, setConfirmUninstallId] = useState<string | null>(null);
@@ -270,6 +272,18 @@ export const RecentlyInstalledPackagesComponent: React.FC<RecentlyInstalledPacka
       toast.success('Path copied to clipboard');
       setTimeout(() => setCopiedPathId(null), 2500);
     } catch (err: any) {
+      toast.error('Failed to copy to clipboard');
+    }
+  };
+
+  const handleCopyCommand = async (id: string, text: string) => {
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedCmdId(id);
+      toast.success('Command copied to clipboard');
+      setTimeout(() => setCopiedCmdId(null), 2500);
+    } catch {
       toast.error('Failed to copy to clipboard');
     }
   };
@@ -969,9 +983,17 @@ export const RecentlyInstalledPackagesComponent: React.FC<RecentlyInstalledPacka
             {/* Modal Header */}
             <div className="pkg-modal-header">
               <div className="pkg-modal-title-area">
-                <div className={`pkg-modal-icon-wrap ${activePackageForDetails.rawType === 'mcp' || activePackageForDetails.type === 'MCP SERVER' ? 'mcp' : activePackageForDetails.rawType === 'plugin' || activePackageForDetails.type === 'PLUGIN' || (activePackageForDetails.type as string) === 'SKILL BUNDLE' ? 'plugin' : 'skill'}`}>
+                <div
+                  className={`pkg-modal-icon-wrap ${
+                    activePackageForDetails.rawType === 'mcp' || activePackageForDetails.type === 'MCP SERVER'
+                      ? 'mcp'
+                      : activePackageForDetails.rawType === 'plugin' || activePackageForDetails.type === 'PLUGIN' || (activePackageForDetails.type as string) === 'SKILL BUNDLE'
+                      ? 'plugin'
+                      : 'skill'
+                  }`}
+                >
                   {activePackageForDetails.rawType === 'mcp' || activePackageForDetails.type === 'MCP SERVER' ? (
-                    <Server size={20} />
+                    activePackageForDetails.transport === 'sse' ? <Globe size={20} /> : <Server size={20} />
                   ) : activePackageForDetails.rawType === 'plugin' || activePackageForDetails.type === 'PLUGIN' || (activePackageForDetails.type as string) === 'SKILL BUNDLE' ? (
                     <Boxes size={20} />
                   ) : (
@@ -981,7 +1003,9 @@ export const RecentlyInstalledPackagesComponent: React.FC<RecentlyInstalledPacka
                 <div className="pkg-modal-title-content">
                   <div className="pkg-modal-title-row">
                     <h3 className="pkg-modal-title">{activePackageForDetails.name}</h3>
-                    <span className="pkg-version-tag font-mono">{activePackageForDetails.version}</span>
+                    <span className="pkg-version-tag font-mono">
+                      {activePackageForDetails.version?.startsWith('v') ? activePackageForDetails.version : `v${activePackageForDetails.version || '1.0.0'}`}
+                    </span>
                   </div>
                   <div className="pkg-modal-subtitle">
                     {(() => {
@@ -989,12 +1013,13 @@ export const RecentlyInstalledPackagesComponent: React.FC<RecentlyInstalledPacka
                       const isModalPlugin = activePackageForDetails.rawType === 'plugin' || activePackageForDetails.type === 'PLUGIN' || (activePackageForDetails.type as string) === 'SKILL BUNDLE';
                       return (
                         <span
-                          className={`badge ${isModalMcp
+                          className={`badge ${
+                            isModalMcp
                               ? 'badge-cyan'
                               : isModalPlugin
-                                ? 'badge-amber'
-                                : 'badge-purple'
-                            } font-mono`}
+                              ? 'badge-amber'
+                              : 'badge-purple'
+                          } font-mono`}
                         >
                           {isModalMcp ? 'MCP SERVER' : isModalPlugin ? 'PLUGIN' : 'SKILL'}
                         </span>
@@ -1004,25 +1029,14 @@ export const RecentlyInstalledPackagesComponent: React.FC<RecentlyInstalledPacka
                       <span className="status-dot installed" />
                       <span>INSTALLED</span>
                     </span>
-                    {activePackageForDetails.sourceAgentName ? (
-                      <span className="agent-modal-pill font-mono" style={{ borderColor: `${activePackageForDetails.sourceAgentColor || '#818cf8'}40`, background: `${activePackageForDetails.sourceAgentColor || '#818cf8'}10`, color: '#f1f5f9' }}>
-                        <span
-                          className="agent-color-dot"
-                          style={{
-                            background: activePackageForDetails.sourceAgentColor || '#818cf8',
-                            boxShadow: `0 0 6px ${activePackageForDetails.sourceAgentColor || '#818cf8'}88`
-                          }}
-                        />
-                        <span>{activePackageForDetails.sourceAgentName}</span>
-                      </span>
-                    ) : (
-                      <span className="agent-modal-pill font-mono" style={{ borderColor: 'rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#94a3b8' }}>
-                        <span>Global Workspace</span>
-                      </span>
-                    )}
                     {activePackageForDetails.source && (
                       <span className="source-registry-pill font-mono">
                         {activePackageForDetails.source}
+                      </span>
+                    )}
+                    {activePackageForDetails.author && (
+                      <span className="author-text font-mono">
+                        <span>by {activePackageForDetails.author}</span>
                       </span>
                     )}
                   </div>
@@ -1041,6 +1055,7 @@ export const RecentlyInstalledPackagesComponent: React.FC<RecentlyInstalledPacka
 
             {/* Modal Body */}
             <div className="pkg-modal-body">
+              {/* Description Card */}
               {activePackageForDetails.description && (
                 <div className="detail-section">
                   <div className="detail-label-row">
@@ -1052,15 +1067,59 @@ export const RecentlyInstalledPackagesComponent: React.FC<RecentlyInstalledPacka
                 </div>
               )}
 
-              {/* Location on Disk */}
+              {/* For MCP Servers: Command / Endpoint URL */}
+              {(activePackageForDetails.rawType === 'mcp' || activePackageForDetails.type === 'MCP SERVER') &&
+                (activePackageForDetails.command || activePackageForDetails.url) && (
+                  <div className="detail-section">
+                    <div className="detail-label-row">
+                      <span className="detail-label">
+                        {activePackageForDetails.transport === 'sse' ? 'SSE ENDPOINT URL' : 'COMMAND & ARGUMENTS'}
+                      </span>
+                      <button
+                        className="copy-path-btn font-mono"
+                        onClick={() => {
+                          const cmd = activePackageForDetails.transport === 'sse'
+                            ? (activePackageForDetails.url || '')
+                            : `${activePackageForDetails.command || ''} ${(activePackageForDetails.args || []).join(' ')}`.trim();
+                          handleCopyCommand(`modal-${activePackageForDetails.id}`, cmd);
+                        }}
+                        title="Copy command to clipboard"
+                      >
+                        {copiedCmdId === `modal-${activePackageForDetails.id}` ? (
+                          <>
+                            <Check size={11} className="text-emerald" />
+                            <span>Copied</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy size={11} />
+                            <span>Copy Command</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                    <div className="detail-path-card">
+                      <Terminal size={13} className="detail-path-icon" />
+                      <span className="detail-path-text font-mono">
+                        {activePackageForDetails.transport === 'sse'
+                          ? activePackageForDetails.url
+                          : `${activePackageForDetails.command || ''} ${(activePackageForDetails.args || []).join(' ')}`.trim()}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+              {/* Location on Disk / Config Path */}
               {resolvePackagePath(activePackageForDetails) && (
                 <div className="detail-section">
                   <div className="detail-label-row">
-                    <span className="detail-label">LOCATION ON DISK</span>
+                    <span className="detail-label">
+                      {activePackageForDetails.rawType === 'mcp' ? 'CONFIGURATION PATH' : 'LOCATION ON DISK'}
+                    </span>
                     <button
                       className="copy-path-btn font-mono"
                       onClick={() => handleCopyPath(activePackageForDetails)}
-                      title="Copy package path"
+                      title="Copy filesystem path"
                     >
                       {copiedPathId === activePackageForDetails.id ? (
                         <>
@@ -1084,40 +1143,83 @@ export const RecentlyInstalledPackagesComponent: React.FC<RecentlyInstalledPacka
                 </div>
               )}
 
+              {/* Host Agent Section */}
+              <div className="detail-section">
+                <div className="detail-label-row">
+                  <span className="detail-label">EQUIPPED HOST AGENT</span>
+                </div>
+                <div className="detail-agents-list">
+                  {(() => {
+                    const agentId = activePackageForDetails.sourceAgentId || '';
+                    const HostAgentIcon = AGENT_ICON_MAP[agentId] || AGENT_ICON_MAP[activePackageForDetails.sourceAgentIcon || ''] || Bot;
+                    const agentColor = activePackageForDetails.sourceAgentColor || '#818cf8';
+                    const agentName = activePackageForDetails.sourceAgentName || 'Global Workspace';
+                    return (
+                      <div
+                        className="agent-modal-pill font-mono"
+                        style={{
+                          borderColor: `${agentColor}40`,
+                          background: `${agentColor}12`,
+                        }}
+                      >
+                        <HostAgentIcon size={12} style={{ color: agentColor }} />
+                        <span className="agent-modal-pill-name">{agentName}</span>
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
+
               {/* Metadata Grid */}
               <div className="detail-meta-grid">
                 <div className="meta-card">
-                  <div className="meta-k">HOST AGENT</div>
-                  <div className="meta-v">{activePackageForDetails.sourceAgentName || 'Global'}</div>
+                  <div className="meta-k">PACKAGE TYPE</div>
+                  <div className="meta-v">
+                    {activePackageForDetails.rawType === 'mcp' || activePackageForDetails.type === 'MCP SERVER'
+                      ? 'MCP Server'
+                      : activePackageForDetails.rawType === 'plugin' || activePackageForDetails.type === 'PLUGIN'
+                      ? 'Capability Plugin'
+                      : 'Skill Package'}
+                  </div>
                 </div>
                 <div className="meta-card">
                   <div className="meta-k">ORIGIN</div>
-                  <div className="meta-v font-mono">{activePackageForDetails.source}</div>
+                  <div className="meta-v font-mono">{activePackageForDetails.source || 'LOCAL'}</div>
                 </div>
-                {activePackageForDetails.transport && (
-                  <div className="meta-card">
-                    <div className="meta-k">TRANSPORT</div>
-                    <div className="meta-v font-mono">{activePackageForDetails.transport.toUpperCase()}</div>
+                <div className="meta-card">
+                  <div className="meta-k">INSTALLED</div>
+                  <div className="meta-v">{activePackageForDetails.installedDate || 'Active'}</div>
+                </div>
+                <div className="meta-card">
+                  <div className="meta-k">
+                    {activePackageForDetails.rawType === 'mcp' ? 'TRANSPORT' : 'RUNTIME'}
                   </div>
-                )}
-                {activePackageForDetails.skillsCount !== undefined && (
-                  <div className="meta-card">
-                    <div className="meta-k">BUNDLED SKILLS</div>
-                    <div className="meta-v">{activePackageForDetails.skillsCount} skills</div>
+                  <div className="meta-v font-mono">
+                    {activePackageForDetails.rawType === 'mcp'
+                      ? (activePackageForDetails.transport || 'stdio').toUpperCase()
+                      : 'NODE.JS'}
                   </div>
-                )}
-                {activePackageForDetails.author && (
-                  <div className="meta-card">
-                    <div className="meta-k">AUTHOR</div>
-                    <div className="meta-v">{activePackageForDetails.author}</div>
+                </div>
+                <div className="meta-card">
+                  <div className="meta-k">AUTHOR</div>
+                  <div className="meta-v">{activePackageForDetails.author || 'Community / Open Source'}</div>
+                </div>
+                <div className="meta-card">
+                  <div className="meta-k">
+                    {activePackageForDetails.skillsCount !== undefined
+                      ? 'BUNDLED SKILLS'
+                      : activePackageForDetails.hasScripts !== undefined
+                      ? 'HELPER SCRIPTS'
+                      : 'STATUS'}
                   </div>
-                )}
-                {activePackageForDetails.hasScripts !== undefined && (
-                  <div className="meta-card">
-                    <div className="meta-k">HELPER SCRIPTS</div>
-                    <div className="meta-v">{activePackageForDetails.hasScripts ? 'Available' : 'None'}</div>
+                  <div className="meta-v">
+                    {activePackageForDetails.skillsCount !== undefined
+                      ? `${activePackageForDetails.skillsCount} skills`
+                      : activePackageForDetails.hasScripts !== undefined
+                      ? (activePackageForDetails.hasScripts ? 'Available' : 'None')
+                      : 'Configured'}
                   </div>
-                )}
+                </div>
               </div>
             </div>
 
@@ -2278,7 +2380,7 @@ export const RecentlyInstalledPackagesComponent: React.FC<RecentlyInstalledPacka
           border: 1px solid rgba(255, 255, 255, 0.08);
           border-radius: 14px;
           width: 100%;
-          max-width: 720px;
+          max-width: 740px;
           min-width: 0;
           box-sizing: border-box;
           box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5), 0 25px 65px -12px rgba(0, 0, 0, 0.85), inset 0 1px 0 0 rgba(255, 255, 255, 0.1);
@@ -2356,24 +2458,24 @@ export const RecentlyInstalledPackagesComponent: React.FC<RecentlyInstalledPacka
         }
 
         .pkg-modal-icon-wrap.mcp {
-          background: linear-gradient(135deg, rgba(56, 189, 248, 0.22), rgba(14, 165, 233, 0.08));
+          background: rgba(56, 189, 248, 0.14);
           border: 1px solid rgba(56, 189, 248, 0.35);
           color: #38bdf8;
-          box-shadow: 0 0 18px rgba(56, 189, 248, 0.18);
+          box-shadow: 0 0 16px rgba(56, 189, 248, 0.15);
         }
 
         .pkg-modal-icon-wrap.plugin {
-          background: linear-gradient(135deg, rgba(245, 158, 11, 0.22), rgba(217, 119, 6, 0.08));
+          background: rgba(245, 158, 11, 0.14);
           border: 1px solid rgba(245, 158, 11, 0.35);
           color: #fbbf24;
-          box-shadow: 0 0 18px rgba(245, 158, 11, 0.18);
+          box-shadow: 0 0 16px rgba(245, 158, 11, 0.15);
         }
 
         .pkg-modal-icon-wrap.skill {
-          background: linear-gradient(135deg, rgba(168, 85, 247, 0.22), rgba(99, 102, 241, 0.08));
+          background: rgba(168, 85, 247, 0.14);
           border: 1px solid rgba(168, 85, 247, 0.35);
           color: #c084fc;
-          box-shadow: 0 0 18px rgba(168, 85, 247, 0.18);
+          box-shadow: 0 0 16px rgba(168, 85, 247, 0.15);
         }
 
         .pkg-modal-title-row {
@@ -2411,6 +2513,22 @@ export const RecentlyInstalledPackagesComponent: React.FC<RecentlyInstalledPacka
           gap: 8px;
           margin-top: 4px;
           flex-wrap: wrap;
+          min-width: 0;
+          max-width: 100%;
+        }
+
+        .author-text {
+          font-size: 10px;
+          color: #64748b;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          min-width: 0;
+          max-width: 320px;
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          line-height: 1.2;
         }
 
         .pkg-modal-close-btn {
@@ -2496,15 +2614,46 @@ export const RecentlyInstalledPackagesComponent: React.FC<RecentlyInstalledPacka
           background: rgba(255, 255, 255, 0.25);
         }
 
+        .detail-section {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+        }
+
+        .detail-label-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+        }
+
+        .detail-label {
+          font-size: 10px;
+          font-weight: 700;
+          letter-spacing: 0.08em;
+          color: #64748b;
+          font-family: var(--font-mono, monospace);
+        }
+
         .detail-desc-card {
           background: rgba(255, 255, 255, 0.02);
           border: 1px solid rgba(255, 255, 255, 0.05);
           border-radius: 9px;
           padding: 9px 13px;
+          max-height: 160px;
+          overflow-y: auto;
+        }
+
+        .detail-desc-card::-webkit-scrollbar {
+          width: 4px;
+        }
+
+        .detail-desc-card::-webkit-scrollbar-thumb {
+          background: rgba(255, 255, 255, 0.15);
+          border-radius: 4px;
         }
 
         .detail-description {
-          font-size: 13px;
+          font-size: 12.5px;
           line-height: 1.6;
           color: #cbd5e1;
           word-break: break-word;
@@ -2515,7 +2664,7 @@ export const RecentlyInstalledPackagesComponent: React.FC<RecentlyInstalledPacka
           background: #080c14;
           border: 1px solid rgba(255, 255, 255, 0.07);
           border-radius: 8px;
-          padding: 9px 12px;
+          padding: 8px 12px;
           display: flex;
           align-items: center;
           gap: 8px;
@@ -2556,10 +2705,36 @@ export const RecentlyInstalledPackagesComponent: React.FC<RecentlyInstalledPacka
           border-color: rgba(255, 255, 255, 0.15);
         }
 
+        .detail-agents-list {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 7px;
+        }
+
+        .agent-modal-pill {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          padding: 3px 9px;
+          border-radius: 6px;
+          border: 1px solid transparent;
+          font-size: 11px;
+          font-weight: 600;
+          color: #f1f5f9;
+          line-height: 1.2;
+        }
+
+        .agent-modal-pill-name {
+          font-size: 11px;
+        }
+
         .detail-meta-grid {
           display: grid;
-          grid-template-columns: repeat(3, 1fr);
+          grid-template-columns: repeat(3, minmax(0, 1fr));
           gap: 8px;
+          width: 100%;
+          min-width: 0;
+          box-sizing: border-box;
         }
 
         .meta-card {
@@ -2570,6 +2745,9 @@ export const RecentlyInstalledPackagesComponent: React.FC<RecentlyInstalledPacka
           display: flex;
           flex-direction: column;
           gap: 3px;
+          min-width: 0;
+          overflow: hidden;
+          box-sizing: border-box;
           transition: border-color 0.15s, background 0.15s;
         }
 
@@ -2593,6 +2771,10 @@ export const RecentlyInstalledPackagesComponent: React.FC<RecentlyInstalledPacka
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
+          min-width: 0;
+          display: flex;
+          align-items: center;
+          gap: 5px;
         }
 
         .pkg-modal-footer {
