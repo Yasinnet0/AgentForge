@@ -74,7 +74,7 @@ export const EnvironmentSecurityCards: React.FC = () => {
             </div>
 
             <div className="meta-row">
-              <Globe size={14} className="meta-icon text-blue" />
+              <Globe size={14} className="meta-icon text-cyan" />
               <span className="meta-label">Network access:</span>
               <span className="meta-value font-mono">Localhost + Proxy only</span>
             </div>
@@ -186,7 +186,7 @@ export const EnvironmentSecurityCards: React.FC = () => {
           color: #f59e0b;
         }
 
-        .meta-icon.text-blue {
+        .meta-icon.text-cyan {
           color: #38bdf8;
         }
 
