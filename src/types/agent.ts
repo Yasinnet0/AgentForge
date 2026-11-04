@@ -20,6 +20,7 @@ export interface SupportedAgent {
     rules: number;
   };
   paths: AgentPathConfig;
+  resolvedPaths?: Partial<AgentPathConfig>;
 }
 
 export interface ScannedSkill {
@@ -36,6 +37,7 @@ export interface ScannedSkill {
   hasScripts: boolean;
   hasReferences: boolean;
   disabled?: boolean;
+  mtimeMs?: number;
 }
 
 export interface ScannedMcpServer {
@@ -45,6 +47,7 @@ export interface ScannedMcpServer {
   args?: string[];
   url?: string;
   transport: 'stdio' | 'sse';
+  env?: Record<string, string>;
   envKeys: string[];
   sourceAgentId: string;
   sourceAgentName: string;
@@ -53,6 +56,7 @@ export interface ScannedMcpServer {
   sourcePath: string;
   pluginName?: string;
   disabled?: boolean;
+  mtimeMs?: number;
 }
 
 export interface ScannedPlugin {
@@ -71,6 +75,7 @@ export interface ScannedPlugin {
   mcpsCount: number;
   rulesCount: number;
   disabled?: boolean;
+  mtimeMs?: number;
 }
 
 export interface AgentCapabilitiesPayload {

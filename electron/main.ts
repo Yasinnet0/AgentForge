@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, screen, shell, dialog } from 'electron';
+import { app, BrowserWindow, ipcMain, screen, shell, dialog, Menu, nativeImage } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
@@ -6,6 +6,24 @@ import AdmZip from 'adm-zip';
 import { execSync } from 'child_process';
 
 const isDev = process.env.NODE_ENV === 'development';
+
+// Set application identity early so Windows Task Manager and Taskbar register AgentForge branding
+app.name = 'AgentForge';
+app.setName('AgentForge');
+
+if (process.platform === 'win32') {
+  app.setAppUserModelId('com.agentforge.desktop');
+}
+
+if (isDev) {
+  // Isolate development cache from production/portable releases to prevent GPUCache access collisions
+  app.setPath('userData', path.join(app.getPath('appData'), 'agentforge-dev'));
+}
+
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+  app.quit();
+}
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -100,16 +118,47 @@ function saveWindowState(win: BrowserWindow) {
   }, 250);
 }
 
+function getAppIconPath(): string {
+  if (process.platform === 'win32') {
+    const icoCandidates = [
+      path.join(__dirname, '../build/icon.ico'),
+      path.join(__dirname, '../public/icon.ico'),
+      path.join(__dirname, '../dist/icon.ico'),
+      path.join(__dirname, 'icon.ico'),
+    ];
+    for (const c of icoCandidates) {
+      if (fs.existsSync(c)) return c;
+    }
+  }
+
+  const pngCandidates = [
+    path.join(__dirname, '../build/icon.png'),
+    path.join(__dirname, '../public/icon.png'),
+    path.join(__dirname, '../dist/icon.png'),
+    path.join(__dirname, '../AgentForge.png'),
+    path.join(__dirname, 'icon.png'),
+  ];
+  for (const c of pngCandidates) {
+    if (fs.existsSync(c)) return c;
+  }
+  return '';
+}
+
 function createWindow() {
+  Menu.setApplicationMenu(null);
   const windowState = loadWindowState();
+  const iconPath = getAppIconPath();
+  const appIcon = iconPath ? nativeImage.createFromPath(iconPath) : undefined;
 
   mainWindow = new BrowserWindow({
+    title: 'AgentForge',
+    icon: appIcon,
     width: windowState.width,
     height: windowState.height,
     x: windowState.x,
     y: windowState.y,
-    minWidth: 1100,
-    minHeight: 700,
+    minWidth: 880,
+    minHeight: 600,
     frame: false,
     titleBarStyle: 'hidden',
     backgroundColor: '#0d1117',
@@ -118,9 +167,39 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
+      devTools: false,
     },
     show: false,
   });
+
+  mainWindow.removeMenu();
+  mainWindow.setMenuBarVisibility(false);
+
+  // Block Developer Tools and Inspect Element keyboard shortcuts
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    const isCtrlOrCmd = input.control || input.meta;
+    const key = input.key.toLowerCase();
+    if (
+      key === 'f12' ||
+      (isCtrlOrCmd && input.shift && (key === 'i' || key === 'j' || key === 'c')) ||
+      (isCtrlOrCmd && key === 'u')
+    ) {
+      event.preventDefault();
+    }
+  });
+
+  // Block Chromium context menu to disable Inspect Element
+  mainWindow.webContents.on('context-menu', (event) => {
+    event.preventDefault();
+  });
+
+  if (process.platform === 'win32' && appIcon && !appIcon.isEmpty()) {
+    try {
+      mainWindow.setIcon(appIcon);
+    } catch (err) {
+      console.warn('Failed to set window icon:', err);
+    }
+  }
 
   if (windowState.isMaximized) {
     mainWindow.maximize();
@@ -146,6 +225,13 @@ function createWindow() {
   });
 
   mainWindow.once('ready-to-show', () => {
+    if (process.platform === 'win32' && appIcon && !appIcon.isEmpty()) {
+      try {
+        mainWindow?.setIcon(appIcon);
+      } catch (err) {
+        console.warn('Failed to re-apply window icon on ready-to-show:', err);
+      }
+    }
     mainWindow?.show();
   });
 
@@ -291,19 +377,279 @@ function resolveHome(filepath: string): string {
   return filepath;
 }
 
+function parseJsonc(text: string): any {
+  let inString = false;
+  let inSingle = false;
+  let inMulti = false;
+  let quote = '';
+  let res = '';
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    const next = text[i + 1];
+
+    if (inSingle) {
+      if (ch === '\n' || ch === '\r') {
+        inSingle = false;
+        res += ch;
+      }
+      continue;
+    }
+
+    if (inMulti) {
+      if (ch === '*' && next === '/') {
+        inMulti = false;
+        i++;
+      }
+      continue;
+    }
+
+    if (inString) {
+      res += ch;
+      if (ch === '\\' && i + 1 < text.length) {
+        i++;
+        res += text[i];
+      } else if (ch === quote) {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (ch === '"' || ch === "'") {
+      inString = true;
+      quote = ch;
+      res += ch;
+    } else if (ch === '/' && next === '/') {
+      inSingle = true;
+      i++;
+    } else if (ch === '/' && next === '*') {
+      inMulti = true;
+      i++;
+    } else {
+      res += ch;
+    }
+  }
+
+  return JSON.parse(res.replace(/,\s*([}\]])/g, '$1'));
+}
+
+function checkCliCommandExists(commandName: string): boolean {
+  try {
+    const pathEnv = process.env.PATH || '';
+    const delimiter = path.delimiter;
+    const pathDirs = pathEnv.split(delimiter);
+    const extensions = process.platform === 'win32'
+      ? (process.env.PATHEXT ? process.env.PATHEXT.split(';') : ['.exe', '.cmd', '.bat', '.ps1'])
+      : [''];
+
+    for (const dir of pathDirs) {
+      if (!dir) continue;
+      if (process.platform === 'win32') {
+        for (const ext of extensions) {
+          const target = path.join(dir, commandName.toLowerCase().endsWith(ext.toLowerCase()) ? commandName : `${commandName}${ext}`);
+          if (fs.existsSync(target)) return true;
+        }
+      } else {
+        const target = path.join(dir, commandName);
+        if (fs.existsSync(target)) return true;
+      }
+    }
+  } catch {}
+  return false;
+}
+
+interface AgentFallbackConfig {
+  cliCommands?: string[];
+  baseDirs?: string[];
+  mcpConfigPaths?: string[];
+  skillsDirs?: string[];
+  rulesPaths?: string[];
+  pluginsDirs?: string[];
+}
+
+const AGENT_FALLBACK_PATHS: Record<string, AgentFallbackConfig> = {
+  opencode: {
+    cliCommands: ['opencode', 'opencode.cmd'],
+    baseDirs: ['~/.config/opencode/', '~/.opencode/'],
+    mcpConfigPaths: [
+      '~/.config/opencode/opencode.jsonc',
+      '~/.config/opencode/opencode.json',
+      '~/.opencode/opencode.jsonc',
+      '~/.opencode/opencode.json',
+      '~/.opencode/mcp_config.json',
+    ],
+    skillsDirs: ['~/.config/opencode/skills', '~/.opencode/skills'],
+    rulesPaths: ['~/.config/opencode/rules', '~/.config/opencode/instructions.md', '~/.opencode/rules.md'],
+    pluginsDirs: ['~/.config/opencode/plugins', '~/.opencode/plugins'],
+  },
+  antigravity: {
+    cliCommands: ['agy', 'antigravity'],
+    baseDirs: ['~/.gemini/config/', '~/.gemini/antigravity-ide/'],
+    mcpConfigPaths: ['~/.gemini/config/mcp_config.json'],
+    skillsDirs: ['~/.gemini/config/skills'],
+    rulesPaths: ['~/.gemini/config/AGENTS.md', '~/.gemini/config/GEMINI.md'],
+    pluginsDirs: ['~/.gemini/config/plugins'],
+  },
+  'claude-code': {
+    cliCommands: ['claude'],
+    baseDirs: ['~/.claude/'],
+    mcpConfigPaths: ['~/.claude/mcp.json', '~/.claude.json'],
+    skillsDirs: ['~/.claude/skills'],
+    rulesPaths: ['~/.claude/CLAUDE.md'],
+    pluginsDirs: ['~/.claude/plugins'],
+  },
+  cursor: {
+    cliCommands: ['cursor'],
+    baseDirs: ['~/.cursor/', '~/AppData/Roaming/Cursor'],
+    mcpConfigPaths: ['~/.cursor/mcp.json'],
+    skillsDirs: ['~/.cursor/skills'],
+    rulesPaths: ['~/.cursor/rules'],
+    pluginsDirs: ['~/.cursor/extensions'],
+  },
+  cline: {
+    baseDirs: [
+      '~/.cline/',
+      '~/AppData/Roaming/Code/User/globalStorage/saoudrizwan.claude-dev',
+      '~/AppData/Roaming/Code/User/globalStorage/rooveterinaryinc.roo-cline',
+    ],
+    mcpConfigPaths: [
+      '~/.cline/mcp_settings.json',
+      '~/AppData/Roaming/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json',
+      '~/AppData/Roaming/Code/User/globalStorage/rooveterinaryinc.roo-cline/settings/cline_mcp_settings.json',
+    ],
+    skillsDirs: ['~/.cline/skills'],
+    rulesPaths: ['~/.clinerules'],
+    pluginsDirs: ['~/.cline/plugins'],
+  },
+  windsurf: {
+    cliCommands: ['windsurf'],
+    baseDirs: ['~/.windsurf/', '~/AppData/Roaming/Windsurf', '~/.codeium/windsurf'],
+    mcpConfigPaths: ['~/.windsurf/mcp_config.json'],
+    skillsDirs: ['~/.windsurf/skills'],
+    rulesPaths: ['~/.windsurf/rules'],
+    pluginsDirs: ['~/.windsurf/plugins'],
+  },
+  codex: {
+    cliCommands: ['codex'],
+    baseDirs: ['~/.codex/'],
+    mcpConfigPaths: ['~/.codex/mcp_config.json'],
+    skillsDirs: ['~/.codex/skills'],
+    rulesPaths: ['~/.codex/instructions.md'],
+    pluginsDirs: ['~/.codex/plugins'],
+  },
+  copilot: {
+    cliCommands: ['gh'],
+    baseDirs: ['~/.copilot/', '~/.config/github-copilot/'],
+    mcpConfigPaths: ['~/.copilot/mcp-config.json'],
+    skillsDirs: ['~/.copilot/skills'],
+    rulesPaths: ['~/.copilot/instructions.md'],
+    pluginsDirs: ['~/.copilot/plugins'],
+  },
+  aider: {
+    cliCommands: ['aider'],
+    baseDirs: ['~/.aider/'],
+    mcpConfigPaths: ['~/.aider/mcp.json'],
+    skillsDirs: ['~/.aider/skills'],
+    rulesPaths: ['~/.aider.conf.yml'],
+    pluginsDirs: ['~/.aider/plugins'],
+  },
+  continue: {
+    baseDirs: ['~/.continue/'],
+    mcpConfigPaths: ['~/.continue/config.json'],
+    skillsDirs: ['~/.continue/skills'],
+    rulesPaths: ['~/.continue/rules.md'],
+    pluginsDirs: ['~/.continue/plugins'],
+  },
+  pi: {
+    cliCommands: ['pi', 'pi-ai'],
+    baseDirs: ['~/.pi/'],
+    mcpConfigPaths: ['~/.pi/mcp.json'],
+    skillsDirs: ['~/.pi/skills'],
+    rulesPaths: ['~/.pi/instructions.md', '~/.pi/prompt.md'],
+    pluginsDirs: ['~/.pi/plugins'],
+  },
+  zed: {
+    cliCommands: ['zed', 'zedit'],
+    baseDirs: ['~/.config/zed/', '~/AppData/Roaming/Zed'],
+    mcpConfigPaths: ['~/.config/zed/settings.json'],
+    skillsDirs: ['~/.config/zed/skills'],
+    rulesPaths: ['~/.config/zed/prompts'],
+    pluginsDirs: ['~/.config/zed/extensions'],
+  },
+};
+
+function resolveFirstExisting(primaryPath: string | undefined, candidates: string[] | undefined): string {
+  if (primaryPath) {
+    const resolved = resolveHome(primaryPath);
+    if (resolved && fs.existsSync(resolved)) {
+      return resolved;
+    }
+  }
+  if (Array.isArray(candidates)) {
+    for (const cand of candidates) {
+      const resolved = resolveHome(cand);
+      if (resolved && fs.existsSync(resolved)) {
+        return resolved;
+      }
+    }
+  }
+  return primaryPath ? resolveHome(primaryPath) : '';
+}
+
+function resolveAgentEffectivePaths(agent: any) {
+  const fallback = AGENT_FALLBACK_PATHS[agent.id];
+  const resolvedBase = resolveFirstExisting(agent.baseDir, fallback?.baseDirs);
+  const resolvedSkills = resolveFirstExisting(agent.skillsDir, fallback?.skillsDirs);
+  const resolvedMcp = resolveFirstExisting(agent.mcpConfigPath, fallback?.mcpConfigPaths);
+  const resolvedRules = resolveFirstExisting(agent.rulesPath, fallback?.rulesPaths);
+  const resolvedPlugins = resolveFirstExisting(agent.pluginsDir, fallback?.pluginsDirs);
+
+  let cliDetected = false;
+  if (fallback?.cliCommands) {
+    for (const cmd of fallback.cliCommands) {
+      if (checkCliCommandExists(cmd)) {
+        cliDetected = true;
+        break;
+      }
+    }
+  }
+
+  return {
+    resolvedBase,
+    resolvedSkills,
+    resolvedMcp,
+    resolvedRules,
+    resolvedPlugins,
+    cliDetected,
+  };
+}
+
 ipcMain.handle('agents:detectAll', async (_event, agentConfigs: any[]) => {
-  const results: Record<string, { detected: boolean; installedCounts: { skills: number; mcps: number; rules: number } }> = {};
+  const results: Record<string, {
+    detected: boolean;
+    installedCounts: { skills: number; mcps: number; rules: number };
+    resolvedPaths?: {
+      baseDir: string;
+      skillsDir: string;
+      mcpConfigPath: string;
+      rulesPath: string;
+      pluginsDir: string;
+    };
+  }> = {};
 
   if (!Array.isArray(agentConfigs)) {
     return results;
   }
 
   for (const agent of agentConfigs) {
-    const resolvedBase = resolveHome(agent.baseDir);
-    const resolvedSkills = resolveHome(agent.skillsDir);
-    const resolvedMcp = resolveHome(agent.mcpConfigPath);
-    const resolvedRules = resolveHome(agent.rulesPath);
-    const resolvedPlugins = resolveHome(agent.pluginsDir);
+    const {
+      resolvedBase,
+      resolvedSkills,
+      resolvedMcp,
+      resolvedRules,
+      resolvedPlugins,
+      cliDetected,
+    } = resolveAgentEffectivePaths(agent);
 
     const baseExists = resolvedBase ? fs.existsSync(resolvedBase) : false;
     const skillsExists = resolvedSkills ? fs.existsSync(resolvedSkills) : false;
@@ -311,7 +657,7 @@ ipcMain.handle('agents:detectAll', async (_event, agentConfigs: any[]) => {
     const rulesExists = resolvedRules ? fs.existsSync(resolvedRules) : false;
     const pluginsExists = resolvedPlugins ? fs.existsSync(resolvedPlugins) : false;
 
-    const detected = baseExists || skillsExists || mcpExists || rulesExists || pluginsExists;
+    const detected = baseExists || skillsExists || mcpExists || rulesExists || pluginsExists || cliDetected;
 
     let skillsCount = 0;
     if (skillsExists) {
@@ -324,9 +670,9 @@ ipcMain.handle('agents:detectAll', async (_event, agentConfigs: any[]) => {
     let mcpsCount = 0;
     if (mcpExists) {
       try {
-        const content = JSON.parse(fs.readFileSync(resolvedMcp, 'utf-8'));
-        const mcpServers = content.mcpServers || content.servers || {};
-        const disabledServers = content.disabledMcpServers || content.disabledServers || {};
+        const content = parseJsonc(fs.readFileSync(resolvedMcp, 'utf-8'));
+        const mcpServers = content.mcpServers || content.servers || content.mcp?.servers || {};
+        const disabledServers = content.disabledMcpServers || content.disabledServers || content.mcp?.disabledServers || {};
         mcpsCount = Object.keys(mcpServers).length + Object.keys(disabledServers).length;
       } catch {}
     }
@@ -350,6 +696,13 @@ ipcMain.handle('agents:detectAll', async (_event, agentConfigs: any[]) => {
         skills: skillsCount,
         mcps: mcpsCount,
         rules: rulesCount,
+      },
+      resolvedPaths: {
+        baseDir: resolvedBase,
+        skillsDir: resolvedSkills,
+        mcpConfigPath: resolvedMcp,
+        rulesPath: resolvedRules,
+        pluginsDir: resolvedPlugins,
       },
     };
   }
@@ -416,9 +769,11 @@ ipcMain.handle('agents:scanCapabilities', async (_event, agentConfigs: any[]) =>
   }
 
   for (const agent of agentConfigs) {
-    const resolvedSkills = resolveHome(agent.skillsDir);
-    const resolvedMcp = resolveHome(agent.mcpConfigPath);
-    const resolvedPlugins = resolveHome(agent.pluginsDir);
+    const {
+      resolvedSkills,
+      resolvedMcp,
+      resolvedPlugins,
+    } = resolveAgentEffectivePaths(agent);
 
     // Scan direct skills
     if (resolvedSkills && fs.existsSync(resolvedSkills)) {
@@ -428,6 +783,10 @@ ipcMain.handle('agents:scanCapabilities', async (_event, agentConfigs: any[]) =>
           if (entry.isDirectory()) {
             const skillPath = path.join(resolvedSkills, entry.name);
             const info = parseSkillInfo(skillPath, entry.name);
+            let skillMtime = 0;
+            try {
+              skillMtime = fs.statSync(skillPath).mtimeMs;
+            } catch {}
             allSkills.push({
               id: `${agent.id}-skill-${entry.name}`,
               folderName: entry.name,
@@ -441,6 +800,7 @@ ipcMain.handle('agents:scanCapabilities', async (_event, agentConfigs: any[]) =>
               hasScripts: info.hasScripts,
               hasReferences: info.hasReferences,
               disabled: Boolean(info.disabled),
+              mtimeMs: skillMtime,
             });
           }
         }
@@ -536,6 +896,11 @@ ipcMain.handle('agents:scanCapabilities', async (_event, agentConfigs: any[]) =>
               } catch {}
             }
 
+            let pluginMtime = 0;
+            try {
+              pluginMtime = fs.statSync(pluginPath).mtimeMs;
+            } catch {}
+
             allPlugins.push({
               id: `${agent.id}-plugin-${pluginDir.name}`,
               folderName: pluginDir.name,
@@ -552,6 +917,7 @@ ipcMain.handle('agents:scanCapabilities', async (_event, agentConfigs: any[]) =>
               mcpsCount: bundledMcpsCount,
               rulesCount: bundledRulesCount,
               disabled: isPluginDisabled,
+              mtimeMs: pluginMtime,
             });
           }
         }
@@ -563,18 +929,32 @@ ipcMain.handle('agents:scanCapabilities', async (_event, agentConfigs: any[]) =>
     // Scan MCP configs
     if (resolvedMcp && fs.existsSync(resolvedMcp)) {
       try {
-        const mcpContent = JSON.parse(fs.readFileSync(resolvedMcp, 'utf-8'));
-        const servers = mcpContent.mcpServers || mcpContent.servers || {};
-        const disabledServers = mcpContent.disabledMcpServers || mcpContent.disabledServers || {};
+        let mcpMtime = 0;
+        try {
+          mcpMtime = fs.statSync(resolvedMcp).mtimeMs;
+        } catch {}
+        const mcpContent = parseJsonc(fs.readFileSync(resolvedMcp, 'utf-8'));
+        const servers = mcpContent.mcpServers || mcpContent.servers || mcpContent.mcp?.servers || {};
+        const disabledServers = mcpContent.disabledMcpServers || mcpContent.disabledServers || mcpContent.mcp?.disabledServers || {};
 
         for (const [sKey, sVal] of Object.entries<any>(servers)) {
+          let command = sVal?.command;
+          let args = sVal?.args || [];
+          if (Array.isArray(sVal?.command)) {
+            command = sVal.command[0];
+            args = sVal.command.slice(1);
+          }
+          const url = sVal?.url || sVal?.options?.url;
+          const transport = url ? 'sse' : (sVal?.type === 'sse' ? 'sse' : 'stdio');
+
           allMcps.push({
             id: `${agent.id}-mcp-${sKey}`,
             name: sKey,
-            command: sVal?.command,
-            args: sVal?.args || [],
-            url: sVal?.url,
-            transport: sVal?.url ? 'sse' : 'stdio',
+            command,
+            args,
+            url,
+            transport,
+            env: sVal?.env || {},
             envKeys: Object.keys(sVal?.env || {}),
             sourceAgentId: agent.id,
             sourceAgentName: agent.name,
@@ -582,18 +962,29 @@ ipcMain.handle('agents:scanCapabilities', async (_event, agentConfigs: any[]) =>
             sourceAgentIcon: agent.iconName || 'Server',
             sourcePath: resolvedMcp,
             disabled: Boolean(sVal?.disabled),
+            mtimeMs: mcpMtime,
           });
         }
 
         for (const [sKey, sVal] of Object.entries<any>(disabledServers)) {
           if (servers[sKey]) continue;
+          let command = sVal?.command;
+          let args = sVal?.args || [];
+          if (Array.isArray(sVal?.command)) {
+            command = sVal.command[0];
+            args = sVal.command.slice(1);
+          }
+          const url = sVal?.url || sVal?.options?.url;
+          const transport = url ? 'sse' : (sVal?.type === 'sse' ? 'sse' : 'stdio');
+
           allMcps.push({
             id: `${agent.id}-mcp-${sKey}`,
             name: sKey,
-            command: sVal?.command,
-            args: sVal?.args || [],
-            url: sVal?.url,
-            transport: sVal?.url ? 'sse' : 'stdio',
+            command,
+            args,
+            url,
+            transport,
+            env: sVal?.env || {},
             envKeys: Object.keys(sVal?.env || {}),
             sourceAgentId: agent.id,
             sourceAgentName: agent.name,
@@ -601,6 +992,7 @@ ipcMain.handle('agents:scanCapabilities', async (_event, agentConfigs: any[]) =>
             sourceAgentIcon: agent.iconName || 'Server',
             sourcePath: resolvedMcp,
             disabled: true,
+            mtimeMs: mcpMtime,
           });
         }
       } catch (err) {
@@ -642,6 +1034,22 @@ ipcMain.handle('catalog:installSkill', async (_event, params: {
     }
 
     if (!skillContent || !skillContent.trim()) {
+      // Check if any target already has an existing valid file before creating stub
+      let hasExistingFile = false;
+      for (const target of targets) {
+        const resolvedSkillsDir = resolveHome(target.skillsDir);
+        if (resolvedSkillsDir) {
+          const dest = path.join(resolvedSkillsDir, skillId);
+          if (fs.existsSync(path.join(dest, 'SKILL.md')) || fs.existsSync(path.join(dest, 'SKILL.md.disabled'))) {
+            hasExistingFile = true;
+            break;
+          }
+        }
+      }
+      if (hasExistingFile) {
+        return { success: false, error: 'Could not fetch upstream update; existing local skill retained.' };
+      }
+
       const readableName = skillId
         .split('-')
         .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
@@ -666,7 +1074,10 @@ Comprehensive agent instructions for **${readableName}**.
 
       const destFolder = path.join(resolvedSkillsDir, skillId);
       fs.mkdirSync(destFolder, { recursive: true });
-      fs.writeFileSync(path.join(destFolder, 'SKILL.md'), skillContent, 'utf-8');
+      const targetMd = fs.existsSync(path.join(destFolder, 'SKILL.md.disabled'))
+        ? path.join(destFolder, 'SKILL.md.disabled')
+        : path.join(destFolder, 'SKILL.md');
+      fs.writeFileSync(targetMd, skillContent, 'utf-8');
       installedAgents.push(target.agentId);
     }
 
@@ -844,6 +1255,26 @@ ipcMain.handle('skills:readSkill', async (_event, params: {
   return { success: false, error: 'Skill file not found on disk' };
 });
 
+// File content reader for diff inspections
+ipcMain.handle('diff:getFileContent', async (_event, filePath: string) => {
+  if (!filePath) return { success: false, error: 'Path required' };
+  try {
+    const resolved = resolveHome(filePath);
+    if (!resolved || !fs.existsSync(resolved)) {
+      return { success: false, error: 'File not found on disk' };
+    }
+    const stat = fs.statSync(resolved);
+    if (!stat.isFile()) {
+      return { success: false, error: 'Path is not a regular file' };
+    }
+    const content = fs.readFileSync(resolved, 'utf-8');
+    return { success: true, content, path: resolved };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Failed reading file' };
+  }
+});
+
+
 // Skill Transfer
 ipcMain.handle('skills:transferSkills', async (_event, params: {
   sourceAgentId: string;
@@ -929,7 +1360,8 @@ ipcMain.handle('catalog:installMcp', async (_event, params: {
   try {
     let installedCount = 0;
     for (const target of targets) {
-      const resolvedMcp = resolveHome(target.mcpConfigPath);
+      const { resolvedMcp: effectiveMcp } = resolveAgentEffectivePaths({ id: target.agentId, mcpConfigPath: target.mcpConfigPath });
+      const resolvedMcp = effectiveMcp || resolveHome(target.mcpConfigPath);
       if (!resolvedMcp) continue;
 
       fs.mkdirSync(path.dirname(resolvedMcp), { recursive: true });
@@ -937,17 +1369,66 @@ ipcMain.handle('catalog:installMcp', async (_event, params: {
       let configObj: any = { mcpServers: {} };
       if (fs.existsSync(resolvedMcp)) {
         try {
-          configObj = JSON.parse(fs.readFileSync(resolvedMcp, 'utf-8'));
+          configObj = parseJsonc(fs.readFileSync(resolvedMcp, 'utf-8'));
         } catch {
           configObj = { mcpServers: {} };
         }
       }
 
-      if (!configObj.mcpServers && !configObj.servers) {
-        configObj.mcpServers = {};
+      // Detect container structure (nested mcp.servers vs flat mcpServers/servers)
+      let activeContainer: any;
+      let disabledContainer: any;
+
+      if (configObj.mcp && typeof configObj.mcp === 'object') {
+        if (!configObj.mcp.servers) configObj.mcp.servers = {};
+        if (!configObj.mcp.disabledServers) configObj.mcp.disabledServers = {};
+        activeContainer = configObj.mcp.servers;
+        disabledContainer = configObj.mcp.disabledServers;
+      } else {
+        if (!configObj.mcpServers && !configObj.servers) {
+          configObj.mcpServers = {};
+        }
+        activeContainer = configObj.mcpServers !== undefined ? configObj.mcpServers : configObj.servers;
+        if (!configObj.disabledMcpServers && !configObj.disabledServers) {
+          configObj.disabledMcpServers = {};
+        }
+        disabledContainer = configObj.disabledMcpServers !== undefined ? configObj.disabledMcpServers : configObj.disabledServers;
       }
-      const targetKey = configObj.mcpServers !== undefined ? 'mcpServers' : 'servers';
-      configObj[targetKey][serverKey] = serverConfig;
+
+      // 1. Find existing config for this serverKey
+      let existingConfig: any = activeContainer[serverKey] || disabledContainer[serverKey];
+
+      // 2. Safely merge env variables so user tokens / secrets are NEVER wiped out
+      const finalConfig = { ...serverConfig };
+      if (existingConfig?.env || serverConfig.env) {
+        const mergedEnv: Record<string, string> = { ...(serverConfig.env || {}) };
+        if (existingConfig?.env && typeof existingConfig.env === 'object') {
+          for (const [k, v] of Object.entries(existingConfig.env)) {
+            const newV = mergedEnv[k];
+            const isNewValPlaceholder = typeof newV === 'string' && (newV.trim() === '' || newV.startsWith('<') || newV.toLowerCase().includes('your_token') || newV.toLowerCase().includes('your_api_key'));
+            if (v !== undefined && v !== null && v !== '' && (isNewValPlaceholder || !newV)) {
+              mergedEnv[k] = v as string;
+            }
+          }
+        }
+        finalConfig.env = mergedEnv;
+      }
+
+      // 3. Preserve Windows command wrapper (npx.cmd, uvx.cmd) if matching
+      if (process.platform === 'win32' && existingConfig?.command) {
+        const normOld = existingConfig.command.toLowerCase().replace(/\.(cmd|exe|bat)$/i, '').trim();
+        const normNew = (serverConfig.command || '').toLowerCase().replace(/\.(cmd|exe|bat)$/i, '').trim();
+        if (normOld === normNew) {
+          finalConfig.command = existingConfig.command;
+        }
+      }
+      
+      // Preserve disabled state if currently disabled
+      if (disabledContainer[serverKey]) {
+        disabledContainer[serverKey] = finalConfig;
+      } else {
+        activeContainer[serverKey] = finalConfig;
+      }
 
       fs.writeFileSync(resolvedMcp, JSON.stringify(configObj, null, 2), 'utf-8');
       installedCount++;
@@ -971,12 +1452,21 @@ ipcMain.handle('catalog:uninstallMcp', async (_event, params: {
   try {
     let uninstalledCount = 0;
     for (const target of targets) {
-      const resolvedMcp = resolveHome(target.mcpConfigPath);
+      const { resolvedMcp: effectiveMcp } = resolveAgentEffectivePaths({ id: target.agentId, mcpConfigPath: target.mcpConfigPath });
+      const resolvedMcp = effectiveMcp || resolveHome(target.mcpConfigPath);
       if (!resolvedMcp || !fs.existsSync(resolvedMcp)) continue;
 
       try {
-        const configObj = JSON.parse(fs.readFileSync(resolvedMcp, 'utf-8'));
+        const configObj = parseJsonc(fs.readFileSync(resolvedMcp, 'utf-8'));
         let modified = false;
+        if (configObj.mcp?.servers && configObj.mcp.servers[serverKey]) {
+          delete configObj.mcp.servers[serverKey];
+          modified = true;
+        }
+        if (configObj.mcp?.disabledServers && configObj.mcp.disabledServers[serverKey]) {
+          delete configObj.mcp.disabledServers[serverKey];
+          modified = true;
+        }
         if (configObj.mcpServers && configObj.mcpServers[serverKey]) {
           delete configObj.mcpServers[serverKey];
           modified = true;
@@ -1019,42 +1509,54 @@ ipcMain.handle('catalog:toggleMcp', async (_event, params: {
 
   let modifiedCount = 0;
   for (const target of targets) {
-    const resolvedMcp = resolveHome(target.mcpConfigPath);
+    const { resolvedMcp: effectiveMcp } = resolveAgentEffectivePaths({ id: target.agentId, mcpConfigPath: target.mcpConfigPath });
+    const resolvedMcp = effectiveMcp || resolveHome(target.mcpConfigPath);
     if (!resolvedMcp || !fs.existsSync(resolvedMcp)) continue;
 
     try {
-      const configObj = JSON.parse(fs.readFileSync(resolvedMcp, 'utf-8'));
-      if (!configObj.mcpServers && !configObj.servers) {
-        configObj.mcpServers = {};
-      }
-      const serversKey = configObj.mcpServers ? 'mcpServers' : 'servers';
-      if (!configObj.disabledMcpServers) {
-        configObj.disabledMcpServers = {};
+      const configObj = parseJsonc(fs.readFileSync(resolvedMcp, 'utf-8'));
+      let activeContainer: any;
+      let disabledContainer: any;
+
+      if (configObj.mcp && typeof configObj.mcp === 'object') {
+        if (!configObj.mcp.servers) configObj.mcp.servers = {};
+        if (!configObj.mcp.disabledServers) configObj.mcp.disabledServers = {};
+        activeContainer = configObj.mcp.servers;
+        disabledContainer = configObj.mcp.disabledServers;
+      } else {
+        if (!configObj.mcpServers && !configObj.servers) {
+          configObj.mcpServers = {};
+        }
+        activeContainer = configObj.mcpServers !== undefined ? configObj.mcpServers : configObj.servers;
+        if (!configObj.disabledMcpServers && !configObj.disabledServers) {
+          configObj.disabledMcpServers = {};
+        }
+        disabledContainer = configObj.disabledMcpServers !== undefined ? configObj.disabledMcpServers : configObj.disabledServers;
       }
 
       if (enabled) {
-        // Move from disabledMcpServers -> mcpServers
-        const serverDef = configObj.disabledMcpServers[serverKey] || configObj[serversKey]?.[serverKey];
+        // Move from disabledContainer -> activeContainer
+        const serverDef = disabledContainer[serverKey] || activeContainer[serverKey];
         if (serverDef) {
           const cleanedDef = { ...serverDef };
           delete cleanedDef.disabled;
-          configObj[serversKey][serverKey] = cleanedDef;
-          delete configObj.disabledMcpServers[serverKey];
+          activeContainer[serverKey] = cleanedDef;
+          delete disabledContainer[serverKey];
           fs.writeFileSync(resolvedMcp, JSON.stringify(configObj, null, 2), 'utf-8');
           modifiedCount++;
         }
       } else {
-        // Move from mcpServers -> disabledMcpServers
-        const serverDef = configObj[serversKey]?.[serverKey];
+        // Move from activeContainer -> disabledContainer
+        const serverDef = activeContainer[serverKey];
         if (serverDef) {
-          configObj.disabledMcpServers[serverKey] = {
+          disabledContainer[serverKey] = {
             ...serverDef,
             disabled: true,
           };
-          delete configObj[serversKey][serverKey];
+          delete activeContainer[serverKey];
           fs.writeFileSync(resolvedMcp, JSON.stringify(configObj, null, 2), 'utf-8');
           modifiedCount++;
-        } else if (configObj.disabledMcpServers[serverKey]) {
+        } else if (disabledContainer[serverKey]) {
           modifiedCount++;
         }
       }
@@ -1283,6 +1785,27 @@ This skill is part of the **${pluginDisplayName}** plugin bundle.
       const pluginDest = path.join(resolvedPluginsDir, cleanPluginId);
 
       if (fs.existsSync(pluginDest)) {
+        try {
+          const existingManifestPath = path.join(pluginDest, 'plugin.json');
+          if (fs.existsSync(existingManifestPath)) {
+            const existingManifest = JSON.parse(fs.readFileSync(existingManifestPath, 'utf-8'));
+            const existingVer = existingManifest.version;
+            const incomingVer = version || '1.0.0';
+            const exParts = String(existingVer || '').replace(/^v/i, '').split('.').map((p) => parseInt(p, 10));
+            const inParts = String(incomingVer || '').replace(/^v/i, '').split('.').map((p) => parseInt(p, 10));
+            if (!isNaN(exParts[0]) && !isNaN(inParts[0])) {
+              const isDowngrade = inParts[0] < exParts[0] || 
+                (inParts[0] === exParts[0] && (inParts[1] || 0) < (exParts[1] || 0)) ||
+                (inParts[0] === exParts[0] && (inParts[1] || 0) === (exParts[1] || 0) && (inParts[2] || 0) < (exParts[2] || 0));
+              if (isDowngrade) {
+                console.warn(`Prevented downgrade of ${cleanPluginId} from v${existingVer} to v${incomingVer}`);
+                continue;
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('Error checking existing plugin version:', e);
+        }
         fs.rmSync(pluginDest, { recursive: true, force: true });
       }
       fs.mkdirSync(pluginDest, { recursive: true });
@@ -1300,8 +1823,10 @@ This skill is part of the **${pluginDisplayName}** plugin bundle.
         ...(Object.keys(mcpServersMap).length > 0 ? { mcpServers: mcpServersMap } : {}),
       };
 
+      const isPluginDisabled = fs.existsSync(path.join(pluginDest, '.disabled')) || fs.existsSync(path.join(pluginDest, 'plugin.json.disabled'));
+      const manifestFile = isPluginDisabled ? 'plugin.json.disabled' : 'plugin.json';
       fs.writeFileSync(
-        path.join(pluginDest, 'plugin.json'),
+        path.join(pluginDest, manifestFile),
         JSON.stringify(pluginManifest, null, 2),
         'utf-8'
       );
@@ -2176,6 +2701,13 @@ ipcMain.handle('env:checkDependencies', async (_event, requestedBinaries?: strin
 
 app.whenReady().then(() => {
   createWindow();
+
+  app.on('second-instance', () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
+  });
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

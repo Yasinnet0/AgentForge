@@ -16,6 +16,13 @@ export interface AgentDetectionResult {
     mcps: number;
     rules: number;
   };
+  resolvedPaths?: {
+    baseDir: string;
+    skillsDir: string;
+    mcpConfigPath: string;
+    rulesPath: string;
+    pluginsDir: string;
+  };
 }
 
 export interface ScannedSkill {
@@ -344,6 +351,7 @@ export interface ElectronAPI {
   openExternal: (url: string) => Promise<boolean>;
   openPath: (targetPath: string) => Promise<boolean>;
   readSkill: (params: ReadSkillParams) => Promise<ReadSkillResult>;
+  getFileContent: (filePath: string) => Promise<{ success: boolean; content?: string; path?: string; error?: string }>;
   checkDependencies: (binaries?: string[]) => Promise<DependencyReport>;
 }
 
@@ -404,8 +412,10 @@ const electronAPI: ElectronAPI = {
   openExternal: (url: string) => ipcRenderer.invoke('app:openExternal', url),
   openPath: (targetPath: string) => ipcRenderer.invoke('app:openPath', targetPath),
   readSkill: (params: ReadSkillParams) => ipcRenderer.invoke('skills:readSkill', params),
+  getFileContent: (filePath: string) => ipcRenderer.invoke('diff:getFileContent', filePath),
   checkDependencies: (binaries) => ipcRenderer.invoke('env:checkDependencies', binaries),
 };
+
 
 contextBridge.exposeInMainWorld('electronAPI', electronAPI);
 
