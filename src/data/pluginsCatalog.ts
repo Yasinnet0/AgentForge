@@ -7,7 +7,7 @@ export const PLUGINS_CATALOG: CatalogPlugin[] = [
     "version": "2.0.0",
     "description": "Elite game development powerhouse bundling Unreal Engine 5, Unity, Godot 4, and Blender 3D alongside gameplay architecture skills.",
     "category": "Game Development",
-    "author": "AgentForge Core",
+    "author": "Community",
     "bundledSkills": [
       "unreal-engine-blueprints",
       "unity-engine-csharp",
@@ -32,7 +32,7 @@ export const PLUGINS_CATALOG: CatalogPlugin[] = [
       "3d",
       "shaders"
     ],
-    "sourceRegistry": "AgentForge Core",
+    "sourceRegistry": "Community",
     "license": "MIT"
   },
   {
@@ -41,7 +41,7 @@ export const PLUGINS_CATALOG: CatalogPlugin[] = [
     "version": "1.5.0",
     "description": "Complete multimedia and visual art studio connecting Blender, DaVinci Resolve, Photopea, Aseprite, and FreeCAD for 3D modeling and video editing.",
     "category": "Creative & Media",
-    "author": "AgentForge Core",
+    "author": "Community",
     "bundledSkills": [
       "blender-python-automation",
       "shader-graph-and-glsl",
@@ -64,7 +64,7 @@ export const PLUGINS_CATALOG: CatalogPlugin[] = [
       "vfx",
       "art"
     ],
-    "sourceRegistry": "AgentForge Core",
+    "sourceRegistry": "Community",
     "license": "MIT"
   },
   {
@@ -73,7 +73,7 @@ export const PLUGINS_CATALOG: CatalogPlugin[] = [
     "version": "1.2.0",
     "description": "Autonomous Minecraft bot and world automation platform: survival navigation, procedural construction, crafting recipes, and RCON administration.",
     "category": "Game Development",
-    "author": "AgentForge Core",
+    "author": "Community",
     "bundledSkills": [
       "minecraft-bot-automation",
       "procedural-world-generation",
@@ -90,7 +90,7 @@ export const PLUGINS_CATALOG: CatalogPlugin[] = [
       "world-gen",
       "survival"
     ],
-    "sourceRegistry": "AgentForge Core",
+    "sourceRegistry": "Community",
     "license": "MIT"
   },
   {
@@ -99,7 +99,7 @@ export const PLUGINS_CATALOG: CatalogPlugin[] = [
     "version": "1.1.0",
     "description": "Interactive audio processing, DSP sound synthesis, Spotify music metadata queries, and streaming broadcast automation with OBS Studio.",
     "category": "Audio & Broadcast",
-    "author": "AgentForge Core",
+    "author": "Community",
     "bundledSkills": [
       "game-audio-dsp",
       "websocket-realtime-protocol"
@@ -117,7 +117,7 @@ export const PLUGINS_CATALOG: CatalogPlugin[] = [
       "streaming",
       "sound"
     ],
-    "sourceRegistry": "AgentForge Core",
+    "sourceRegistry": "Community",
     "license": "MIT"
   },
   {
@@ -126,7 +126,7 @@ export const PLUGINS_CATALOG: CatalogPlugin[] = [
     "version": "2.1.0",
     "description": "Enterprise cloud infrastructure toolkit uniting Kubernetes, Docker, AWS, Cloudflare, and Terraform for automated infrastructure as code.",
     "category": "DevOps & Cloud",
-    "author": "AgentForge Core",
+    "author": "Community",
     "bundledSkills": [
       "kubernetes-cloud-native",
       "docker-container-mastery",
@@ -150,7 +150,7 @@ export const PLUGINS_CATALOG: CatalogPlugin[] = [
       "cloud",
       "devops"
     ],
-    "sourceRegistry": "AgentForge Core",
+    "sourceRegistry": "Community",
     "license": "MIT"
   },
   {
@@ -159,7 +159,7 @@ export const PLUGINS_CATALOG: CatalogPlugin[] = [
     "version": "2.0.0",
     "description": "State-of-the-art vector intelligence and embedding retrieval combining Qdrant, Chroma, Weaviate, Milvus, and Elasticsearch.",
     "category": "AI & Data",
-    "author": "AgentForge Core",
+    "author": "Community",
     "bundledSkills": [
       "vector-search-embeddings",
       "llamaindex-rag-pipeline",
@@ -181,7 +181,7 @@ export const PLUGINS_CATALOG: CatalogPlugin[] = [
       "weaviate",
       "search"
     ],
-    "sourceRegistry": "AgentForge Core",
+    "sourceRegistry": "Community",
     "license": "MIT"
   },
   {
@@ -190,7 +190,7 @@ export const PLUGINS_CATALOG: CatalogPlugin[] = [
     "version": "2.0.0",
     "description": "Autonomous research lab combining scientific paper retrieval from ArXiv, intelligent web crawlers (Firecrawl, Exa, Tavily), and Obsidian PKM note taking.",
     "category": "Research & Intelligence",
-    "author": "AgentForge Core",
+    "author": "Community",
     "bundledSkills": [
       "enhance-prompt",
       "agent-memory-systems",
@@ -212,7 +212,7 @@ export const PLUGINS_CATALOG: CatalogPlugin[] = [
       "obsidian",
       "knowledge"
     ],
-    "sourceRegistry": "AgentForge Core",
+    "sourceRegistry": "Community",
     "license": "MIT"
   },
   {
@@ -221,7 +221,7 @@ export const PLUGINS_CATALOG: CatalogPlugin[] = [
     "version": "2.0.0",
     "description": "High-performance SQL engineering pack: deep PostgreSQL query planning, MySQL clustering, SQLite local persistence, and cloud databases (Supabase, Neon).",
     "category": "Database",
-    "author": "AgentForge Core",
+    "author": "Community",
     "tags": [
       "postgres",
       "mysql",
@@ -244,7 +244,7 @@ export const PLUGINS_CATALOG: CatalogPlugin[] = [
       "supabase",
       "neon"
     ],
-    "sourceRegistry": "AgentForge Core",
+    "sourceRegistry": "Community",
     "license": "MIT"
   },
   {
@@ -253,7 +253,7 @@ export const PLUGINS_CATALOG: CatalogPlugin[] = [
     "version": "1.4.0",
     "description": "Sub-millisecond data systems combining Redis distributed caching, MongoDB document aggregation, ClickHouse analytics, and serverless Upstash.",
     "category": "Database",
-    "author": "AgentForge Core",
+    "author": "Community",
     "bundledSkills": [
       "redis-caching-architect",
       "clickhouse-olap-analytics",
@@ -274,7 +274,7 @@ export const PLUGINS_CATALOG: CatalogPlugin[] = [
       "caching",
       "nosql"
     ],
-    "sourceRegistry": "AgentForge Core",
+    "sourceRegistry": "Community",
     "license": "MIT"
   },
   {
@@ -283,7 +283,7 @@ export const PLUGINS_CATALOG: CatalogPlugin[] = [
     "version": "1.3.0",
     "description": "Multi-platform community engagement automation: Discord server bots, Telegram channels, Slack workspace integrations, and Resend transactional emails.",
     "category": "Communication",
-    "author": "AgentForge Core",
+    "author": "Community",
     "bundledSkills": [
       "websocket-realtime-protocol",
       "api-design-principles",
@@ -305,7 +305,7 @@ export const PLUGINS_CATALOG: CatalogPlugin[] = [
       "community",
       "bots"
     ],
-    "sourceRegistry": "AgentForge Core",
+    "sourceRegistry": "Community",
     "license": "MIT"
   },
   {
@@ -314,7 +314,7 @@ export const PLUGINS_CATALOG: CatalogPlugin[] = [
     "version": "2.0.0",
     "description": "Direct operating system terminal control, cross-platform file management, background process execution, and system performance monitoring.",
     "category": "System & OS",
-    "author": "AgentForge Core",
+    "author": "wonderwhy-er",
     "bundledSkills": [
       "electron-development",
       "systematic-debugging",
@@ -334,7 +334,7 @@ export const PLUGINS_CATALOG: CatalogPlugin[] = [
       "system",
       "commander"
     ],
-    "sourceRegistry": "AgentForge Core",
+    "sourceRegistry": "Awesome MCP",
     "license": "MIT"
   },
   {
@@ -343,7 +343,7 @@ export const PLUGINS_CATALOG: CatalogPlugin[] = [
     "version": "1.2.0",
     "description": "Real-time financial markets, on-chain ledger queries (Etherscan, Solscan), crypto price indices (CoinGecko), and Stripe checkout monetization.",
     "category": "Finance & Crypto",
-    "author": "AgentForge Core",
+    "author": "Community",
     "bundledSkills": [
       "api-design-principles",
       "jwt-security-and-token-rotation",
@@ -365,7 +365,7 @@ export const PLUGINS_CATALOG: CatalogPlugin[] = [
       "web3",
       "finance"
     ],
-    "sourceRegistry": "AgentForge Core",
+    "sourceRegistry": "Community",
     "license": "MIT"
   },
   {
@@ -374,7 +374,7 @@ export const PLUGINS_CATALOG: CatalogPlugin[] = [
     "version": "1.8.0",
     "description": "Unified digital workspace integrating Notion databases, Obsidian markdown vaults, Linear issue tracking, Jira enterprise tickets, and Google Calendar.",
     "category": "Productivity",
-    "author": "AgentForge Core",
+    "author": "Community",
     "bundledSkills": [
       "spec-driven-development",
       "plan-driven-development",
@@ -396,7 +396,7 @@ export const PLUGINS_CATALOG: CatalogPlugin[] = [
       "jira",
       "second-brain"
     ],
-    "sourceRegistry": "AgentForge Core",
+    "sourceRegistry": "Community",
     "license": "MIT"
   },
   {
@@ -405,7 +405,7 @@ export const PLUGINS_CATALOG: CatalogPlugin[] = [
     "version": "2.0.0",
     "description": "Distributed microservices architecture kit: Apollo GraphQL Federation, gRPC Protocol Buffers v3, Apache Kafka streaming, and OpenAPI generator.",
     "category": "Backend & API",
-    "author": "AgentForge Core",
+    "author": "Community",
     "bundledSkills": [
       "graphql-federation-apollo",
       "grpc-protocol-buffers-v3",
@@ -428,7 +428,7 @@ export const PLUGINS_CATALOG: CatalogPlugin[] = [
       "kafka",
       "openapi"
     ],
-    "sourceRegistry": "AgentForge Core",
+    "sourceRegistry": "Community",
     "license": "MIT"
   },
   {
@@ -437,7 +437,7 @@ export const PLUGINS_CATALOG: CatalogPlugin[] = [
     "version": "2.2.0",
     "description": "Comprehensive cybersecurity operations: OWASP API vulnerability scanning, penetration testing probes, GitGuardian secret leakage detection, and Shodan recon.",
     "category": "Security",
-    "author": "AgentForge Core",
+    "author": "Community",
     "bundledSkills": [
       "api-security-best-practices",
       "api-security-testing",
@@ -460,7 +460,7 @@ export const PLUGINS_CATALOG: CatalogPlugin[] = [
       "shodan",
       "vulnerability"
     ],
-    "sourceRegistry": "AgentForge Core",
+    "sourceRegistry": "Community",
     "license": "MIT"
   },
   {
@@ -469,7 +469,7 @@ export const PLUGINS_CATALOG: CatalogPlugin[] = [
     "version": "2.0.0",
     "description": "Software craftsmanship and quality gate: five-axis peer review, dead code simplification, SonarQube quality analysis, and zero-downtime refactoring.",
     "category": "Quality & Review",
-    "author": "AgentForge Core",
+    "author": "Community",
     "bundledSkills": [
       "clean-code-guard",
       "code-review-and-quality",
@@ -490,7 +490,7 @@ export const PLUGINS_CATALOG: CatalogPlugin[] = [
       "quality",
       "sonar"
     ],
-    "sourceRegistry": "AgentForge Core",
+    "sourceRegistry": "Community",
     "license": "MIT"
   },
   {
@@ -499,7 +499,7 @@ export const PLUGINS_CATALOG: CatalogPlugin[] = [
     "version": "1.5.0",
     "description": "Data science and machine learning research lab: PyTorch deep learning pipelines, Jupyter Notebook automation, DuckDB analytics, and MLflow tracking.",
     "category": "Data Science & ML",
-    "author": "AgentForge Core",
+    "author": "Community",
     "bundledSkills": [
       "async-python-patterns",
       "peft-lora-fine-tuning",
@@ -519,7 +519,7 @@ export const PLUGINS_CATALOG: CatalogPlugin[] = [
       "data-science",
       "analytics"
     ],
-    "sourceRegistry": "AgentForge Core",
+    "sourceRegistry": "Community",
     "license": "MIT"
   },
   {
@@ -528,7 +528,7 @@ export const PLUGINS_CATALOG: CatalogPlugin[] = [
     "version": "1.3.0",
     "description": "Blazing fast memory-safe systems engineering with Rust, Tokio asynchronous runtime, zero-cost abstractions, and high-concurrency network servers.",
     "category": "Systems Programming",
-    "author": "AgentForge Core",
+    "author": "Community",
     "bundledSkills": [
       "rust-tokio-async-systems",
       "grpc-protocol-buffers-v3",
@@ -547,7 +547,7 @@ export const PLUGINS_CATALOG: CatalogPlugin[] = [
       "performance",
       "concurrency"
     ],
-    "sourceRegistry": "AgentForge Core",
+    "sourceRegistry": "Community",
     "license": "MIT"
   },
   {
@@ -556,7 +556,7 @@ export const PLUGINS_CATALOG: CatalogPlugin[] = [
     "version": "2.5.0",
     "description": "State-of-the-art web interface craftsmanship: Tailwind CSS v4 design tokens, React UI patterns, Three.js 3D web scenes, and Antigravity Swiss typography.",
     "category": "Frontend & UI",
-    "author": "AgentForge Core",
+    "author": "Community",
     "bundledSkills": [
       "tailwind-v4-expert",
       "code-showcase-react-ui-patterns",
@@ -579,7 +579,7 @@ export const PLUGINS_CATALOG: CatalogPlugin[] = [
       "design",
       "ux"
     ],
-    "sourceRegistry": "AgentForge Core",
+    "sourceRegistry": "Community",
     "license": "MIT"
   },
   {
@@ -588,7 +588,7 @@ export const PLUGINS_CATALOG: CatalogPlugin[] = [
     "version": "1.4.0",
     "description": "Universal application development across iOS, Android, and Desktop with React Native Expo Router, Flutter BLoC, and Tauri 2.0 Rust.",
     "category": "Mobile & Desktop",
-    "author": "AgentForge Core",
+    "author": "Community",
     "bundledSkills": [
       "react-native-expo-router",
       "flutter-clean-architecture",
@@ -610,7 +610,7 @@ export const PLUGINS_CATALOG: CatalogPlugin[] = [
       "ios",
       "android"
     ],
-    "sourceRegistry": "AgentForge Core",
+    "sourceRegistry": "Community",
     "license": "MIT"
   },
   {
@@ -619,7 +619,7 @@ export const PLUGINS_CATALOG: CatalogPlugin[] = [
     "version": "1.6.0",
     "description": "Full-stack production telemetry: real-time Sentry crash diagnostics, Datadog APM tracing, Prometheus metric scrapers, and OpenTelemetry pipelines.",
     "category": "DevOps & Reliability",
-    "author": "AgentForge Core",
+    "author": "Community",
     "bundledSkills": [
       "prometheus-grafana-observability",
       "opentelemetry-distributed-tracing",
@@ -639,7 +639,7 @@ export const PLUGINS_CATALOG: CatalogPlugin[] = [
       "grafana",
       "telemetry"
     ],
-    "sourceRegistry": "AgentForge Core",
+    "sourceRegistry": "Community",
     "license": "MIT"
   },
   {
@@ -648,7 +648,7 @@ export const PLUGINS_CATALOG: CatalogPlugin[] = [
     "version": "2.0.0",
     "description": "Reliable headless browser testing and web extraction uniting Playwright, Puppeteer, Firecrawl smart markdown extraction, and Browserbase cloud browsers.",
     "category": "Automation & Testing",
-    "author": "AgentForge Core",
+    "author": "Community",
     "bundledSkills": [
       "playwright-e2e-automation",
       "browser-dom-perf-tuning",
@@ -668,7 +668,7 @@ export const PLUGINS_CATALOG: CatalogPlugin[] = [
       "testing",
       "firecrawl"
     ],
-    "sourceRegistry": "AgentForge Core",
+    "sourceRegistry": "Community",
     "license": "MIT"
   },
   {
@@ -677,7 +677,7 @@ export const PLUGINS_CATALOG: CatalogPlugin[] = [
     "version": "2.0.0",
     "description": "Comprehensive LLM intelligence stack: LangGraph multi-agent coordination, LlamaIndex hierarchical chunking, benchmark evaluators, and prompt defense.",
     "category": "AI & Multi-Agent",
-    "author": "AgentForge Core",
+    "author": "Community",
     "bundledSkills": [
       "langchain-agentic-flows",
       "llamaindex-rag-pipeline",
@@ -699,7 +699,7 @@ export const PLUGINS_CATALOG: CatalogPlugin[] = [
       "evals",
       "ai"
     ],
-    "sourceRegistry": "AgentForge Core",
+    "sourceRegistry": "Community",
     "license": "MIT"
   },
   {
@@ -708,7 +708,7 @@ export const PLUGINS_CATALOG: CatalogPlugin[] = [
     "version": "2.0.0",
     "description": "Engineering excellence playbooks inspired by Addy Osmani: Spec-driven development, atomic task breakdown, incremental shipping, and pre-release gates.",
     "category": "Engineering Playbooks",
-    "author": "AgentForge Core",
+    "author": "Community",
     "bundledSkills": [
       "spec-driven-development",
       "plan-driven-development",
@@ -730,7 +730,7 @@ export const PLUGINS_CATALOG: CatalogPlugin[] = [
       "delivery",
       "playbooks"
     ],
-    "sourceRegistry": "AgentForge Core",
+    "sourceRegistry": "Community",
     "license": "MIT"
   },
   {
@@ -739,7 +739,7 @@ export const PLUGINS_CATALOG: CatalogPlugin[] = [
     "version": "2.0.0",
     "description": "Comprehensive kit bundling frontend React & 3D Web patterns, REST/GraphQL API design principles, and database architecture.",
     "category": "Engineering Suite",
-    "author": "AgentForge Core",
+    "author": "Community",
     "bundledSkills": [
       "3d-web-experience",
       "code-showcase-react-ui-patterns",
@@ -759,7 +759,7 @@ export const PLUGINS_CATALOG: CatalogPlugin[] = [
       "database",
       "engineering"
     ],
-    "sourceRegistry": "AgentForge Core",
+    "sourceRegistry": "Community",
     "license": "MIT"
   },
   {
@@ -768,7 +768,7 @@ export const PLUGINS_CATALOG: CatalogPlugin[] = [
     "version": "2.0.0",
     "description": "Autonomous Git workflows, rebase automation, PR reviewer, automated git hooks, and terminal command execution capabilities.",
     "category": "DevOps Toolkit",
-    "author": "AgentForge Core",
+    "author": "Community",
     "bundledSkills": [
       "git-advanced-workflows",
       "git-pr-review",
@@ -787,7 +787,7 @@ export const PLUGINS_CATALOG: CatalogPlugin[] = [
       "docker",
       "pr"
     ],
-    "sourceRegistry": "AgentForge Core",
+    "sourceRegistry": "Community",
     "license": "MIT"
   },
   {
@@ -796,7 +796,7 @@ export const PLUGINS_CATALOG: CatalogPlugin[] = [
     "version": "2.0.0",
     "description": "Elite quality engineering suite bundling Test-Driven Development (TDD), systematic debugging, and A/B test experiments.",
     "category": "Quality Suite",
-    "author": "AgentForge Core",
+    "author": "Community",
     "bundledSkills": [
       "test-driven-development",
       "systematic-debugging",
@@ -816,7 +816,7 @@ export const PLUGINS_CATALOG: CatalogPlugin[] = [
       "qa",
       "reliability"
     ],
-    "sourceRegistry": "AgentForge Core",
+    "sourceRegistry": "Community",
     "license": "MIT"
   },
   {
@@ -825,7 +825,7 @@ export const PLUGINS_CATALOG: CatalogPlugin[] = [
     "version": "2.0.0",
     "description": "Autonomous agent squad orchestration, vector-augmented memory systems, prompt engineering, and custom tool binding.",
     "category": "AI Multi-Agent Pack",
-    "author": "AgentForge Core",
+    "author": "Community",
     "bundledSkills": [
       "agent-orchestrator",
       "agent-memory-systems",
@@ -845,7 +845,7 @@ export const PLUGINS_CATALOG: CatalogPlugin[] = [
       "prompting",
       "orchestration"
     ],
-    "sourceRegistry": "AgentForge Core",
+    "sourceRegistry": "Community",
     "license": "MIT"
   },
   {
@@ -854,7 +854,7 @@ export const PLUGINS_CATALOG: CatalogPlugin[] = [
     "version": "2.0.0",
     "description": "Defensive engineering kit with OWASP API top 10 security defenses, automated penetration testing, and clean code boundaries.",
     "category": "Security Bundle",
-    "author": "AgentForge Core",
+    "author": "Community",
     "bundledSkills": [
       "api-security-best-practices",
       "api-security-testing",
@@ -873,7 +873,7 @@ export const PLUGINS_CATALOG: CatalogPlugin[] = [
       "audit",
       "defense"
     ],
-    "sourceRegistry": "AgentForge Core",
+    "sourceRegistry": "Community",
     "license": "MIT"
   },
   {
@@ -882,7 +882,7 @@ export const PLUGINS_CATALOG: CatalogPlugin[] = [
     "version": "1.0.0",
     "description": "Comprehensive reverse engineering powerhouse bundling REA (Reverse Engineer Anything), Ghidra disassembly, Electron ASAR unpacking, API network interception, and binary vulnerability discovery.",
     "category": "Security & Forensics",
-    "author": "AgentForge Core",
+    "author": "Community",
     "bundledSkills": [
       "reverse-engineer-anything",
       "reverse-engineering-binary",
@@ -905,7 +905,7 @@ export const PLUGINS_CATALOG: CatalogPlugin[] = [
       "security",
       "asar"
     ],
-    "sourceRegistry": "AgentForge Core",
+    "sourceRegistry": "Community",
     "license": "MIT"
   },
   {
@@ -914,7 +914,7 @@ export const PLUGINS_CATALOG: CatalogPlugin[] = [
     "version": "1.0.0",
     "description": "Eliminate outdated API hallucinations and streamline production development with live Context7 documentation injection, Supabase database tooling, and Linear issue tracking.",
     "category": "Productivity & Docs",
-    "author": "AgentForge Core",
+    "author": "Community",
     "bundledSkills": [
       "context-engine-anti-hallucination",
       "api-design-principles",
@@ -935,7 +935,7 @@ export const PLUGINS_CATALOG: CatalogPlugin[] = [
       "anti-hallucination",
       "developer-tools"
     ],
-    "sourceRegistry": "AgentForge Core",
+    "sourceRegistry": "Community",
     "license": "MIT"
   },
   {
@@ -944,7 +944,7 @@ export const PLUGINS_CATALOG: CatalogPlugin[] = [
     "version": "1.0.0",
     "description": "Production-grade quality assurance and observability kit combining Sentry error monitoring, Playwright browser automation, OpenTelemetry tracing, and Docker container management.",
     "category": "Testing & Observability",
-    "author": "AgentForge Core",
+    "author": "Community",
     "bundledSkills": [
       "playwright-e2e-automation",
       "opentelemetry-distributed-tracing",
@@ -965,7 +965,7 @@ export const PLUGINS_CATALOG: CatalogPlugin[] = [
       "testing",
       "monitoring"
     ],
-    "sourceRegistry": "AgentForge Core",
+    "sourceRegistry": "Community",
     "license": "MIT"
   },
   {

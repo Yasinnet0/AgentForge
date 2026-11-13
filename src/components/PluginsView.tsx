@@ -4,6 +4,7 @@ import { ScannedPlugin, ScannedSkill, ScannedMcpServer, SupportedAgent, Installe
 import { CatalogPlugin, CatalogSkill } from '../types/catalog';
 import { PLUGINS_CATALOG } from '../data/pluginsCatalog';
 import { SKILLS_CATALOG } from '../data/skillsCatalog';
+import { CapabilityIcon, getDomainTheme } from './CapabilityIcon';
 import {
   Boxes,
   Bot,
@@ -68,6 +69,7 @@ interface PluginsViewProps {
   onAgentFilterChange?: (agentIds: string[]) => void;
   dependencyReport?: DependencyReport | null;
   onRefreshDependencies?: () => Promise<void>;
+  isActive?: boolean;
 }
 
 type SegmentTab = 'all' | 'installed' | 'available';
@@ -95,6 +97,14 @@ interface UnifiedPluginCard {
 const EMPTY_AGENTS: SupportedAgent[] = [];
 const pluginSearchCache = new WeakMap<UnifiedPluginCard, string>();
 
+function cleanCategory(cat?: string): string {
+  if (!cat) return 'General';
+  const stripped = cat
+    .replace(/[\u{1F300}-\u{1FAFF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F900}-\u{1F9FF}\u{D800}-\u{DFFF}]/gu, '')
+    .trim();
+  return stripped || 'General';
+}
+
 function getPluginSearchString(p: UnifiedPluginCard): string {
   let cached = pluginSearchCache.get(p);
   if (!cached) {
@@ -104,7 +114,7 @@ function getPluginSearchString(p: UnifiedPluginCard): string {
   return cached;
 }
 
-export const PluginsView: React.FC<PluginsViewProps> = ({
+const PluginsViewComponent: React.FC<PluginsViewProps> = ({
   plugins,
   selectedAgents,
   allAgents,
@@ -366,7 +376,7 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
         name: cat.name,
         version: cat.version,
         description: cat.description,
-        category: cat.category,
+        category: cleanCategory(cat.category),
         author: cat.author,
         bundledSkills: cat.bundledSkills,
         bundledMcps: cat.bundledMcps,
@@ -397,7 +407,7 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
           name: p.name,
           version: p.version,
           description: p.description,
-          category: 'Custom Bundle',
+          category: cleanCategory((p as any).category || 'Custom Bundle'),
           author: p.author || 'Local',
           bundledSkills: Array(p.skillsCount).fill('Skill'),
           bundledMcps: Array(p.mcpsCount).fill('MCP'),
@@ -450,10 +460,11 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
   }, [categories, categorySearchQuery]);
 
   const filteredTargetAgents = useMemo(() => {
-    if (!agentSearchQuery.trim()) return selectedAgents;
+    const list = selectedAgents.length > 0 ? selectedAgents : (allAgents || []);
+    if (!agentSearchQuery.trim()) return list;
     const q = agentSearchQuery.trim().toLowerCase();
-    return selectedAgents.filter((ag) => ag.name.toLowerCase().includes(q) || ag.id.toLowerCase().includes(q));
-  }, [selectedAgents, agentSearchQuery]);
+    return list.filter((ag) => ag.name.toLowerCase().includes(q) || ag.id.toLowerCase().includes(q));
+  }, [selectedAgents, allAgents, agentSearchQuery]);
 
   const counts = useMemo(() => {
     let installed = 0;
@@ -478,24 +489,52 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
     if (!activeBtn) return;
     const containerRect = container.getBoundingClientRect();
     const btnRect = activeBtn.getBoundingClientRect();
-    setSegmentPillStyle({
-      left: btnRect.left - containerRect.left,
-      width: btnRect.width,
-      isReady: true,
+    if (btnRect.width <= 10 || containerRect.width <= 10) return;
+    const nextLeft = Math.round(btnRect.left - containerRect.left);
+    const nextWidth = Math.round(btnRect.width);
+
+    setSegmentPillStyle((prev) => {
+      if (prev.isReady && Math.abs(prev.left - nextLeft) < 1 && Math.abs(prev.width - nextWidth) < 1) {
+        return prev;
+      }
+      return {
+        left: nextLeft,
+        width: nextWidth,
+        isReady: true,
+      };
     });
   }, []);
 
   useLayoutEffect(() => {
     updateSegmentPill();
-  }, [updateSegmentPill, activeSegment, counts]);
+  }, [updateSegmentPill, activeSegment]);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
+    const container = segmentedControlsRef.current;
+    if (!container) return;
+
+    updateSegmentPill();
+
+    let ro: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(() => {
+        updateSegmentPill();
+      });
+      ro.observe(container);
+    }
+
+    const t1 = setTimeout(updateSegmentPill, 50);
+    const t2 = setTimeout(updateSegmentPill, 150);
+    const t3 = setTimeout(() => {
       isPillAnimatedRef.current = true;
-    }, 60);
+    }, 100);
+
     window.addEventListener('resize', updateSegmentPill);
     return () => {
-      clearTimeout(timer);
+      if (ro) ro.disconnect();
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
       window.removeEventListener('resize', updateSegmentPill);
     };
   }, [updateSegmentPill]);
@@ -704,34 +743,10 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
       }
     }
 
-    let title = 'TARGET AGENTS';
-    let badgeText = '';
-    if (installedAgents.length > 0) {
-      if (selectedAgents.length > 0) {
-        title = installedAgents.length >= selectedAgents.length ? 'Active on' : 'Active / Target';
-        badgeText = `${installedAgents.length}/${selectedAgents.length}`;
-      } else {
-        title = 'Active on';
-        badgeText = `${installedAgents.length}`;
-      }
-    } else if (selectedAgents.length > 0) {
-      title = selectedAgents.length === 1 ? 'Target agent' : 'Target agents';
-      badgeText = `${selectedAgents.length}`;
-    } else {
-      title = 'Target agents';
-      badgeText = '0';
-    }
-
     if (items.length === 0) {
       return (
         <div className="agent-deck-container empty">
-          <div className="agent-deck-header">
-            <div className="agent-deck-label-group">
-              <Bot size={11} className="agent-deck-icon" />
-              <span className="agent-deck-title font-mono">{title}</span>
-            </div>
-          </div>
-          <div className="agent-deck-empty-hint font-mono">No target agents selected</div>
+          <span className="uninstalled-muted-label font-mono">No target agents</span>
         </div>
       );
     }
@@ -752,19 +767,6 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
 
     return (
       <div className={`agent-deck-container ${installedAgents.length === 0 ? 'pending-only' : ''}`}>
-        <div className="agent-deck-header">
-          <div className="agent-deck-label-group">
-            <Bot size={11} className="agent-deck-icon" />
-            <span className="agent-deck-title font-mono">{title}</span>
-            <span className="agent-deck-count-badge font-mono">{badgeText}</span>
-          </div>
-          {items.length > 0 && (
-            <span className="agent-deck-filter-hint font-mono">
-              {currentAgentFilter.length > 0 && items.some((i) => i.isFiltered) ? 'filtered' : 'click to filter'}
-            </span>
-          )}
-        </div>
-
         <div className="agent-deck-pills">
           <div className="agent-deck-base-row">
             {initialItems.map(({ agent: ag, isInstalled, isFiltered }) => {
@@ -774,19 +776,6 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
                   type="button"
                   key={ag.id}
                   className={`agent-deck-pill ${isInstalled ? 'installed' : 'pending'} ${isFiltered ? 'is-filtered' : ''}`}
-                  style={{
-                    color: ag.color,
-                    borderColor: isFiltered
-                      ? `${ag.color}75`
-                      : isInstalled
-                      ? `${ag.color}40`
-                      : `${ag.color}28`,
-                    background: isFiltered
-                      ? `${ag.color}16`
-                      : isInstalled
-                      ? `${ag.color}0e`
-                      : `${ag.color}06`,
-                  }}
                   onClick={(e) => {
                     e.stopPropagation();
                     handleAgentPillClick(ag.id);
@@ -799,8 +788,8 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
                       : `Pending target: ${ag.name} (click to filter)`
                   }
                 >
-                  <AgentIcon size={11} className="pill-brand-icon" />
-                  <span className="pill-name">{isInstalled ? ag.name : `+${ag.name}`}</span>
+                  <AgentIcon size={11} className="pill-brand-icon" style={{ color: ag.color }} />
+                  <span className="pill-name">{ag.name}</span>
                   {isFiltered && <Check size={9} className="pill-check-icon" />}
                 </button>
               );
@@ -831,17 +820,6 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
                         key={ag.id}
                         className={`agent-deck-pill ${isInstalled ? 'installed' : 'pending'} ${isFiltered ? 'is-filtered' : ''}`}
                         style={{
-                          color: ag.color,
-                          borderColor: isFiltered
-                            ? `${ag.color}75`
-                            : isInstalled
-                            ? `${ag.color}40`
-                            : `${ag.color}28`,
-                          background: isFiltered
-                            ? `${ag.color}16`
-                            : isInstalled
-                            ? `${ag.color}0e`
-                            : `${ag.color}06`,
                           animationDelay: `${idx * 28}ms`,
                         }}
                         onClick={(e) => {
@@ -856,8 +834,8 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
                             : `Pending target: ${ag.name} (click to filter)`
                         }
                       >
-                        <AgentIcon size={11} className="pill-brand-icon" />
-                        <span className="pill-name">{isInstalled ? ag.name : `+${ag.name}`}</span>
+                        <AgentIcon size={11} className="pill-brand-icon" style={{ color: ag.color }} />
+                        <span className="pill-name">{ag.name}</span>
                         {isFiltered && <Check size={9} className="pill-check-icon" />}
                       </button>
                     );
@@ -941,19 +919,6 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
                 type="button"
                 key={ag.id}
                 className={`agent-deck-pill compact ${isInstalled ? 'installed' : 'pending'} ${isFiltered ? 'is-filtered' : ''}`}
-                style={{
-                  color: ag.color,
-                  borderColor: isFiltered
-                    ? `${ag.color}75`
-                    : isInstalled
-                    ? `${ag.color}40`
-                    : `${ag.color}28`,
-                  background: isFiltered
-                    ? `${ag.color}16`
-                    : isInstalled
-                    ? `${ag.color}0e`
-                    : `${ag.color}06`,
-                }}
                 onClick={(e) => {
                   e.stopPropagation();
                   handleAgentPillClick(ag.id);
@@ -966,8 +931,8 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
                     : `Pending target: ${ag.name} (click to filter)`
                 }
               >
-                <AgentIcon size={10} className="pill-brand-icon" />
-                <span className="pill-name">{isInstalled ? ag.name : `+${ag.name}`}</span>
+                <AgentIcon size={10} className="pill-brand-icon" style={{ color: ag.color }} />
+                <span className="pill-name">{ag.name}</span>
                 {isFiltered && <Check size={8} className="pill-check-icon" />}
               </button>
             );
@@ -1002,17 +967,6 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
                       key={ag.id}
                       className={`agent-deck-pill compact ${isInstalled ? 'installed' : 'pending'} ${isFiltered ? 'is-filtered' : ''}`}
                       style={{
-                        color: ag.color,
-                        borderColor: isFiltered
-                          ? `${ag.color}75`
-                          : isInstalled
-                          ? `${ag.color}40`
-                          : `${ag.color}28`,
-                        background: isFiltered
-                          ? `${ag.color}16`
-                          : isInstalled
-                          ? `${ag.color}0e`
-                          : `${ag.color}06`,
                         animationDelay: `${idx * 24}ms`,
                       }}
                       onClick={(e) => {
@@ -1027,8 +981,8 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
                           : `Pending target: ${ag.name} (click to filter)`
                       }
                     >
-                      <AgentIcon size={10} className="pill-brand-icon" />
-                      <span className="pill-name">{isInstalled ? ag.name : `+${ag.name}`}</span>
+                      <AgentIcon size={10} className="pill-brand-icon" style={{ color: ag.color }} />
+                      <span className="pill-name">{ag.name}</span>
                       {isFiltered && <Check size={8} className="pill-check-icon" />}
                     </button>
                   );
@@ -1539,7 +1493,7 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
               style={{
                 transform: `translateX(${segmentPillStyle.left}px)`,
                 width: `${segmentPillStyle.width}px`,
-                opacity: segmentPillStyle.isReady ? 1 : 0,
+                opacity: segmentPillStyle.isReady && segmentPillStyle.width > 10 ? 1 : 0,
                 transition: isPillAnimatedRef.current
                   ? 'transform 0.24s cubic-bezier(0.16, 1, 0.3, 1), width 0.24s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.15s ease'
                   : 'opacity 0.15s ease',
@@ -1630,7 +1584,7 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
             >
               <Filter size={12} className="filter-chip-icon text-indigo" />
               <span className="filter-chip-label">Category:</span>
-              <span className="filter-chip-value">
+              <span className="filter-chip-value" title={selectedCategory}>
                 {selectedCategory === 'All' ? 'All' : selectedCategory}
               </span>
               <ChevronDown
@@ -1729,6 +1683,7 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
                             setSelectedCategory(cat);
                             setIsCategoryMenuOpen(false);
                           }}
+                          title={cat}
                         >
                           <div className="filter-popover-item-left">
                             <span>{cat}</span>
@@ -1752,14 +1707,16 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
           </div>
 
           {/* Agent Filter Chip */}
-          {selectedAgents.length > 1 && (() => {
+          {(selectedAgents.length > 0 || (allAgents && allAgents.length > 0)) && (() => {
+            const availableAgents = selectedAgents.length > 0 ? selectedAgents : (allAgents || []);
             const singleFilteredAgent = currentAgentFilter.length === 1
-              ? selectedAgents.find((a) => a.id === currentAgentFilter[0])
+              ? availableAgents.find((a) => a.id === currentAgentFilter[0])
               : null;
-            const AgentTriggerIcon = singleFilteredAgent
-              ? (AGENT_ICON_MAP[singleFilteredAgent.id] || AGENT_ICON_MAP[singleFilteredAgent.iconName] || Bot)
+            const activeAgent = singleFilteredAgent || (currentAgentFilter.length === 0 && availableAgents.length === 1 ? availableAgents[0] : null);
+            const AgentTriggerIcon = activeAgent
+              ? (AGENT_ICON_MAP[activeAgent.id] || AGENT_ICON_MAP[activeAgent.iconName] || Bot)
               : Bot;
-            const isAgentActive = currentAgentFilter.length > 0;
+            const isAgentActive = currentAgentFilter.length > 0 || (availableAgents.length === 1 && currentAgentFilter.length === 0);
 
             return (
               <div className="filter-chip-wrapper" ref={agentMenuRef}>
@@ -1767,10 +1724,10 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
                   type="button"
                   className={`filter-chip-trigger ${isAgentActive ? 'active' : ''}`}
                   style={
-                    singleFilteredAgent
+                    activeAgent
                       ? {
-                        borderColor: `${singleFilteredAgent.color}55`,
-                        background: `${singleFilteredAgent.color}14`,
+                        borderColor: `${activeAgent.color}55`,
+                        background: `${activeAgent.color}14`,
                       }
                       : undefined
                   }
@@ -1795,17 +1752,20 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
                     size={12}
                     className="filter-chip-icon"
                     style={
-                      singleFilteredAgent
-                        ? { color: singleFilteredAgent.color }
+                      activeAgent
+                        ? { color: activeAgent.color }
                         : isAgentActive
                           ? { color: '#818cf8' }
                           : undefined
                     }
                   />
                   <span className="filter-chip-label">Agent:</span>
-                  <span className="filter-chip-value">
+                  <span
+                    className="filter-chip-value"
+                    style={activeAgent ? { color: activeAgent.color } : undefined}
+                  >
                     {currentAgentFilter.length === 0
-                      ? 'All'
+                      ? (availableAgents.length === 1 ? availableAgents[0].name : `All (${availableAgents.length})`)
                       : singleFilteredAgent?.name || `${currentAgentFilter.length} Agents`}
                   </span>
                   <ChevronDown
@@ -1863,7 +1823,7 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
                     </div>
 
                     <div className="filter-popover-list">
-                      {(!agentSearchQuery.trim() || 'all selected agents'.includes(agentSearchQuery.toLowerCase())) && (
+                      {(!agentSearchQuery.trim() || 'all agents'.includes(agentSearchQuery.toLowerCase())) && (
                         <button
                           type="button"
                           className={`filter-popover-item ${currentAgentFilter.length === 0 ? 'selected' : ''}`}
@@ -1874,16 +1834,16 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
                         >
                           <div className="filter-popover-item-left">
                             <Bot size={13} className="text-muted" />
-                            <span>All Selected Agents</span>
+                            <span>All Agents</span>
                           </div>
                           <div className="filter-popover-item-right">
-                            <span className="filter-popover-count">{selectedAgents.length}</span>
+                            <span className="filter-popover-count">{availableAgents.length}</span>
                             {currentAgentFilter.length === 0 && <Check size={12} className="filter-popover-check" />}
                           </div>
                         </button>
                       )}
 
-                      {(!agentSearchQuery.trim() || 'all selected agents'.includes(agentSearchQuery.toLowerCase())) && filteredTargetAgents.length > 0 && (
+                      {(!agentSearchQuery.trim() || 'all agents'.includes(agentSearchQuery.toLowerCase())) && filteredTargetAgents.length > 0 && (
                         <div className="filter-popover-divider" />
                       )}
 
@@ -2023,6 +1983,7 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
                   tags: plugin.tags,
                 });
                 const depStatus = evaluateDependencyStatus(requiredBinaries, dependencyReport || null);
+                const domainTheme = getDomainTheme(plugin.category, 'plugin');
 
                 return (
                   <div
@@ -2034,8 +1995,14 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
                     {/* 1. Header: Icon Avatar + Name/Version + Status */}
                     <div className="card-header-cluster">
                       <div className="card-header-left">
-                        <div className="card-icon-avatar plugin">
-                          <Boxes size={16} />
+                        <div
+                          className="card-icon-avatar plugin"
+                          style={{
+                            background: domainTheme.bg,
+                            borderColor: domainTheme.border,
+                          }}
+                        >
+                          <CapabilityIcon type="plugin" category={plugin.category} name={plugin.name} size={16} />
                         </div>
                         <div className="card-identity-text">
                           <div className="card-title-row">
@@ -2044,13 +2011,9 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
                           </div>
                           <div className="card-sub-meta">
                             {plugin.category && (
-                              <span className="card-cat-text font-mono">{plugin.category}</span>
-                            )}
-                            {plugin.category && plugin.author && (
-                              <span className="card-meta-dot">·</span>
-                            )}
-                            {plugin.author && (
-                              <span className="author-text font-mono">by {plugin.author}</span>
+                              <span className="card-cat-text font-mono" style={{ color: domainTheme.color }}>
+                                {plugin.category}
+                              </span>
                             )}
                           </div>
                         </div>
@@ -2203,6 +2166,7 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
                   tags: plugin.tags,
                 });
                 const depStatus = evaluateDependencyStatus(requiredBinaries, dependencyReport || null);
+                const domainTheme = getDomainTheme(plugin.category, 'plugin');
 
                 return (
                   <div
@@ -2213,8 +2177,14 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
                   >
                     {/* Identity Col */}
                     <div className="list-col col-identity">
-                      <div className="card-icon-avatar list-avatar plugin">
-                        <Boxes size={15} />
+                      <div
+                        className="card-icon-avatar list-avatar plugin"
+                        style={{
+                          background: domainTheme.bg,
+                          borderColor: domainTheme.border,
+                        }}
+                      >
+                        <CapabilityIcon type="plugin" category={plugin.category} name={plugin.name} size={15} />
                       </div>
                       <div className="list-identity-text">
                         <div className="list-title-row">
@@ -2240,7 +2210,9 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
                     {/* Meta Col */}
                     <div className="list-col col-meta">
                       {plugin.category && (
-                        <span className="card-cat-text font-mono">{plugin.category}</span>
+                        <span className="card-cat-text font-mono" style={{ color: domainTheme.color }}>
+                          {plugin.category}
+                        </span>
                       )}
                       {plugin.author && (
                         <span className="author-text font-mono">by {plugin.author}</span>
@@ -2489,7 +2461,12 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
             <div className="item-modal-header">
               <div className="item-modal-title-area">
                 <div className="item-modal-icon-wrap plugin">
-                  <Boxes size={20} />
+                  <CapabilityIcon
+                    type="plugin"
+                    category={selectedPluginForDetails.category}
+                    name={selectedPluginForDetails.name}
+                    size={20}
+                  />
                 </div>
                 <div className="item-modal-title-content">
                   <div className="item-modal-title-row">
@@ -2535,8 +2512,7 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
                 title="Close (Esc)"
                 aria-label="Close modal"
               >
-                <X size={12} strokeWidth={2.2} />
-                <kbd className="modal-esc-hint font-mono">ESC</kbd>
+                <X size={15} strokeWidth={2} />
               </button>
             </div>
 
@@ -3089,7 +3065,6 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
 
         .segment-content-animated {
           animation: segmentContentEnter 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
-          will-change: opacity, transform;
         }
 
         @keyframes segmentContentEnter {
@@ -3289,8 +3264,11 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
         }
 
         .filter-chip-label {
+          display: inline-flex;
+          align-items: center;
           color: #64748b;
           font-size: 11px;
+          line-height: 1;
           font-weight: 500;
           letter-spacing: 0.01em;
           flex-shrink: 0;
@@ -3301,9 +3279,12 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
         }
 
         .filter-chip-value {
+          display: inline-flex;
+          align-items: center;
           color: #f1f5f9;
           font-weight: 600;
-          font-size: 11.5px;
+          font-size: 11px;
+          line-height: 1;
           flex: 1;
           min-width: 0;
           text-align: left;
@@ -3541,17 +3522,19 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
           display: flex;
           align-items: center;
           justify-content: space-between;
-          gap: 8px;
+          gap: 6px;
           width: 100%;
+          min-height: 28px;
           padding: 5px 8px;
           background: transparent;
           border: 1px solid transparent;
           border-radius: 5px;
           cursor: pointer;
           color: #cbd5e1;
-          font-size: 11.5px;
+          font-size: 11px;
           text-align: left;
           transition: all 0.12s ease;
+          box-sizing: border-box;
         }
 
         .filter-popover-item:hover {
@@ -3570,15 +3553,16 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
         .filter-popover-item-left {
           display: flex;
           align-items: center;
-          gap: 7px;
+          gap: 6px;
           min-width: 0;
           flex: 1;
         }
 
         .filter-popover-item-left span {
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
+          white-space: normal;
+          word-break: break-word;
+          line-height: 1.25;
+          font-size: 11px;
         }
 
         .filter-popover-dot {
@@ -3731,6 +3715,9 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
           box-sizing: border-box;
           box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
           cursor: pointer;
+          contain: layout style;
+          content-visibility: auto;
+          contain-intrinsic-size: auto 56px;
         }
 
         .plugin-row-card:hover {
@@ -3767,16 +3754,18 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
           display: flex;
           align-items: center;
           justify-content: center;
-          background: linear-gradient(135deg, rgba(245, 158, 11, 0.18) 0%, rgba(217, 119, 6, 0.08) 100%);
-          border: 1px solid rgba(245, 158, 11, 0.32);
-          color: #fbbf24;
+          background: rgba(255, 255, 255, 0.035);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          color: #94a3b8;
           box-shadow: none;
           flex-shrink: 0;
-          transition: border-color 0.15s ease;
+          transition: all 0.15s ease;
         }
 
         .plugin-row-card:hover .card-icon-avatar.list-avatar.plugin {
-          border-color: rgba(245, 158, 11, 0.55);
+          border-color: rgba(168, 85, 247, 0.45);
+          color: #f8fafc;
+          background: rgba(255, 255, 255, 0.06);
           box-shadow: none;
           transform: none;
         }
@@ -3902,7 +3891,7 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
         }
 
         .plugin-card {
-          background: #0f1626;
+          background: linear-gradient(180deg, #131b2f 0%, #0d1424 100%);
           border: 1px solid rgba(255, 255, 255, 0.07);
           border-radius: 12px;
           padding: 16px 18px;
@@ -3911,17 +3900,20 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
           min-width: 0;
           min-height: 226px;
           box-sizing: border-box;
-          transition: border-color 0.12s ease, background 0.12s ease;
+          transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
           position: relative;
           overflow: hidden;
-          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+          box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 2px 8px rgba(0, 0, 0, 0.28);
           cursor: pointer;
+          contain: layout style;
+          content-visibility: auto;
+          contain-intrinsic-size: auto 226px;
         }
 
         .plugin-card:hover {
-          border-color: rgba(245, 158, 11, 0.32);
-          background: #131c30;
-          box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+          border-color: rgba(168, 85, 247, 0.42);
+          background: linear-gradient(180deg, #16203a 0%, #0f182c 100%);
+          box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.09), 0 8px 24px -4px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(168, 85, 247, 0.2);
         }
 
         /* Header: Clean decoupled flex header */
@@ -3947,21 +3939,17 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
           width: 36px;
           height: 36px;
           border-radius: 9px;
-          background: linear-gradient(135deg, rgba(245, 158, 11, 0.18) 0%, rgba(217, 119, 6, 0.08) 100%);
-          border: 1px solid rgba(245, 158, 11, 0.32);
-          color: #fbbf24;
+          border: 1px solid rgba(255, 255, 255, 0.08);
           box-shadow: none;
           display: flex;
           align-items: center;
           justify-content: center;
           flex-shrink: 0;
-          transition: border-color 0.15s ease;
+          transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
         .plugin-card:hover .card-icon-avatar.plugin {
-          border-color: rgba(245, 158, 11, 0.55);
-          box-shadow: none;
-          transform: none;
+          box-shadow: 0 0 16px -2px rgba(168, 85, 247, 0.35);
         }
 
         .card-identity-text {
@@ -4049,9 +4037,9 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
 
         .source-registry-pill {
           font-size: 8.5px;
-          color: #38bdf8;
-          background: rgba(56, 189, 248, 0.08);
-          border: 1px solid rgba(56, 189, 248, 0.22);
+          color: #94a3b8;
+          background: rgba(255, 255, 255, 0.035);
+          border: 1px solid rgba(255, 255, 255, 0.08);
           padding: 0.5px 5px;
           border-radius: 3px;
           font-weight: 600;
@@ -4062,48 +4050,13 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
           white-space: nowrap;
           max-width: 140px;
           flex-shrink: 0;
+          transition: all 0.12s ease;
         }
 
-        .source-registry-pill.pill-aas {
-          color: #c084fc;
-          background: rgba(192, 132, 252, 0.12);
-          border-color: rgba(192, 132, 252, 0.28);
-        }
-
-        .source-registry-pill.pill-official {
-          color: #38bdf8;
-          background: rgba(56, 189, 248, 0.12);
-          border-color: rgba(56, 189, 248, 0.28);
-        }
-
-        .source-registry-pill.pill-addy {
-          color: #fbbf24;
-          background: rgba(251, 191, 36, 0.12);
-          border-color: rgba(251, 191, 36, 0.28);
-        }
-
-        .source-registry-pill.pill-custom {
-          color: #34d399;
-          background: rgba(52, 211, 153, 0.12);
-          border-color: rgba(52, 211, 153, 0.28);
-        }
-
-        .source-registry-pill.pill-smithery {
-          color: #fb923c;
-          background: rgba(251, 146, 60, 0.12);
-          border-color: rgba(251, 146, 60, 0.28);
-        }
-
-        .source-registry-pill.pill-community {
-          color: #2dd4bf;
-          background: rgba(45, 212, 191, 0.12);
-          border-color: rgba(45, 212, 191, 0.28);
-        }
-
-        .source-registry-pill.pill-core {
-          color: #818cf8;
-          background: rgba(129, 140, 248, 0.12);
-          border-color: rgba(129, 140, 248, 0.28);
+        .source-registry-pill:hover {
+          color: #f1f5f9;
+          border-color: rgba(255, 255, 255, 0.16);
+          background: rgba(255, 255, 255, 0.06);
         }
 
         .card-header-right {
@@ -4216,30 +4169,33 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
           letter-spacing: 0.02em;
           white-space: nowrap;
           flex-shrink: 0;
+          background: rgba(255, 255, 255, 0.035);
+          border: 1px solid rgba(255, 255, 255, 0.07);
+          color: #94a3b8;
         }
 
         .status-pill-clean.installed {
-          color: #34d399;
-          background: rgba(16, 185, 129, 0.08);
-          border: 1px solid rgba(16, 185, 129, 0.22);
+          color: #e2e8f0;
+          background: rgba(16, 185, 129, 0.06);
+          border-color: rgba(16, 185, 129, 0.18);
         }
 
         .status-pill-clean.disabled {
           color: #fb7185;
-          background: rgba(244, 63, 94, 0.08);
-          border: 1px solid rgba(244, 63, 94, 0.28);
+          background: rgba(244, 63, 94, 0.06);
+          border-color: rgba(244, 63, 94, 0.2);
         }
 
         .status-pill-clean.partial {
-          color: #fbbf24;
-          background: rgba(245, 158, 11, 0.08);
-          border: 1px solid rgba(245, 158, 11, 0.22);
+          color: #e2e8f0;
+          background: rgba(245, 158, 11, 0.06);
+          border-color: rgba(245, 158, 11, 0.18);
         }
 
         .status-pill-clean.available {
-          color: #38bdf8;
-          background: rgba(56, 189, 248, 0.1);
-          border: 1px solid rgba(56, 189, 248, 0.25);
+          color: #64748b;
+          background: rgba(255, 255, 255, 0.025);
+          border-color: rgba(255, 255, 255, 0.05);
         }
 
         .status-pill-clean.clickable {
@@ -4474,92 +4430,16 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
         .agent-deck-container {
           display: flex;
           flex-direction: column;
-          gap: 7px;
-          background: rgba(15, 23, 42, 0.45);
-          border: 1px solid rgba(255, 255, 255, 0.05);
-          border-radius: 8px;
-          padding: 8px 10px;
+          gap: 5px;
+          background: transparent;
+          border: none;
+          padding: 2px 0;
           box-sizing: border-box;
           width: 100%;
           min-width: 0;
-          transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-
-        .agent-deck-container:hover {
-          background: rgba(15, 23, 42, 0.65);
-          border-color: rgba(255, 255, 255, 0.09);
-        }
-
-        .agent-deck-container.pending-only {
-          background: rgba(15, 23, 42, 0.25);
-          border-color: rgba(255, 255, 255, 0.035);
-          border-style: dashed;
         }
 
         .agent-deck-container.empty {
-          padding: 7px 10px;
-        }
-
-        .agent-deck-header {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 8px;
-          width: 100%;
-          min-width: 0;
-        }
-
-        .agent-deck-label-group {
-          display: flex;
-          align-items: center;
-          gap: 5.5px;
-          min-width: 0;
-        }
-
-        .agent-deck-icon {
-          color: #64748b;
-          flex-shrink: 0;
-        }
-
-        .agent-deck-title {
-          font-size: 9.5px;
-          font-weight: 700;
-          letter-spacing: 0.05em;
-          color: #718096;
-          text-transform: uppercase;
-          white-space: nowrap;
-        }
-
-        .agent-deck-count-badge {
-          display: inline-flex;
-          align-items: center;
-          font-size: 9px;
-          font-weight: 600;
-          color: #94a3b8;
-          background: rgba(255, 255, 255, 0.06);
-          border: 1px solid rgba(255, 255, 255, 0.07);
-          padding: 0 5px;
-          border-radius: 9999px;
-          line-height: 14px;
-        }
-
-        .agent-deck-filter-hint {
-          font-size: 9px;
-          color: #475569;
-          font-style: italic;
-          white-space: nowrap;
-          letter-spacing: 0.01em;
-          transition: color 0.15s ease;
-        }
-
-        .agent-deck-container:hover .agent-deck-filter-hint {
-          color: #64748b;
-        }
-
-        .agent-deck-empty-hint {
-          font-size: 10px;
-          color: #475569;
-          font-style: italic;
           padding: 2px 0;
         }
 
@@ -4650,33 +4530,55 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
           padding: 2.5px 7.5px;
           border-radius: 5px;
           font-size: 10px;
-          font-weight: 600;
-          border: 1px solid;
+          font-weight: 500;
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          background: rgba(255, 255, 255, 0.035);
+          color: #94a3b8;
           cursor: pointer;
           user-select: none;
           white-space: nowrap;
           flex-shrink: 0;
           line-height: 14px;
+          outline: none !important;
+          box-shadow: none !important;
           transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
+        .agent-deck-pill:focus,
+        .agent-deck-pill:focus-visible {
+          outline: none !important;
+          box-shadow: none !important;
+        }
+
         .agent-deck-pill:hover {
-          filter: brightness(1.12);
+          background: rgba(255, 255, 255, 0.07);
+          border-color: rgba(255, 255, 255, 0.16);
+          color: #f1f5f9;
+        }
+
+        .agent-deck-pill.installed {
+          color: #cbd5e1;
+          border-color: rgba(255, 255, 255, 0.1);
         }
 
         .agent-deck-pill.pending {
-          border-style: dashed !important;
-          opacity: 0.85;
+          color: #64748b;
+          border: 1px solid rgba(255, 255, 255, 0.06) !important;
+          background: rgba(255, 255, 255, 0.018) !important;
         }
 
         .agent-deck-pill.pending:hover {
-          opacity: 1;
-          border-style: solid !important;
+          color: #94a3b8;
+          border-color: rgba(255, 255, 255, 0.14) !important;
+          background: rgba(255, 255, 255, 0.05) !important;
         }
 
         .agent-deck-pill.is-filtered {
           font-weight: 600;
-          box-shadow: none;
+          border-color: rgba(168, 85, 247, 0.45) !important;
+          background: rgba(168, 85, 247, 0.12) !important;
+          color: #f3e8ff !important;
+        }
         }
 
         .agent-deck-pill .pill-brand-icon {
@@ -4813,13 +4715,15 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
         }
 
         .agent-pill.unequipped {
-          border-style: dashed !important;
-          opacity: 0.85;
+          border: 1px solid rgba(255, 255, 255, 0.06) !important;
+          background: rgba(255, 255, 255, 0.018) !important;
+          color: #64748b !important;
         }
 
         .agent-pill.unequipped:hover {
-          opacity: 1 !important;
-          border-style: solid !important;
+          color: #94a3b8 !important;
+          border-color: rgba(255, 255, 255, 0.14) !important;
+          background: rgba(255, 255, 255, 0.05) !important;
         }
 
         /* Bottom Toolbar: Clean 36px height, consistent across tabs */
@@ -5154,9 +5058,9 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
         .item-modal-backdrop {
           position: fixed;
           inset: 0;
-          background: rgba(3, 7, 18, 0.78);
-          backdrop-filter: blur(12px);
-          -webkit-backdrop-filter: blur(12px);
+          background: radial-gradient(ellipse at 50% 40%, rgba(13, 19, 36, 0.62) 0%, rgba(4, 7, 15, 0.74) 100%);
+          backdrop-filter: blur(16px) saturate(180%) contrast(105%);
+          -webkit-backdrop-filter: blur(16px) saturate(180%) contrast(105%);
           display: flex;
           align-items: center;
           justify-content: center;
@@ -5193,7 +5097,6 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
           overflow: hidden;
           overflow-x: hidden;
           animation: itemModalScaleIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-          will-change: transform, opacity;
           display: flex;
           flex-direction: column;
           max-height: min(94vh, calc(100vh - 36px));
@@ -5205,13 +5108,13 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
         }
 
         @keyframes itemModalScaleIn {
-          from { opacity: 0; transform: scale(0.96) translateY(8px); }
-          to { opacity: 1; transform: scale(1) translateY(0); }
+          from { opacity: 0; transform: scale(0.97) translateY(8px); }
+          to { opacity: 1; transform: none; }
         }
 
         @keyframes itemModalScaleOut {
-          from { opacity: 1; transform: scale(1) translateY(0); }
-          to { opacity: 0; transform: scale(0.96) translateY(8px); }
+          from { opacity: 1; transform: none; }
+          to { opacity: 0; transform: scale(0.97) translateY(8px); }
         }
 
         .item-modal-header {
@@ -5329,17 +5232,18 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
         .item-modal-close-btn {
           align-self: flex-start;
           margin-top: 2px;
-          height: 26px;
-          padding: 0 7px 0 6px;
+          width: 28px;
+          height: 28px;
+          padding: 0;
           background: rgba(255, 255, 255, 0.04);
           border: 1px solid rgba(255, 255, 255, 0.08);
           color: #94a3b8;
           cursor: pointer;
-          border-radius: 6px;
+          border-radius: 7px;
           display: inline-flex;
           align-items: center;
-          gap: 5px;
-          transition: all 0.14s cubic-bezier(0.16, 1, 0.3, 1);
+          justify-content: center;
+          transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
           flex-shrink: 0;
           box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
           user-select: none;
@@ -5347,39 +5251,14 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
 
         .item-modal-close-btn:hover {
           color: #f8fafc;
-          background: rgba(255, 255, 255, 0.08);
+          background: rgba(255, 255, 255, 0.09);
           border-color: rgba(255, 255, 255, 0.18);
+          transform: translateY(-0.5px);
         }
 
         .item-modal-close-btn:active {
           transform: translateY(0.5px);
-          background: rgba(255, 255, 255, 0.12);
-        }
-
-        .item-modal-close-btn .modal-esc-hint,
-        .modal-esc-hint {
-          font-size: 9px;
-          font-weight: 600;
-          letter-spacing: 0.04em;
-          color: #64748b;
-          background: rgba(255, 255, 255, 0.05);
-          border: 1px solid rgba(255, 255, 255, 0.1);
-          box-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
-          padding: 1px 4.5px;
-          border-radius: 3.5px;
-          line-height: 1;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          height: 15px;
-          box-sizing: border-box;
-          transition: all 0.14s ease;
-        }
-
-        .item-modal-close-btn:hover .modal-esc-hint {
-          color: #e2e8f0;
-          background: rgba(255, 255, 255, 0.09);
-          border-color: rgba(255, 255, 255, 0.2);
+          background: rgba(255, 255, 255, 0.14);
         }
 
         .item-modal-body {
@@ -5718,3 +5597,27 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
     </div>
   );
 };
+
+export const PluginsView = React.memo(PluginsViewComponent, (prev, next) => {
+  if (prev.isActive === false && next.isActive === false) {
+    return true;
+  }
+  if (prev.isActive !== next.isActive) {
+    return false;
+  }
+  return (
+    prev.plugins === next.plugins &&
+    prev.selectedAgents === next.selectedAgents &&
+    prev.allAgents === next.allAgents &&
+    prev.skills === next.skills &&
+    prev.mcpServers === next.mcpServers &&
+    prev.pluginsCatalog === next.pluginsCatalog &&
+    prev.skillsCatalog === next.skillsCatalog &&
+    prev.searchQuery === next.searchQuery &&
+    prev.highlightedId === next.highlightedId &&
+    prev.isSyncingCatalog === next.isSyncingCatalog &&
+    prev.catalogSyncedAt === next.catalogSyncedAt &&
+    prev.activeAgentFilter === next.activeAgentFilter &&
+    prev.dependencyReport === next.dependencyReport
+  );
+});

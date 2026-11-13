@@ -131,9 +131,9 @@ export function formatSourceBadge(sourceRegistry?: string): SourceBadgeInfo {
   }
   if (s.includes('agentforge') || s.includes('core')) {
     return {
-      badgeText: '[Core]',
-      badgeClass: 'pill-core',
-      tooltip: 'AgentForge Core Bundled Package',
+      badgeText: '[Community]',
+      badgeClass: 'pill-community',
+      tooltip: 'Community Curated Package',
     };
   }
 
@@ -184,7 +184,12 @@ function formatTitle(slug: string): string {
 
 function formatCategory(category?: string): string {
   if (!category) return 'General';
-  const c = category.toLowerCase().trim();
+  // Strip emojis, symbols, and surrogate pairs
+  const stripped = category
+    .replace(/[\u{1F300}-\u{1FAFF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F900}-\u{1F9FF}\u{D800}-\u{DFFF}]/gu, '')
+    .trim();
+  if (!stripped) return 'General';
+  const c = stripped.toLowerCase();
   if (c === 'frontend' || c === 'ui') return 'Frontend';
   if (c === 'backend' || c === 'api') return 'Backend & API';
   if (c === 'ai' || c === 'agents' || c === 'llm' || c === 'multi-agent') return 'AI & Multi-Agent';
@@ -196,7 +201,7 @@ function formatCategory(category?: string): string {
   if (c === 'design' || c === 'styling') return 'Design & Styling';
   if (c === 'productivity' || c === 'tools') return 'Productivity';
 
-  return category.charAt(0).toUpperCase() + category.slice(1);
+  return stripped.charAt(0).toUpperCase() + stripped.slice(1);
 }
 
 // 1. Ingest Primary AAS Skills (MIT)
@@ -488,8 +493,8 @@ async function fetchSmitheryRegistry(): Promise<CatalogMcpServer[]> {
     const rawServers: any[] = Array.isArray(data)
       ? data
       : Array.isArray(data?.servers)
-      ? data.servers
-      : [];
+        ? data.servers
+        : [];
 
     return rawServers.map((s: any) => {
       const name = s.displayName || formatTitle(s.qualifiedName || s.namespace || 'Smithery Server');
