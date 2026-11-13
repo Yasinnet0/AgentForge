@@ -377,7 +377,7 @@ ${instructions.trim()}
             </p>
           </div>
           <button className="close-btn" onClick={handleClose} aria-label="Close modal">
-            <X size={16} />
+            <X size={15} strokeWidth={2} />
           </button>
         </div>
 
@@ -782,9 +782,9 @@ ${instructions.trim()}
             bottom: 0 !important;
             width: 100vw !important;
             height: 100vh !important;
-            background: rgba(3, 7, 18, 0.82) !important;
-            backdrop-filter: blur(8px) !important;
-            -webkit-backdrop-filter: blur(8px) !important;
+            background: radial-gradient(ellipse at 50% 40%, rgba(13, 19, 36, 0.62) 0%, rgba(4, 7, 15, 0.74) 100%) !important;
+            backdrop-filter: blur(16px) saturate(180%) contrast(105%) !important;
+            -webkit-backdrop-filter: blur(16px) saturate(180%) contrast(105%) !important;
             display: flex !important;
             align-items: center !important;
             justify-content: center !important;
@@ -872,18 +872,33 @@ ${instructions.trim()}
           }
 
           .close-btn {
-            background: transparent;
-            border: none;
-            color: #64748b;
-            padding: 6px;
-            border-radius: 6px;
+            width: 28px;
+            height: 28px;
+            padding: 0;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            color: #94a3b8;
             cursor: pointer;
-            transition: all 0.15s;
+            border-radius: 7px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+            flex-shrink: 0;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+            user-select: none;
           }
 
           .close-btn:hover {
-            background: #1e293b;
             color: #f8fafc;
+            background: rgba(255, 255, 255, 0.09);
+            border-color: rgba(255, 255, 255, 0.18);
+            transform: translateY(-0.5px);
+          }
+
+          .close-btn:active {
+            transform: translateY(0.5px);
+            background: rgba(255, 255, 255, 0.14);
           }
 
           .forge-error-banner {

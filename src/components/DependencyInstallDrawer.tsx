@@ -124,7 +124,7 @@ export const DependencyInstallDrawer: React.FC<DependencyInstallDrawerProps> = (
             </div>
           </div>
           <button className="drawer-close-btn" onClick={handleClose} aria-label="Close Drawer">
-            <X size={16} />
+            <X size={15} strokeWidth={2} />
           </button>
         </div>
 
@@ -296,8 +296,9 @@ export const DependencyInstallDrawer: React.FC<DependencyInstallDrawerProps> = (
           left: 0;
           right: 0;
           bottom: 0;
-          background: rgba(0, 0, 0, 0.65);
-          backdrop-filter: blur(4px);
+          background: radial-gradient(ellipse at 50% 40%, rgba(13, 19, 36, 0.62) 0%, rgba(4, 7, 15, 0.74) 100%);
+          backdrop-filter: blur(16px) saturate(180%) contrast(105%);
+          -webkit-backdrop-filter: blur(16px) saturate(180%) contrast(105%);
           z-index: 10000;
           display: flex;
           justify-content: flex-end;
@@ -406,22 +407,33 @@ export const DependencyInstallDrawer: React.FC<DependencyInstallDrawerProps> = (
         }
 
         .drawer-close-btn {
-          background: transparent;
-          border: none;
-          color: #64748b;
-          cursor: pointer;
           width: 28px;
           height: 28px;
-          border-radius: 6px;
-          display: flex;
+          padding: 0;
+          background: rgba(255, 255, 255, 0.04);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          color: #94a3b8;
+          cursor: pointer;
+          border-radius: 7px;
+          display: inline-flex;
           align-items: center;
           justify-content: center;
-          transition: all 0.15s ease;
+          transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+          flex-shrink: 0;
+          box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+          user-select: none;
         }
 
         .drawer-close-btn:hover {
-          color: #ffffff;
-          background: rgba(255, 255, 255, 0.08);
+          color: #f8fafc;
+          background: rgba(255, 255, 255, 0.09);
+          border-color: rgba(255, 255, 255, 0.18);
+          transform: translateY(-0.5px);
+        }
+
+        .drawer-close-btn:active {
+          transform: translateY(0.5px);
+          background: rgba(255, 255, 255, 0.14);
         }
 
         .dep-summary-banner {

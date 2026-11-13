@@ -19,11 +19,12 @@ interface AgentsManagerViewProps {
   onSelectAll?: (select: boolean) => void;
   searchQuery?: string;
   highlightedId?: string | null;
+  isActive?: boolean;
 }
 
 const ICON_MAP = AGENT_ICON_MAP;
 
-export const AgentsManagerView: React.FC<AgentsManagerViewProps> = ({
+const AgentsManagerViewComponent: React.FC<AgentsManagerViewProps> = ({
   agents,
   onToggleAgent,
   onSelectOnly,
@@ -1636,7 +1637,7 @@ export const AgentsManagerView: React.FC<AgentsManagerViewProps> = ({
           justify-content: center;
           padding: 60px 20px;
           background: #111726;
-          border: 1px dashed #1e283d;
+          border: 1px solid rgba(255, 255, 255, 0.06);
           border-radius: 12px;
           text-align: center;
           color: #8899ac;
@@ -1739,3 +1740,17 @@ export const AgentsManagerView: React.FC<AgentsManagerViewProps> = ({
     </div>
   );
 };
+
+export const AgentsManagerView = React.memo(AgentsManagerViewComponent, (prev, next) => {
+  if (prev.isActive === false && next.isActive === false) {
+    return true;
+  }
+  if (prev.isActive !== next.isActive) {
+    return false;
+  }
+  return (
+    prev.agents === next.agents &&
+    prev.searchQuery === next.searchQuery &&
+    prev.highlightedId === next.highlightedId
+  );
+});
