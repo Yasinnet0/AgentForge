@@ -3,9 +3,10 @@ import { createPortal } from 'react-dom';
 import { ScannedSkill, SupportedAgent } from '../types/agent';
 import { CatalogSkill } from '../types/catalog';
 import { SKILLS_CATALOG } from '../data/skillsCatalog';
-import { 
-  Sparkles, 
-  Bot, 
+import { CapabilityIcon, getDomainTheme } from './CapabilityIcon';
+import {
+  Sparkles,
+  Bot,
   Download,
   Trash2,
   CheckCircle2,
@@ -23,6 +24,7 @@ import {
   Search,
   X,
   Edit3,
+  Zap,
   AlertCircle,
   Copy,
   Power,
@@ -34,6 +36,8 @@ import {
   MoreVertical,
   Info,
   ExternalLink,
+  ArrowRight,
+  Layers,
 } from 'lucide-react';
 import { formatAuthor } from '../utils/formatUtils';
 import { logActivity } from '../services/activityLogger';
@@ -47,6 +51,29 @@ import { DependencyInstallDrawer } from './DependencyInstallDrawer';
 import { AGENT_ICON_MAP } from './AgentIcon';
 import { useModalTransition } from '../hooks/useModalTransition';
 import { Tooltip } from './Tooltip';
+
+const skillDepsCache = new Map<string, string[]>();
+function getCachedRequiredDependencies(item: {
+  id: string;
+  name: string;
+  description?: string;
+  category?: string;
+  tags?: string[];
+  hasScripts?: boolean;
+}): string[] {
+  let cached = skillDepsCache.get(item.id);
+  if (!cached) {
+    cached = getRequiredDependencies({
+      name: item.name,
+      description: item.description,
+      category: item.category,
+      tags: item.tags,
+      hasScripts: item.hasScripts,
+    });
+    skillDepsCache.set(item.id, cached);
+  }
+  return cached;
+}
 
 interface SkillsViewProps {
   skills: ScannedSkill[];
@@ -64,6 +91,7 @@ interface SkillsViewProps {
   onAgentFilterChange?: (agentIds: string[]) => void;
   dependencyReport?: DependencyReport | null;
   onRefreshDependencies?: () => Promise<void>;
+  isActive?: boolean;
 }
 
 type SegmentTab = 'all' | 'installed' | 'available';
@@ -103,7 +131,7 @@ function getSkillSearchString(card: UnifiedSkillCard): string {
   return cached;
 }
 
-export const SkillsView: React.FC<SkillsViewProps> = ({
+const SkillsViewComponent: React.FC<SkillsViewProps> = ({
   skills,
   selectedAgents,
   allAgents,
@@ -136,6 +164,15 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
   const handleViewModeChange = (mode: 'grid' | 'list') => {
     setViewMode(mode);
     localStorage.setItem('agentforge_view_mode_skills', mode);
+  };
+
+  const [browseLayout, setBrowseLayout] = useState<'shelves' | 'stream'>(() => {
+    return (localStorage.getItem('agentforge_browse_layout_skills') as 'shelves' | 'stream') || 'shelves';
+  });
+
+  const handleBrowseLayoutChange = (layout: 'shelves' | 'stream') => {
+    setBrowseLayout(layout);
+    localStorage.setItem('agentforge_browse_layout_skills', layout);
   };
   const [localAgentFilter, setLocalAgentFilter] = useState<string[]>([]);
   const currentAgentFilter = propActiveAgentFilter !== undefined ? propActiveAgentFilter : localAgentFilter;
@@ -341,12 +378,17 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
       localMatch?: ScannedSkill;
     }>();
 
+    const selectedAgentMap = new Map<string, SupportedAgent>();
+    for (let i = 0; i < selectedAgents.length; i++) {
+      selectedAgentMap.set(selectedAgents[i].id, selectedAgents[i]);
+    }
+
     for (let i = 0; i < skills.length; i++) {
       const s = skills[i];
       // Skip plugin-bundled skills
       if (s.pluginName) continue;
 
-      const agent = selectedAgents.find((a) => a.id === s.sourceAgentId);
+      const agent = selectedAgentMap.get(s.sourceAgentId);
       if (!agent) continue;
 
       const k1 = (s.folderName || s.id || '').toLowerCase().trim();
@@ -475,24 +517,52 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
     if (!activeBtn) return;
     const containerRect = container.getBoundingClientRect();
     const btnRect = activeBtn.getBoundingClientRect();
-    setSegmentPillStyle({
-      left: btnRect.left - containerRect.left,
-      width: btnRect.width,
-      isReady: true,
+    if (btnRect.width <= 10 || containerRect.width <= 10) return;
+    const nextLeft = Math.round(btnRect.left - containerRect.left);
+    const nextWidth = Math.round(btnRect.width);
+
+    setSegmentPillStyle((prev) => {
+      if (prev.isReady && Math.abs(prev.left - nextLeft) < 1 && Math.abs(prev.width - nextWidth) < 1) {
+        return prev;
+      }
+      return {
+        left: nextLeft,
+        width: nextWidth,
+        isReady: true,
+      };
     });
   }, []);
 
   useLayoutEffect(() => {
     updateSegmentPill();
-  }, [updateSegmentPill, activeSegment, counts]);
+  }, [updateSegmentPill, activeSegment]);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
+    const container = segmentedControlsRef.current;
+    if (!container) return;
+
+    updateSegmentPill();
+
+    let ro: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(() => {
+        updateSegmentPill();
+      });
+      ro.observe(container);
+    }
+
+    const t1 = setTimeout(updateSegmentPill, 50);
+    const t2 = setTimeout(updateSegmentPill, 150);
+    const t3 = setTimeout(() => {
       isPillAnimatedRef.current = true;
-    }, 60);
+    }, 100);
+
     window.addEventListener('resize', updateSegmentPill);
     return () => {
-      clearTimeout(timer);
+      if (ro) ro.disconnect();
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
       window.removeEventListener('resize', updateSegmentPill);
     };
   }, [updateSegmentPill]);
@@ -521,10 +591,11 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
   }, [categories, categorySearchQuery]);
 
   const filteredTargetAgents = useMemo(() => {
-    if (!agentSearchQuery.trim()) return selectedAgents;
+    const list = selectedAgents.length > 0 ? selectedAgents : (allAgents || []);
+    if (!agentSearchQuery.trim()) return list;
     const q = agentSearchQuery.trim().toLowerCase();
-    return selectedAgents.filter((ag) => ag.name.toLowerCase().includes(q) || ag.id.toLowerCase().includes(q));
-  }, [selectedAgents, agentSearchQuery]);
+    return list.filter((ag) => ag.name.toLowerCase().includes(q) || ag.id.toLowerCase().includes(q));
+  }, [selectedAgents, allAgents, agentSearchQuery]);
 
   // Search & Filtering (deferred for smooth, non-blocking typing)
   const deferredSearchQuery = useDeferredValue(searchQuery);
@@ -620,6 +691,7 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
     const items: CardAgentItem[] = [];
 
     if (installedAgents.length > 0) {
+      const installedSet = new Set(installedAgents.map((a) => a.id));
       for (const ag of installedAgents) {
         items.push({
           agent: ag,
@@ -627,13 +699,14 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
           isFiltered: currentAgentFilter.includes(ag.id),
         });
       }
-      const pending = selectedAgents.filter((sa) => !installedAgents.some((ia) => ia.id === sa.id));
-      for (const ag of pending) {
-        items.push({
-          agent: ag,
-          isInstalled: false,
-          isFiltered: currentAgentFilter.includes(ag.id),
-        });
+      for (const ag of selectedAgents) {
+        if (!installedSet.has(ag.id)) {
+          items.push({
+            agent: ag,
+            isInstalled: false,
+            isFiltered: currentAgentFilter.includes(ag.id),
+          });
+        }
       }
     } else if (selectedAgents.length > 0) {
       for (const ag of selectedAgents) {
@@ -645,45 +718,23 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
       }
     }
 
-    let title = 'TARGET AGENTS';
-    let badgeText = '';
-    if (installedAgents.length > 0) {
-      if (selectedAgents.length > 0) {
-        title = installedAgents.length >= selectedAgents.length ? 'Active in' : 'Active / Target';
-        badgeText = `${installedAgents.length}/${selectedAgents.length}`;
-      } else {
-        title = 'Active in';
-        badgeText = `${installedAgents.length}`;
-      }
-    } else if (selectedAgents.length > 0) {
-      title = selectedAgents.length === 1 ? 'Target agent' : 'Target agents';
-      badgeText = `${selectedAgents.length}`;
-    } else {
-      title = 'Target agents';
-      badgeText = '0';
-    }
-
     if (items.length === 0) {
       return (
         <div className="agent-deck-container empty">
-          <div className="agent-deck-header">
-            <div className="agent-deck-label-group">
-              <Bot size={11} className="agent-deck-icon" />
-              <span className="agent-deck-title font-mono">{title}</span>
-            </div>
-          </div>
-          <div className="agent-deck-empty-hint font-mono">No target agents selected</div>
+          <span className="uninstalled-muted-label font-mono">No target agents</span>
         </div>
       );
     }
 
-    const sortedItems = [...items].sort((a, b) => {
-      if (a.isFiltered && !b.isFiltered) return -1;
-      if (!a.isFiltered && b.isFiltered) return 1;
-      if (a.isInstalled && !b.isInstalled) return -1;
-      if (!a.isInstalled && b.isInstalled) return 1;
-      return 0;
-    });
+    const sortedItems = currentAgentFilter.length > 0
+      ? [...items].sort((a, b) => {
+        if (a.isFiltered && !b.isFiltered) return -1;
+        if (!a.isFiltered && b.isFiltered) return 1;
+        if (a.isInstalled && !b.isInstalled) return -1;
+        if (!a.isInstalled && b.isInstalled) return 1;
+        return 0;
+      })
+      : items;
 
     const MAX_VISIBLE = 4;
     const shouldCollapse = sortedItems.length > MAX_VISIBLE;
@@ -693,19 +744,6 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
 
     return (
       <div className={`agent-deck-container ${installedAgents.length === 0 ? 'pending-only' : ''}`}>
-        <div className="agent-deck-header">
-          <div className="agent-deck-label-group">
-            <Bot size={11} className="agent-deck-icon" />
-            <span className="agent-deck-title font-mono">{title}</span>
-            <span className="agent-deck-count-badge font-mono">{badgeText}</span>
-          </div>
-          {items.length > 0 && (
-            <span className="agent-deck-filter-hint font-mono">
-              {currentAgentFilter.length > 0 && items.some((i) => i.isFiltered) ? 'filtered' : 'click to filter'}
-            </span>
-          )}
-        </div>
-
         <div className="agent-deck-pills">
           <div className="agent-deck-base-row">
             {initialItems.map(({ agent: ag, isInstalled, isFiltered }) => {
@@ -715,19 +753,6 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
                   type="button"
                   key={ag.id}
                   className={`agent-deck-pill ${isInstalled ? 'installed' : 'pending'} ${isFiltered ? 'is-filtered' : ''}`}
-                  style={{
-                    color: ag.color,
-                    borderColor: isFiltered
-                      ? `${ag.color}75`
-                      : isInstalled
-                      ? `${ag.color}40`
-                      : `${ag.color}28`,
-                    background: isFiltered
-                      ? `${ag.color}16`
-                      : isInstalled
-                      ? `${ag.color}0e`
-                      : `${ag.color}06`,
-                  }}
                   onClick={(e) => {
                     e.stopPropagation();
                     handleAgentPillClick(ag.id);
@@ -736,12 +761,12 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
                     isFiltered
                       ? `Filtered by ${ag.name} (click to clear)`
                       : isInstalled
-                      ? `Active in ${ag.name} (click to filter)`
-                      : `Pending target: ${ag.name} (click to filter)`
+                        ? `Active in ${ag.name} (click to filter)`
+                        : `Pending target: ${ag.name} (click to filter)`
                   }
                 >
-                  <AgentIcon size={11} className="pill-brand-icon" />
-                  <span className="pill-name">{isInstalled ? ag.name : `+${ag.name}`}</span>
+                  <AgentIcon size={11} className="pill-brand-icon" style={{ color: ag.color }} />
+                  <span className="pill-name">{ag.name}</span>
                   {isFiltered && <Check size={9} className="pill-check-icon" />}
                 </button>
               );
@@ -772,17 +797,6 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
                         key={ag.id}
                         className={`agent-deck-pill ${isInstalled ? 'installed' : 'pending'} ${isFiltered ? 'is-filtered' : ''}`}
                         style={{
-                          color: ag.color,
-                          borderColor: isFiltered
-                            ? `${ag.color}75`
-                            : isInstalled
-                            ? `${ag.color}40`
-                            : `${ag.color}28`,
-                          background: isFiltered
-                            ? `${ag.color}16`
-                            : isInstalled
-                            ? `${ag.color}0e`
-                            : `${ag.color}06`,
                           animationDelay: `${idx * 28}ms`,
                         }}
                         onClick={(e) => {
@@ -793,12 +807,12 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
                           isFiltered
                             ? `Filtered by ${ag.name} (click to clear)`
                             : isInstalled
-                            ? `Active in ${ag.name} (click to filter)`
-                            : `Pending target: ${ag.name} (click to filter)`
+                              ? `Active in ${ag.name} (click to filter)`
+                              : `Pending target: ${ag.name} (click to filter)`
                         }
                       >
-                        <AgentIcon size={11} className="pill-brand-icon" />
-                        <span className="pill-name">{isInstalled ? ag.name : `+${ag.name}`}</span>
+                        <AgentIcon size={11} className="pill-brand-icon" style={{ color: ag.color }} />
+                        <span className="pill-name">{ag.name}</span>
                         {isFiltered && <Check size={9} className="pill-check-icon" />}
                       </button>
                     );
@@ -825,6 +839,7 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
     const items: CardAgentItem[] = [];
 
     if (installedAgents.length > 0) {
+      const installedSet = new Set(installedAgents.map((a) => a.id));
       for (const ag of installedAgents) {
         items.push({
           agent: ag,
@@ -832,13 +847,14 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
           isFiltered: currentAgentFilter.includes(ag.id),
         });
       }
-      const pending = selectedAgents.filter((sa) => !installedAgents.some((ia) => ia.id === sa.id));
-      for (const ag of pending) {
-        items.push({
-          agent: ag,
-          isInstalled: false,
-          isFiltered: currentAgentFilter.includes(ag.id),
-        });
+      for (const ag of selectedAgents) {
+        if (!installedSet.has(ag.id)) {
+          items.push({
+            agent: ag,
+            isInstalled: false,
+            isFiltered: currentAgentFilter.includes(ag.id),
+          });
+        }
       }
     } else if (selectedAgents.length > 0) {
       for (const ag of selectedAgents) {
@@ -858,13 +874,15 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
       );
     }
 
-    const sortedItems = [...items].sort((a, b) => {
-      if (a.isFiltered && !b.isFiltered) return -1;
-      if (!a.isFiltered && b.isFiltered) return 1;
-      if (a.isInstalled && !b.isInstalled) return -1;
-      if (!a.isInstalled && b.isInstalled) return 1;
-      return 0;
-    });
+    const sortedItems = currentAgentFilter.length > 0
+      ? [...items].sort((a, b) => {
+        if (a.isFiltered && !b.isFiltered) return -1;
+        if (!a.isFiltered && b.isFiltered) return 1;
+        if (a.isInstalled && !b.isInstalled) return -1;
+        if (!a.isInstalled && b.isInstalled) return 1;
+        return 0;
+      })
+      : items;
 
     const MAX_LIST_VISIBLE = 2;
     const shouldCollapse = sortedItems.length > MAX_LIST_VISIBLE;
@@ -882,19 +900,6 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
                 type="button"
                 key={ag.id}
                 className={`agent-deck-pill compact ${isInstalled ? 'installed' : 'pending'} ${isFiltered ? 'is-filtered' : ''}`}
-                style={{
-                  color: ag.color,
-                  borderColor: isFiltered
-                    ? `${ag.color}75`
-                    : isInstalled
-                    ? `${ag.color}40`
-                    : `${ag.color}28`,
-                  background: isFiltered
-                    ? `${ag.color}16`
-                    : isInstalled
-                    ? `${ag.color}0e`
-                    : `${ag.color}06`,
-                }}
                 onClick={(e) => {
                   e.stopPropagation();
                   handleAgentPillClick(ag.id);
@@ -903,12 +908,12 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
                   isFiltered
                     ? `Filtered by ${ag.name} (click to clear)`
                     : isInstalled
-                    ? `Active in ${ag.name} (click to filter)`
-                    : `Pending target: ${ag.name} (click to filter)`
+                      ? `Active in ${ag.name} (click to filter)`
+                      : `Pending target: ${ag.name} (click to filter)`
                 }
               >
-                <AgentIcon size={10} className="pill-brand-icon" />
-                <span className="pill-name">{isInstalled ? ag.name : `+${ag.name}`}</span>
+                <AgentIcon size={10} className="pill-brand-icon" style={{ color: ag.color }} />
+                <span className="pill-name">{ag.name}</span>
                 {isFiltered && <Check size={8} className="pill-check-icon" />}
               </button>
             );
@@ -943,17 +948,6 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
                       key={ag.id}
                       className={`agent-deck-pill compact ${isInstalled ? 'installed' : 'pending'} ${isFiltered ? 'is-filtered' : ''}`}
                       style={{
-                        color: ag.color,
-                        borderColor: isFiltered
-                          ? `${ag.color}75`
-                          : isInstalled
-                          ? `${ag.color}40`
-                          : `${ag.color}28`,
-                        background: isFiltered
-                          ? `${ag.color}16`
-                          : isInstalled
-                          ? `${ag.color}0e`
-                          : `${ag.color}06`,
                         animationDelay: `${idx * 24}ms`,
                       }}
                       onClick={(e) => {
@@ -964,12 +958,12 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
                         isFiltered
                           ? `Filtered by ${ag.name} (click to clear)`
                           : isInstalled
-                          ? `Active in ${ag.name} (click to filter)`
-                          : `Pending target: ${ag.name} (click to filter)`
+                            ? `Active in ${ag.name} (click to filter)`
+                            : `Pending target: ${ag.name} (click to filter)`
                       }
                     >
-                      <AgentIcon size={10} className="pill-brand-icon" />
-                      <span className="pill-name">{isInstalled ? ag.name : `+${ag.name}`}</span>
+                      <AgentIcon size={10} className="pill-brand-icon" style={{ color: ag.color }} />
+                      <span className="pill-name">{ag.name}</span>
                       {isFiltered && <Check size={8} className="pill-check-icon" />}
                     </button>
                   );
@@ -1183,7 +1177,7 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
         }
         return;
       }
-    } catch {}
+    } catch { }
     setDontAskAgainUninstall(false);
     setSkillToConfirmUninstall(skill);
   };
@@ -1194,7 +1188,7 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
     if (dontAskAgainUninstall) {
       try {
         localStorage.setItem(CONFIRM_UNINSTALL_SKILL_KEY, 'true');
-      } catch {}
+      } catch { }
     }
     handleCloseConfirmModal();
     if (selectedSkillForDetails?.id === target.id) {
@@ -1473,11 +1467,10 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
               handleInstallSkill(skill);
             }}
             disabled={isLoading}
-            title={`Install to ${
-              selectedAgents.length > 1 && isPartiallyInstalled
+            title={`Install to ${selectedAgents.length > 1 && isPartiallyInstalled
                 ? 'remaining selected agents'
                 : selectedAgents.map((a) => a.name).join(' & ')
-            }`}
+              }`}
           >
             {isLoading ? (
               <>
@@ -1491,8 +1484,8 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
                   {isPartiallyInstalled
                     ? `Install (${selectedAgents.length - skill.installedAgents.length})`
                     : selectedAgents.length > 1
-                    ? `Install to ${selectedAgents.length}`
-                    : 'Install'}
+                      ? `Install to ${selectedAgents.length}`
+                      : 'Install'}
                 </span>
               </>
             )}
@@ -1531,6 +1524,259 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
     </div>
   );
 
+  const isShelvesActive =
+    viewMode === 'grid' &&
+    browseLayout === 'shelves' &&
+    selectedCategory === 'All' &&
+    !deferredSearchQuery.trim() &&
+    currentAgentFilter.length === 0;
+
+  const spotlightSkills = useMemo(() => {
+    if (!isShelvesActive) return [];
+    const STARTER_SLUGS = [
+      'clean-code-guard',
+      'react-best-practices',
+      'api-design-principles',
+      'database-design',
+      'test-driven-development',
+      'agent-memory-systems',
+      'git-advanced-workflows',
+      'systematic-debugging',
+      'browser-testing-with-devtools',
+    ];
+    const skillMap = new Map<string, UnifiedSkillCard>();
+    for (let i = 0; i < filteredSkills.length; i++) {
+      const s = filteredSkills[i];
+      skillMap.set(s.id.toLowerCase(), s);
+    }
+    const picked: UnifiedSkillCard[] = [];
+    for (let i = 0; i < STARTER_SLUGS.length; i++) {
+      const match = skillMap.get(STARTER_SLUGS[i]);
+      if (match) {
+        picked.push(match);
+      }
+      if (picked.length >= 3) break;
+    }
+    if (picked.length < 3) {
+      for (let i = 0; i < filteredSkills.length && picked.length < 3; i++) {
+        const s = filteredSkills[i];
+        if (!picked.some((p) => p.id === s.id)) {
+          picked.push(s);
+        }
+      }
+    }
+    return picked;
+  }, [filteredSkills, isShelvesActive]);
+
+  const shelfGroups = useMemo(() => {
+    if (!isShelvesActive) return [];
+    const map = new Map<string, UnifiedSkillCard[]>();
+    for (let i = 0; i < filteredSkills.length; i++) {
+      const s = filteredSkills[i];
+      const cat = s.category || 'General';
+      let arr = map.get(cat);
+      if (!arr) {
+        arr = [];
+        map.set(cat, arr);
+      }
+      arr.push(s);
+    }
+    const groups: {
+      category: string;
+      items: UnifiedSkillCard[];
+      displayItems: UnifiedSkillCard[];
+    }[] = [];
+
+    for (const [category, items] of map.entries()) {
+      groups.push({
+        category,
+        items,
+        displayItems: items.slice(0, 4),
+      });
+    }
+    const categoryOrder = [
+      'Frontend',
+      'Backend & API',
+      'AI & Multi-Agent',
+      'Database',
+      'DevOps & Git',
+      'Testing & Debugging',
+      'Security',
+      'Desktop & Mobile',
+      'Engineering Playbooks',
+      'Quality & Review',
+      'Game Development & 3D',
+    ];
+    groups.sort((a, b) => {
+      const idxA = categoryOrder.indexOf(a.category);
+      const idxB = categoryOrder.indexOf(b.category);
+      if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+      if (idxA !== -1) return -1;
+      if (idxB !== -1) return 1;
+      return a.category.localeCompare(b.category);
+    });
+    return groups;
+  }, [filteredSkills, isShelvesActive]);
+
+  const renderSkillCard = (skill: UnifiedSkillCard, isSpotlight = false) => {
+    const isInstalledOnAll =
+      selectedAgents.length > 0 && skill.installedAgents.length === selectedAgents.length;
+    const isPartiallyInstalled =
+      skill.installedAgents.length > 0 && skill.installedAgents.length < selectedAgents.length;
+    const isHighlighted = targetSkillMatch
+      ? targetSkillMatch.id === skill.id
+      : highlightedId === skill.id ||
+      (highlightedSkillMatch
+        ? highlightedSkillMatch.folderName === skill.id || highlightedSkillMatch.name === skill.name
+        : false);
+    const isLoading = loadingSkillId === skill.id;
+
+    const requiredBinaries = getCachedRequiredDependencies(skill);
+    const depStatus = evaluateDependencyStatus(requiredBinaries, dependencyReport || null);
+    const domainTheme = getDomainTheme(skill.category, 'skill');
+
+    return (
+      <div
+        key={isSpotlight ? `spotlight-${skill.id}` : skill.id}
+        id={isSpotlight ? `spotlight-card-${skill.id}` : `skill-card-${skill.id}`}
+        className={`skill-card ${isHighlighted ? 'item-card-highlighted' : ''} ${skill.isDisabled ? 'is-card-disabled' : ''} ${isSpotlight ? 'is-spotlight-card' : ''}`}
+        onClick={() => setSelectedSkillForDetails(skill)}
+      >
+        {/* Card Header: Icon Avatar + Name/Meta + Status Badge */}
+        <div className="card-header-cluster">
+          <div className="card-header-left">
+            <div
+              className="card-icon-avatar"
+              style={{
+                background: domainTheme.bg,
+                borderColor: domainTheme.border,
+              }}
+            >
+              <CapabilityIcon type="skill" category={skill.category} name={skill.name} size={16} />
+            </div>
+            <div className="card-identity-text">
+              <div className="card-title-row">
+                <span className="card-item-name" title={skill.name}>{skill.name}</span>
+              </div>
+              <div className="card-sub-meta">
+                {skill.category && (
+                  <span className="card-cat-text font-mono" style={{ color: domainTheme.color }}>
+                    {skill.category}
+                  </span>
+                )}
+                {isSpotlight && (
+                  <span className="card-spotlight-badge font-mono">
+                    <Sparkles size={9} />
+                    <span>STARTER</span>
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="card-header-right">
+            {isInstalledOnAll ? (
+              <button
+                type="button"
+                className={`status-pill-clean ${skill.isDisabled ? 'disabled' : 'installed'} font-mono clickable`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleToggleSkill(skill);
+                }}
+                title={skill.isDisabled ? 'Skill is disabled. Click to enable.' : 'Skill is enabled. Click to disable.'}
+              >
+                <span className={`status-dot ${skill.isDisabled ? 'disabled' : 'installed'}`} />
+                <span>{skill.isDisabled ? 'DISABLED' : 'INSTALLED'}</span>
+              </button>
+            ) : isPartiallyInstalled ? (
+              <button
+                type="button"
+                className={`status-pill-clean ${skill.isDisabled ? 'disabled' : 'partial'} font-mono clickable`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleToggleSkill(skill);
+                }}
+                title={skill.isDisabled ? 'Skill is disabled on equipped agents. Click to enable.' : `Equipped on ${skill.installedAgents.length}/${selectedAgents.length} agents. Click to toggle.`}
+              >
+                <span className={`status-dot ${skill.isDisabled ? 'disabled' : 'partial'}`} />
+                <span>{skill.isDisabled ? 'DISABLED' : `PARTIAL (${skill.installedAgents.length}/${selectedAgents.length})`}</span>
+              </button>
+            ) : (
+              <span className="status-pill-clean available font-mono">
+                <span className="status-dot available" />
+                <span>AVAILABLE</span>
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Card Body: Description + Prerequisite Alert + Equipped Agents */}
+        <div className="card-content-body">
+          <p className={`card-description-text ${!skill.description ? 'empty-desc' : ''}`}>
+            {skill.description || 'No description provided for this skill.'}
+          </p>
+
+          {depStatus.status === 'missing' && depStatus.firstMissing && (
+            <div className="card-prereq-alert font-mono">
+              <div
+                className="prereq-alert-label"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setDepDrawerTarget({
+                    targetName: skill.name,
+                    requiredBinaries,
+                  });
+                }}
+                title={`Prerequisites missing: ${depStatus.missingBinaries.join(', ')}. Click to inspect install instructions.`}
+              >
+                <AlertCircle size={11} className="prereq-alert-icon" />
+                <span>Requires: <strong>{depStatus.firstMissing}</strong></span>
+              </div>
+              <button
+                type="button"
+                className={`prereq-quick-copy ${copiedDepKey === `dep-${skill.id}` ? 'copied' : ''}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleCopyMissingDep(`dep-${skill.id}`, depStatus.firstMissing!);
+                }}
+                title={`Copy install command: ${getInstallSnippetForPlatform(depStatus.firstMissing)}`}
+                aria-label="Copy install command"
+              >
+                {copiedDepKey === `dep-${skill.id}` ? <Check size={10} /> : <Copy size={10} />}
+                <span>{copiedDepKey === `dep-${skill.id}` ? 'COPIED' : 'INSTALL'}</span>
+              </button>
+            </div>
+          )}
+
+          {renderAgentTargetsDeck(skill.installedAgents, skill.id)}
+        </div>
+
+        {/* Card Bottom Toolbar */}
+        <div className="card-bottom-toolbar">
+          <div className="toolbar-left-chips">
+            {skill.sourceRegistry && (
+              <span
+                className="meta-subtle-badge source-badge font-mono"
+                title={`Source: ${skill.sourceRegistry} (${skill.license || 'MIT'})`}
+              >
+                <Globe size={11} />
+                <span>{skill.sourceRegistry}</span>
+              </span>
+            )}
+            {skill.pluginName && (
+              <span className="meta-subtle-badge font-mono" title={`Bundled in ${skill.pluginName}`}>
+                <Package size={11} />
+                <span>{skill.pluginName}</span>
+              </span>
+            )}
+          </div>
+
+          {renderSkillActions(skill, isInstalledOnAll, isPartiallyInstalled, isLoading)}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="skills-view-container">
       {/* View Header with Segmented Filter */}
@@ -1565,7 +1811,7 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
               style={{
                 transform: `translateX(${segmentPillStyle.left}px)`,
                 width: `${segmentPillStyle.width}px`,
-                opacity: segmentPillStyle.isReady ? 1 : 0,
+                opacity: segmentPillStyle.isReady && segmentPillStyle.width > 10 ? 1 : 0,
                 transition: isPillAnimatedRef.current
                   ? 'transform 0.24s cubic-bezier(0.16, 1, 0.3, 1), width 0.24s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.15s ease'
                   : 'opacity 0.15s ease',
@@ -1638,7 +1884,7 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
               }}
               title="Forge and deploy a custom skill playbook to selected agents"
             >
-              <Sparkles size={12} />
+              <Zap size={12} strokeWidth={1.75} />
               <span>Forge Skill</span>
             </button>
           </div>
@@ -1795,31 +2041,33 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
           </div>
 
           {/* Agent Filter Dropdown Chip */}
-          {selectedAgents.length > 1 && (() => {
+          {(selectedAgents.length > 0 || (allAgents && allAgents.length > 0)) && (() => {
+            const availableAgents = selectedAgents.length > 0 ? selectedAgents : (allAgents || []);
             const singleFilteredAgent = currentAgentFilter.length === 1
-              ? selectedAgents.find((a) => a.id === currentAgentFilter[0])
+              ? availableAgents.find((a) => a.id === currentAgentFilter[0])
               : null;
-            const AgentTriggerIcon = singleFilteredAgent
-              ? (AGENT_ICON_MAP[singleFilteredAgent.id] || AGENT_ICON_MAP[singleFilteredAgent.iconName] || Bot)
+            const activeAgent = singleFilteredAgent || (currentAgentFilter.length === 0 && availableAgents.length === 1 ? availableAgents[0] : null);
+            const AgentTriggerIcon = activeAgent
+              ? (AGENT_ICON_MAP[activeAgent.id] || AGENT_ICON_MAP[activeAgent.iconName] || Bot)
               : Bot;
 
             return (
               <div className="filter-dropdown-wrapper agent-dropdown-wrapper" ref={agentMenuRef}>
                 <button
                   type="button"
-                  className={`filter-chip-trigger ${currentAgentFilter.length > 0 ? 'active' : ''}`}
+                  className={`filter-chip-trigger ${currentAgentFilter.length > 0 || (availableAgents.length === 1 && currentAgentFilter.length === 0) ? 'active' : ''}`}
                   style={
-                    singleFilteredAgent
+                    activeAgent
                       ? {
-                          borderColor: `${singleFilteredAgent.color}55`,
-                          background: `${singleFilteredAgent.color}14`,
-                        }
+                        borderColor: `${activeAgent.color}55`,
+                        background: `${activeAgent.color}14`,
+                      }
                       : currentAgentFilter.length > 1
-                      ? {
+                        ? {
                           borderColor: 'rgba(139, 92, 246, 0.4)',
                           background: 'rgba(139, 92, 246, 0.1)',
                         }
-                      : undefined
+                        : undefined
                   }
                   onClick={() => {
                     setIsAgentMenuOpen((prev) => !prev);
@@ -1841,20 +2089,20 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
                   <AgentTriggerIcon
                     size={12}
                     style={
-                      singleFilteredAgent
-                        ? { color: singleFilteredAgent.color }
+                      activeAgent
+                        ? { color: activeAgent.color }
                         : currentAgentFilter.length > 1
-                        ? { color: '#8b5cf6' }
-                        : { color: '#94a3b8' }
+                          ? { color: '#8b5cf6' }
+                          : { color: '#94a3b8' }
                     }
                   />
                   <span className="filter-chip-label">Agent:</span>
                   <span
                     className="filter-chip-value"
-                    style={singleFilteredAgent ? { color: singleFilteredAgent.color } : undefined}
+                    style={activeAgent ? { color: activeAgent.color } : undefined}
                   >
                     {currentAgentFilter.length === 0
-                      ? `All (${selectedAgents.length})`
+                      ? (availableAgents.length === 1 ? availableAgents[0].name : `All (${availableAgents.length})`)
                       : singleFilteredAgent?.name || (currentAgentFilter.length === 1 ? '1 Agent' : `${currentAgentFilter.length} Agents`)}
                   </span>
                   <ChevronDown
@@ -1914,7 +2162,7 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
                     </div>
 
                     <div className="toolbar-dropdown-list">
-                      {(!agentSearchQuery.trim() || 'all selected agents'.includes(agentSearchQuery.toLowerCase())) && (
+                      {(!agentSearchQuery.trim() || 'all agents'.includes(agentSearchQuery.toLowerCase())) && (
                         <button
                           type="button"
                           className={`toolbar-dropdown-item ${currentAgentFilter.length === 0 ? 'selected' : ''}`}
@@ -1925,16 +2173,16 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
                         >
                           <div className="toolbar-dropdown-item-left">
                             <Bot size={13} className="text-muted" />
-                            <span className="toolbar-dropdown-item-name">All Selected Agents</span>
+                            <span className="toolbar-dropdown-item-name">All Agents</span>
                           </div>
                           <div className="toolbar-dropdown-item-right">
-                            <span className="toolbar-dropdown-item-count">{selectedAgents.length}</span>
+                            <span className="toolbar-dropdown-item-count">{availableAgents.length}</span>
                             {currentAgentFilter.length === 0 && <Check size={12} className="toolbar-dropdown-item-check text-purple" />}
                           </div>
                         </button>
                       )}
 
-                      {(!agentSearchQuery.trim() || 'all selected agents'.includes(agentSearchQuery.toLowerCase())) && filteredTargetAgents.length > 0 && (
+                      {(!agentSearchQuery.trim() || 'all agents'.includes(agentSearchQuery.toLowerCase())) && filteredTargetAgents.length > 0 && (
                         <div className="toolbar-dropdown-divider" />
                       )}
 
@@ -1995,11 +2243,39 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
           )}
         </div>
 
-        {/* Right: Results Count & View Mode Toggle */}
+        {/* Right: Results Count, Shelves Toggle & View Mode Toggle */}
         <div className="category-toolbar-right">
           <span className="toolbar-items-count font-mono">
             {filteredSkills.length} {filteredSkills.length === 1 ? 'skill' : 'skills'}
           </span>
+
+          {selectedCategory === 'All' && !deferredSearchQuery && currentAgentFilter.length === 0 && viewMode === 'grid' && (
+            <div className="browse-layout-toggle font-mono" role="group" aria-label="Browse organization">
+              <Tooltip content="Organized by domain shelves">
+                <button
+                  type="button"
+                  className={`layout-pill-btn ${browseLayout === 'shelves' ? 'active' : ''}`}
+                  onClick={() => handleBrowseLayoutChange('shelves')}
+                  aria-label="Shelves view"
+                >
+                  <Layers size={11} />
+                  <span>Shelves</span>
+                </button>
+              </Tooltip>
+              <Tooltip content="Continuous stream">
+                <button
+                  type="button"
+                  className={`layout-pill-btn ${browseLayout === 'stream' ? 'active' : ''}`}
+                  onClick={() => handleBrowseLayoutChange('stream')}
+                  aria-label="Stream view"
+                >
+                  <LayoutGrid size={11} />
+                  <span>Stream</span>
+                </button>
+              </Tooltip>
+            </div>
+          )}
+
           <div className="view-mode-toggle font-mono" role="group" aria-label="View mode">
             <Tooltip content="Grid view">
               <button
@@ -2048,181 +2324,81 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
             {searchQuery
               ? `No skills match "${searchQuery}". Try adjusting your search query or filter.`
               : activeSegment === 'installed'
-              ? 'No skills are currently installed on your selected agent(s). Switch to "Available in Catalog" to install skills with 1-click.'
-              : 'All catalog skills are currently installed on your selected agent(s).'}
+                ? 'No skills are currently installed on your selected agent(s). Switch to "Available in Catalog" to install skills with 1-click.'
+                : 'All catalog skills are currently installed on your selected agent(s).'}
           </div>
         </div>
       ) : (
         <>
-          {viewMode === 'grid' ? (
-            <div key={`${activeSegment}-grid`} className="skills-grid segment-content-animated">
-              {displayedSkills.map((skill) => {
-                const isInstalledOnAll =
-                  selectedAgents.length > 0 && skill.installedAgents.length === selectedAgents.length;
-                const isPartiallyInstalled =
-                  skill.installedAgents.length > 0 && skill.installedAgents.length < selectedAgents.length;
-                const isHighlighted = targetSkillMatch
-                  ? targetSkillMatch.id === skill.id
-                  : highlightedId === skill.id ||
-                    (highlightedSkillMatch
-                      ? highlightedSkillMatch.folderName === skill.id || highlightedSkillMatch.name === skill.name
-                      : false);
-                const isLoading = loadingSkillId === skill.id;
-
-                const requiredBinaries = getRequiredDependencies({
-                  name: skill.name,
-                  description: skill.description,
-                  category: skill.category,
-                  tags: skill.tags,
-                  hasScripts: skill.hasScripts,
-                });
-                const depStatus = evaluateDependencyStatus(requiredBinaries, dependencyReport || null);
-
-                return (
-                  <div
-                    key={skill.id}
-                    id={`skill-card-${skill.id}`}
-                    className={`skill-card ${isHighlighted ? 'item-card-highlighted' : ''} ${skill.isDisabled ? 'is-card-disabled' : ''}`}
-                    onClick={() => setSelectedSkillForDetails(skill)}
-                  >
-                    {/* Card Header: Icon Avatar + Name/Meta + Status Badge */}
-                    <div className="card-header-cluster">
-                      <div className="card-header-left">
-                        <div className="card-icon-avatar">
-                          <Sparkles size={16} />
-                        </div>
-                        <div className="card-identity-text">
-                          <div className="card-title-row">
-                            <span className="card-item-name" title={skill.name}>{skill.name}</span>
-                          </div>
-                          <div className="card-sub-meta">
-                            {skill.category && (
-                              <span className="card-cat-text font-mono">{skill.category}</span>
-                            )}
-                            {skill.category && skill.author && (
-                              <span className="card-meta-dot">·</span>
-                            )}
-                            {skill.author && (
-                              <span className="author-text font-mono">by {skill.author}</span>
-                            )}
-                          </div>
-                        </div>
+          {isShelvesActive ? (
+            <div key={`${activeSegment}-shelves`} className="skills-shelves-view segment-content-animated">
+              {/* 1. Curated Starter Spotlight Row */}
+              {activeSegment !== 'installed' && spotlightSkills.length > 0 && (
+                <div className="shelves-spotlight-section">
+                  <div className="spotlight-header-cluster">
+                    <div className="spotlight-header-left">
+                      <div className="spotlight-badge-pill font-mono">
+                        <Sparkles size={11} className="text-purple" />
+                        <span>CURATED STARTER PACKS</span>
                       </div>
-
-                      <div className="card-header-right">
-                        {isInstalledOnAll ? (
-                          <button
-                            type="button"
-                            className={`status-pill-clean ${skill.isDisabled ? 'disabled' : 'installed'} font-mono clickable`}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleToggleSkill(skill);
-                            }}
-                            title={skill.isDisabled ? 'Skill is disabled. Click to enable.' : 'Skill is enabled. Click to disable.'}
-                          >
-                            <span className={`status-dot ${skill.isDisabled ? 'disabled' : 'installed'}`} />
-                            <span>{skill.isDisabled ? 'DISABLED' : 'INSTALLED'}</span>
-                          </button>
-                        ) : isPartiallyInstalled ? (
-                          <button
-                            type="button"
-                            className={`status-pill-clean ${skill.isDisabled ? 'disabled' : 'partial'} font-mono clickable`}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleToggleSkill(skill);
-                            }}
-                            title={skill.isDisabled ? 'Skill is disabled on equipped agents. Click to enable.' : `Equipped on ${skill.installedAgents.length}/${selectedAgents.length} agents. Click to toggle.`}
-                          >
-                            <span className={`status-dot ${skill.isDisabled ? 'disabled' : 'partial'}`} />
-                            <span>{skill.isDisabled ? 'DISABLED' : `PARTIAL (${skill.installedAgents.length}/${selectedAgents.length})`}</span>
-                          </button>
-                        ) : (
-                          <span className="status-pill-clean available font-mono">
-                            <span className="status-dot available" />
-                            <span>AVAILABLE</span>
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Card Body: Description + Prerequisite Alert + Equipped Agents */}
-                    <div className="card-content-body">
-                      <p className={`card-description-text ${!skill.description ? 'empty-desc' : ''}`}>
-                        {skill.description || 'No description provided for this skill.'}
-                      </p>
-
-                      {depStatus.status === 'missing' && depStatus.firstMissing && (
-                        <div className="card-prereq-alert font-mono">
-                          <div
-                            className="prereq-alert-label"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setDepDrawerTarget({
-                                targetName: skill.name,
-                                requiredBinaries,
-                              });
-                            }}
-                            title={`Prerequisites missing: ${depStatus.missingBinaries.join(', ')}. Click to inspect install instructions.`}
-                          >
-                            <AlertCircle size={11} className="prereq-alert-icon" />
-                            <span>Requires: <strong>{depStatus.firstMissing}</strong></span>
-                          </div>
-                          <button
-                            type="button"
-                            className={`prereq-quick-copy ${copiedDepKey === `dep-${skill.id}` ? 'copied' : ''}`}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleCopyMissingDep(`dep-${skill.id}`, depStatus.firstMissing!);
-                            }}
-                            title={`Copy install command: ${getInstallSnippetForPlatform(depStatus.firstMissing)}`}
-                            aria-label="Copy install command"
-                          >
-                            {copiedDepKey === `dep-${skill.id}` ? <Check size={10} /> : <Copy size={10} />}
-                            <span>{copiedDepKey === `dep-${skill.id}` ? 'COPIED' : 'INSTALL'}</span>
-                          </button>
-                        </div>
-                      )}
-
-                      {renderAgentTargetsDeck(skill.installedAgents, skill.id)}
-                    </div>
-
-                    {/* Card Bottom Toolbar */}
-                    <div className="card-bottom-toolbar">
-                      <div className="toolbar-left-chips">
-                        {skill.sourceRegistry && (
-                          <span
-                            className="meta-subtle-badge source-badge font-mono"
-                            title={`Source: ${skill.sourceRegistry} (${skill.license || 'MIT'})`}
-                          >
-                            <Globe size={11} />
-                            <span>{skill.sourceRegistry}</span>
-                          </span>
-                        )}
-                        {skill.hasScripts && (
-                          <span className="meta-subtle-badge font-mono" title="Contains automation scripts">
-                            <FileCode2 size={11} />
-                            <span>scripts</span>
-                          </span>
-                        )}
-                        {skill.hasReferences && (
-                          <span className="meta-subtle-badge font-mono" title="Contains reference docs">
-                            <BookOpen size={11} />
-                            <span>docs</span>
-                          </span>
-                        )}
-                        {skill.pluginName && (
-                          <span className="meta-subtle-badge font-mono" title={`Bundled in ${skill.pluginName}`}>
-                            <Package size={11} />
-                            <span>{skill.pluginName}</span>
-                          </span>
-                        )}
-                      </div>
-
-                      {renderSkillActions(skill, isInstalledOnAll, isPartiallyInstalled, isLoading)}
+                      <h3 className="spotlight-title">Essential Capabilities</h3>
+                      <p className="spotlight-subtitle">Hand-picked, zero-configuration playbooks to immediately level up your agent workflow</p>
                     </div>
                   </div>
-                );
-              })}
+                  <div className="skills-grid spotlight-grid">
+                    {spotlightSkills.map((s) => renderSkillCard(s, true))}
+                  </div>
+                </div>
+              )}
+
+              {/* 2. Grouped Category Shelves */}
+              <div className="category-shelves-container">
+                {shelfGroups.map(({ category, items, displayItems }) => {
+                  const domainTheme = getDomainTheme(category, 'skill');
+                  return (
+                    <div key={category} className="shelf-group-section">
+                      <div className="shelf-section-header">
+                        <div className="shelf-header-left">
+                          <div
+                            className="shelf-icon-avatar"
+                            style={{
+                              background: domainTheme.bg,
+                              borderColor: domainTheme.border,
+                              color: domainTheme.color,
+                            }}
+                          >
+                            <CapabilityIcon type="skill" category={category} name={category} size={14} />
+                          </div>
+                          <div className="shelf-title-group">
+                            <span className="shelf-title">{category}</span>
+                            <span className="shelf-count-pill font-mono">{items.length} {items.length === 1 ? 'skill' : 'skills'}</span>
+                          </div>
+                        </div>
+
+                        <div className="shelf-hairline-divider" />
+
+                        <button
+                          type="button"
+                          className="shelf-view-all-btn font-mono"
+                          onClick={() => setSelectedCategory(category)}
+                          title={`View all ${items.length} skills in ${category}`}
+                        >
+                          <span>Explore all {items.length}</span>
+                          <ArrowRight size={11} />
+                        </button>
+                      </div>
+
+                      <div className="skills-grid shelf-items-grid">
+                        {displayItems.map((s) => renderSkillCard(s, false))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : viewMode === 'grid' ? (
+            <div key={`${activeSegment}-grid`} className="skills-grid segment-content-animated">
+              {displayedSkills.map((skill) => renderSkillCard(skill, false))}
             </div>
           ) : (
             <div key={`${activeSegment}-list`} className="skills-list segment-content-animated">
@@ -2241,19 +2417,15 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
                 const isHighlighted = targetSkillMatch
                   ? targetSkillMatch.id === skill.id
                   : highlightedId === skill.id ||
-                    (highlightedSkillMatch
-                      ? highlightedSkillMatch.folderName === skill.id || highlightedSkillMatch.name === skill.name
-                      : false);
+                  (highlightedSkillMatch
+                    ? highlightedSkillMatch.folderName === skill.id || highlightedSkillMatch.name === skill.name
+                    : false);
                 const isLoading = loadingSkillId === skill.id;
 
-                const requiredBinaries = getRequiredDependencies({
-                  name: skill.name,
-                  description: skill.description,
-                  category: skill.category,
-                  tags: skill.tags,
-                  hasScripts: skill.hasScripts,
-                });
+                const requiredBinaries = getCachedRequiredDependencies(skill);
                 const depStatus = evaluateDependencyStatus(requiredBinaries, dependencyReport || null);
+
+                const domainTheme = getDomainTheme(skill.category, 'skill');
 
                 return (
                   <div
@@ -2264,8 +2436,14 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
                   >
                     {/* Identity Col */}
                     <div className="list-col col-identity">
-                      <div className="card-icon-avatar list-avatar">
-                        <Sparkles size={15} />
+                      <div
+                        className="card-icon-avatar list-avatar"
+                        style={{
+                          background: domainTheme.bg,
+                          borderColor: domainTheme.border,
+                        }}
+                      >
+                        <CapabilityIcon type="skill" category={skill.category} name={skill.name} size={15} />
                       </div>
                       <div className="list-identity-text">
                         <div className="list-title-row">
@@ -2296,7 +2474,9 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
                     {/* Meta Col */}
                     <div className="list-col col-meta">
                       {skill.category && (
-                        <span className="card-cat-text font-mono">{skill.category}</span>
+                        <span className="card-cat-text font-mono" style={{ color: domainTheme.color }}>
+                          {skill.category}
+                        </span>
                       )}
                       {skill.author && (
                         <span className="author-text font-mono">by {skill.author}</span>
@@ -2325,13 +2505,12 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
                         <div className="dep-badge-cluster">
                           <button
                             type="button"
-                            className={`dep-badge ${
-                              depStatus.status === 'ready'
+                            className={`dep-badge ${depStatus.status === 'ready'
                                 ? 'ready'
                                 : depStatus.firstMissing === 'docker' || depStatus.firstMissing === 'go'
-                                ? 'missing-amber'
-                                : 'missing-rose'
-                            } font-mono`}
+                                  ? 'missing-amber'
+                                  : 'missing-rose'
+                              } font-mono`}
                             onClick={(e) => {
                               e.stopPropagation();
                               setDepDrawerTarget({
@@ -2404,7 +2583,7 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
             </div>
           )}
 
-          {filteredSkills.length > visibleCount && (
+          {!isShelvesActive && filteredSkills.length > visibleCount && (
             <div className="load-more-wrap">
               <button
                 className="load-more-btn font-mono"
@@ -2569,7 +2748,12 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
             <div className="item-modal-header">
               <div className="item-modal-title-area">
                 <div className="item-modal-icon-wrap skill">
-                  <Sparkles size={20} />
+                  <CapabilityIcon
+                    type="skill"
+                    category={selectedSkillForDetails.category}
+                    name={selectedSkillForDetails.name}
+                    size={20}
+                  />
                 </div>
                 <div className="item-modal-title-content">
                   <div className="item-modal-title-row">
@@ -2617,8 +2801,7 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
                 title="Close (Esc)"
                 aria-label="Close modal"
               >
-                <X size={12} strokeWidth={2.2} />
-                <kbd className="modal-esc-hint font-mono">ESC</kbd>
+                <X size={15} strokeWidth={2} />
               </button>
             </div>
 
@@ -3290,7 +3473,6 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
 
         .segment-content-animated {
           animation: segmentContentEnter 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
-          will-change: opacity, transform;
         }
 
         @keyframes segmentContentEnter {
@@ -3446,7 +3628,10 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
         }
 
         .filter-chip-label {
+          display: inline-flex;
+          align-items: center;
           font-size: 11px;
+          line-height: 1;
           font-weight: 500;
           color: #64748b;
           letter-spacing: 0.01em;
@@ -3454,7 +3639,10 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
         }
 
         .filter-chip-value {
-          font-size: 11.5px;
+          display: inline-flex;
+          align-items: center;
+          font-size: 11px;
+          line-height: 1;
           font-weight: 600;
           color: #e2e8f0;
           flex: 1;
@@ -3907,6 +4095,9 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
           box-sizing: border-box;
           box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
           cursor: pointer;
+          contain: layout style;
+          content-visibility: auto;
+          contain-intrinsic-size: auto 56px;
         }
 
         .skill-row-card:hover {
@@ -3938,16 +4129,18 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
           display: flex;
           align-items: center;
           justify-content: center;
-          background: linear-gradient(135deg, rgba(168, 85, 247, 0.16), rgba(99, 102, 241, 0.08));
-          border: 1px solid rgba(168, 85, 247, 0.28);
-          color: #c084fc;
+          background: rgba(255, 255, 255, 0.035);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          color: #94a3b8;
           box-shadow: none;
           flex-shrink: 0;
-          transition: border-color 0.15s ease;
+          transition: all 0.15s ease;
         }
 
         .skill-row-card:hover .card-icon-avatar.list-avatar {
-          border-color: rgba(168, 85, 247, 0.5);
+          border-color: rgba(168, 85, 247, 0.45);
+          color: #f8fafc;
+          background: rgba(255, 255, 255, 0.06);
           box-shadow: none;
           transform: none;
         }
@@ -4066,27 +4259,282 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
           gap: 14px;
         }
 
+        /* Curated Shelves & Spotlight Styles */
+        .skills-shelves-view {
+          display: flex;
+          flex-direction: column;
+          gap: 34px;
+        }
+
+        .shelves-spotlight-section {
+          background: #0b101d;
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          border-radius: 14px;
+          padding: 20px 22px 22px;
+          position: relative;
+          overflow: hidden;
+          box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 4px 20px rgba(0, 0, 0, 0.35);
+        }
+
+        .shelves-spotlight-section::before {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          height: 1px;
+          background: linear-gradient(90deg, transparent, rgba(168, 85, 247, 0.5), transparent);
+          pointer-events: none;
+        }
+
+        .spotlight-header-cluster {
+          margin-bottom: 16px;
+        }
+
+        .spotlight-header-left {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+        }
+
+        .spotlight-badge-pill {
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          font-size: 10px;
+          font-weight: 700;
+          color: #c084fc;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+        }
+
+        .spotlight-title {
+          font-size: 18px;
+          font-weight: 700;
+          color: #f8fafc;
+          letter-spacing: -0.02em;
+          margin: 0;
+          line-height: 1.2;
+        }
+
+        .spotlight-subtitle {
+          font-size: 12px;
+          color: #94a3b8;
+          margin: 0;
+          line-height: 1.4;
+        }
+
+        .category-shelves-container {
+          display: flex;
+          flex-direction: column;
+          gap: 30px;
+        }
+
+        .shelf-group-section {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+          transition: opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .shelf-section-header {
+          display: flex;
+          align-items: center;
+          gap: 14px;
+          padding: 0 4px;
+        }
+
+        .shelf-header-left {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          flex-shrink: 0;
+        }
+
+        .shelf-icon-avatar {
+          width: 26px;
+          height: 26px;
+          border-radius: 7px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+        }
+
+        .shelf-title-group {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+
+        .shelf-title {
+          font-size: 14px;
+          font-weight: 700;
+          color: #f8fafc;
+          letter-spacing: -0.01em;
+          white-space: nowrap;
+        }
+
+        .shelf-count-pill {
+          font-size: 10.5px;
+          font-weight: 600;
+          color: #8899ac;
+          background: rgba(255, 255, 255, 0.04);
+          border: 1px solid rgba(255, 255, 255, 0.07);
+          padding: 1.5px 7px;
+          border-radius: 999px;
+          white-space: nowrap;
+          transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+        }
+
+        .shelf-hairline-divider {
+          flex: 1;
+          height: 1px;
+          background: linear-gradient(90deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%);
+          min-width: 20px;
+        }
+
+        .shelf-view-all-btn {
+          font-size: 11.5px;
+          font-weight: 600;
+          color: #c084fc;
+          background: rgba(168, 85, 247, 0.06);
+          border: 1px solid rgba(168, 85, 247, 0.18);
+          border-radius: 6px;
+          padding: 4px 10px;
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          cursor: pointer;
+          transition: all 0.15s ease;
+          white-space: nowrap;
+          flex-shrink: 0;
+        }
+
+        .shelf-view-all-btn:hover {
+          background: rgba(168, 85, 247, 0.15);
+          border-color: rgba(168, 85, 247, 0.35);
+          color: #f3e8ff;
+        }
+
+        .shelf-more-footer {
+          display: flex;
+          justify-content: flex-end;
+          padding: 4px 6px 0;
+          transition: opacity 0.2s ease;
+        }
+
+        .shelf-more-footer-btn {
+          font-size: 11px;
+          font-weight: 600;
+          color: #94a3b8;
+          background: transparent;
+          border: none;
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          cursor: pointer;
+          transition: color 0.15s ease;
+          padding: 2px 4px;
+        }
+
+        .shelf-more-footer-btn:hover {
+          color: #c084fc;
+        }
+
+        .card-spotlight-badge {
+          font-size: 9px;
+          font-weight: 700;
+          color: #fbbf24;
+          background: rgba(251, 191, 36, 0.12);
+          border: 1px solid rgba(251, 191, 36, 0.28);
+          border-radius: 4px;
+          padding: 1px 5px;
+          display: inline-flex;
+          align-items: center;
+          gap: 3px;
+          line-height: 1;
+        }
+
+        .browse-layout-toggle {
+          display: flex;
+          align-items: center;
+          background: rgba(15, 23, 42, 0.8);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          border-radius: 6px;
+          padding: 2px;
+          gap: 2px;
+        }
+
+        .layout-pill-btn {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          padding: 3px 7px;
+          font-size: 11px;
+          font-weight: 600;
+          border-radius: 4px;
+          border: none;
+          background: transparent;
+          color: #94a3b8;
+          cursor: pointer;
+          transition: all 0.15s ease;
+        }
+
+        .layout-pill-btn:hover {
+          color: #f1f5f9;
+        }
+
+        .layout-pill-btn.active {
+          background: rgba(168, 85, 247, 0.18);
+          color: #f3e8ff;
+          box-shadow: inset 0 0 0 1px rgba(168, 85, 247, 0.35);
+        }
+
+        /* Luminous Surface Depth (Rock-Solid Desktop Standard - Zero Misclick Jitter) */
         .skill-card {
-          background: #0f1626;
+          background: linear-gradient(180deg, #131b2f 0%, #0d1424 100%);
           border: 1px solid rgba(255, 255, 255, 0.07);
           border-radius: 12px;
           padding: 16px 18px;
           display: flex;
           flex-direction: column;
           min-width: 0;
-          min-height: 226px;
+          min-height: 200px;
           box-sizing: border-box;
-          transition: border-color 0.12s ease, background 0.12s ease;
+          transition: border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+                      box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+                      background 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+                      opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1);
           position: relative;
           overflow: hidden;
-          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+          box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 2px 8px rgba(0, 0, 0, 0.28);
           cursor: pointer;
+          contain: layout style;
+          content-visibility: auto;
+          contain-intrinsic-size: auto 200px;
         }
 
         .skill-card:hover {
-          border-color: rgba(168, 85, 247, 0.32);
-          background: #131c30;
-          box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+          border-color: rgba(168, 85, 247, 0.42);
+          background: linear-gradient(180deg, #16203a 0%, #0f182c 100%);
+          box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.09), 0 8px 24px -4px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(168, 85, 247, 0.2);
+        }
+
+        .skills-grid.shelf-items-grid {
+          contain: none;
+        }
+
+        .skill-card.is-spotlight-card {
+          border-color: rgba(168, 85, 247, 0.18);
+          background: #0d1322;
+          box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 2px 8px rgba(0, 0, 0, 0.25);
+        }
+
+        .skill-card.is-spotlight-card:hover {
+          border-color: rgba(192, 132, 252, 0.6) !important;
+          background: #151e36 !important;
+          box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 6px 16px rgba(0, 0, 0, 0.45) !important;
         }
 
         /* Header: Clean decoupled flex header */
@@ -4113,21 +4561,17 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
           width: 36px;
           height: 36px;
           border-radius: 9px;
-          background: linear-gradient(135deg, rgba(168, 85, 247, 0.18), rgba(99, 102, 241, 0.08));
-          border: 1px solid rgba(168, 85, 247, 0.32);
-          color: #c084fc;
+          border: 1px solid rgba(255, 255, 255, 0.08);
           display: flex;
           align-items: center;
           justify-content: center;
           flex-shrink: 0;
           box-shadow: none;
-          transition: border-color 0.15s ease;
+          transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
         .skill-card:hover .card-icon-avatar {
-          border-color: rgba(168, 85, 247, 0.55);
-          box-shadow: none;
-          transform: none;
+          box-shadow: 0 0 16px -2px rgba(168, 85, 247, 0.35);
         }
 
         .card-identity-text {
@@ -4210,9 +4654,9 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
 
         .source-registry-pill {
           font-size: 8.5px;
-          color: #38bdf8;
-          background: rgba(56, 189, 248, 0.08);
-          border: 1px solid rgba(56, 189, 248, 0.22);
+          color: #94a3b8;
+          background: rgba(255, 255, 255, 0.035);
+          border: 1px solid rgba(255, 255, 255, 0.08);
           padding: 0.5px 5px;
           border-radius: 3px;
           font-weight: 600;
@@ -4223,48 +4667,13 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
           white-space: nowrap;
           max-width: 140px;
           flex-shrink: 0;
+          transition: all 0.12s ease;
         }
 
-        .source-registry-pill.pill-aas {
-          color: #c084fc;
-          background: rgba(192, 132, 252, 0.12);
-          border-color: rgba(192, 132, 252, 0.28);
-        }
-
-        .source-registry-pill.pill-official {
-          color: #38bdf8;
-          background: rgba(56, 189, 248, 0.12);
-          border-color: rgba(56, 189, 248, 0.28);
-        }
-
-        .source-registry-pill.pill-addy {
-          color: #fbbf24;
-          background: rgba(251, 191, 36, 0.12);
-          border-color: rgba(251, 191, 36, 0.28);
-        }
-
-        .source-registry-pill.pill-custom {
-          color: #34d399;
-          background: rgba(52, 211, 153, 0.12);
-          border-color: rgba(52, 211, 153, 0.28);
-        }
-
-        .source-registry-pill.pill-smithery {
-          color: #fb923c;
-          background: rgba(251, 146, 60, 0.12);
-          border-color: rgba(251, 146, 60, 0.28);
-        }
-
-        .source-registry-pill.pill-community {
-          color: #2dd4bf;
-          background: rgba(45, 212, 191, 0.12);
-          border-color: rgba(45, 212, 191, 0.28);
-        }
-
-        .source-registry-pill.pill-core {
-          color: #818cf8;
-          background: rgba(129, 140, 248, 0.12);
-          border-color: rgba(129, 140, 248, 0.28);
+        .source-registry-pill:hover {
+          color: #f1f5f9;
+          border-color: rgba(255, 255, 255, 0.16);
+          background: rgba(255, 255, 255, 0.06);
         }
 
         .card-header-right {
@@ -4377,30 +4786,37 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
           letter-spacing: 0.02em;
           white-space: nowrap;
           flex-shrink: 0;
+          background: rgba(255, 255, 255, 0.035);
+          border: 1px solid rgba(255, 255, 255, 0.07);
+          color: #94a3b8;
+          transition: background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+                      border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+                      color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+                      box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
         .status-pill-clean.installed {
-          color: #34d399;
-          background: rgba(16, 185, 129, 0.08);
-          border: 1px solid rgba(16, 185, 129, 0.22);
+          color: #e2e8f0;
+          background: rgba(16, 185, 129, 0.06);
+          border-color: rgba(16, 185, 129, 0.18);
         }
 
         .status-pill-clean.disabled {
           color: #fb7185;
-          background: rgba(244, 63, 94, 0.08);
-          border: 1px solid rgba(244, 63, 94, 0.28);
+          background: rgba(244, 63, 94, 0.06);
+          border-color: rgba(244, 63, 94, 0.2);
         }
 
         .status-pill-clean.partial {
-          color: #fbbf24;
-          background: rgba(245, 158, 11, 0.08);
-          border: 1px solid rgba(245, 158, 11, 0.22);
+          color: #e2e8f0;
+          background: rgba(245, 158, 11, 0.06);
+          border-color: rgba(245, 158, 11, 0.18);
         }
 
         .status-pill-clean.available {
-          color: #c084fc;
-          background: rgba(147, 51, 234, 0.1);
-          border: 1px solid rgba(147, 51, 234, 0.25);
+          color: #64748b;
+          background: rgba(255, 255, 255, 0.025);
+          border-color: rgba(255, 255, 255, 0.05);
         }
 
         .status-pill-clean.clickable {
@@ -4447,6 +4863,7 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
           height: 5px;
           border-radius: 50%;
           flex-shrink: 0;
+          transition: background-color 0.2s ease, box-shadow 0.2s ease;
         }
 
         .status-dot.installed {
@@ -4570,92 +4987,16 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
         .agent-deck-container {
           display: flex;
           flex-direction: column;
-          gap: 7px;
-          background: rgba(15, 23, 42, 0.45);
-          border: 1px solid rgba(255, 255, 255, 0.05);
-          border-radius: 8px;
-          padding: 8px 10px;
+          gap: 5px;
+          background: transparent;
+          border: none;
+          padding: 2px 0;
           box-sizing: border-box;
           width: 100%;
           min-width: 0;
-          transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-
-        .agent-deck-container:hover {
-          background: rgba(15, 23, 42, 0.65);
-          border-color: rgba(255, 255, 255, 0.09);
-        }
-
-        .agent-deck-container.pending-only {
-          background: rgba(15, 23, 42, 0.25);
-          border-color: rgba(255, 255, 255, 0.035);
-          border-style: dashed;
         }
 
         .agent-deck-container.empty {
-          padding: 7px 10px;
-        }
-
-        .agent-deck-header {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 8px;
-          width: 100%;
-          min-width: 0;
-        }
-
-        .agent-deck-label-group {
-          display: flex;
-          align-items: center;
-          gap: 5.5px;
-          min-width: 0;
-        }
-
-        .agent-deck-icon {
-          color: #64748b;
-          flex-shrink: 0;
-        }
-
-        .agent-deck-title {
-          font-size: 9.5px;
-          font-weight: 700;
-          letter-spacing: 0.05em;
-          color: #718096;
-          text-transform: uppercase;
-          white-space: nowrap;
-        }
-
-        .agent-deck-count-badge {
-          display: inline-flex;
-          align-items: center;
-          font-size: 9px;
-          font-weight: 600;
-          color: #94a3b8;
-          background: rgba(255, 255, 255, 0.06);
-          border: 1px solid rgba(255, 255, 255, 0.07);
-          padding: 0 5px;
-          border-radius: 9999px;
-          line-height: 14px;
-        }
-
-        .agent-deck-filter-hint {
-          font-size: 9px;
-          color: #475569;
-          font-style: italic;
-          white-space: nowrap;
-          letter-spacing: 0.01em;
-          transition: color 0.15s ease;
-        }
-
-        .agent-deck-container:hover .agent-deck-filter-hint {
-          color: #64748b;
-        }
-
-        .agent-deck-empty-hint {
-          font-size: 10px;
-          color: #475569;
-          font-style: italic;
           padding: 2px 0;
         }
 
@@ -4739,6 +5080,17 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
           }
         }
 
+        @keyframes deckPillFadeScale {
+          from {
+            opacity: 0;
+            transform: scale(0.92);
+          }
+          to {
+            opacity: 1;
+            transform: scale(1);
+          }
+        }
+
         .agent-deck-pill {
           display: inline-flex;
           align-items: center;
@@ -4746,33 +5098,59 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
           padding: 2.5px 7.5px;
           border-radius: 5px;
           font-size: 10px;
-          font-weight: 600;
-          border: 1px solid;
+          font-weight: 500;
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          background: rgba(255, 255, 255, 0.035);
+          color: #94a3b8;
           cursor: pointer;
           user-select: none;
           white-space: nowrap;
           flex-shrink: 0;
           line-height: 14px;
-          transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+          outline: none !important;
+          box-shadow: none !important;
+          animation: deckPillFadeScale 0.2s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+          transition: background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+                      border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+                      color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+                      opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+                      transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .agent-deck-pill:focus,
+        .agent-deck-pill:focus-visible {
+          outline: none !important;
+          box-shadow: none !important;
         }
 
         .agent-deck-pill:hover {
-          filter: brightness(1.12);
+          background: rgba(255, 255, 255, 0.07);
+          border-color: rgba(255, 255, 255, 0.16);
+          color: #f1f5f9;
+        }
+
+        .agent-deck-pill.installed {
+          color: #cbd5e1;
+          border-color: rgba(255, 255, 255, 0.1);
         }
 
         .agent-deck-pill.pending {
-          border-style: dashed !important;
-          opacity: 0.85;
+          color: #64748b;
+          border: 1px solid rgba(255, 255, 255, 0.06) !important;
+          background: rgba(255, 255, 255, 0.018) !important;
         }
 
         .agent-deck-pill.pending:hover {
-          opacity: 1;
-          border-style: solid !important;
+          color: #94a3b8;
+          border-color: rgba(255, 255, 255, 0.14) !important;
+          background: rgba(255, 255, 255, 0.05) !important;
         }
 
         .agent-deck-pill.is-filtered {
           font-weight: 600;
-          box-shadow: none;
+          border-color: rgba(168, 85, 247, 0.45) !important;
+          background: rgba(168, 85, 247, 0.12) !important;
+          color: #f3e8ff !important;
         }
 
         .agent-deck-pill .pill-brand-icon {
@@ -4910,13 +5288,15 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
         }
 
         .agent-pill.unequipped {
-          border-style: dashed !important;
-          opacity: 0.85;
+          border: 1px solid rgba(255, 255, 255, 0.06) !important;
+          background: rgba(255, 255, 255, 0.018) !important;
+          color: #64748b !important;
         }
 
         .agent-pill.unequipped:hover {
-          opacity: 1 !important;
-          border-style: solid !important;
+          color: #94a3b8 !important;
+          border-color: rgba(255, 255, 255, 0.14) !important;
+          background: rgba(255, 255, 255, 0.05) !important;
         }
 
         /* Bottom Toolbar: Clean 36px height, consistent across tabs */
@@ -5012,7 +5392,10 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
           color: #8fa0b5;
           border-radius: 6px;
           cursor: pointer;
-          transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+          transition: background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+                      border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+                      color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+                      opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1);
           padding: 0;
           box-sizing: border-box;
         }
@@ -5089,7 +5472,10 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
           letter-spacing: 0.01em;
           border-radius: 6px;
           cursor: pointer;
-          transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+          transition: background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+                      border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+                      color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+                      box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1);
           white-space: nowrap;
           box-sizing: border-box;
           box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
@@ -5292,9 +5678,9 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
         .item-modal-backdrop {
           position: fixed;
           inset: 0;
-          background: rgba(3, 7, 18, 0.78);
-          backdrop-filter: blur(12px);
-          -webkit-backdrop-filter: blur(12px);
+          background: radial-gradient(ellipse at 50% 40%, rgba(13, 19, 36, 0.62) 0%, rgba(4, 7, 15, 0.74) 100%);
+          backdrop-filter: blur(16px) saturate(180%) contrast(105%);
+          -webkit-backdrop-filter: blur(16px) saturate(180%) contrast(105%);
           display: flex;
           align-items: center;
           justify-content: center;
@@ -5331,7 +5717,6 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
           overflow: hidden;
           overflow-x: hidden;
           animation: itemModalScaleIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-          will-change: transform, opacity;
           display: flex;
           flex-direction: column;
           max-height: min(94vh, calc(100vh - 36px));
@@ -5343,13 +5728,13 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
         }
 
         @keyframes itemModalScaleIn {
-          from { opacity: 0; transform: scale(0.96) translateY(8px); }
-          to { opacity: 1; transform: scale(1) translateY(0); }
+          from { opacity: 0; transform: scale(0.97) translateY(8px); }
+          to { opacity: 1; transform: none; }
         }
 
         @keyframes itemModalScaleOut {
-          from { opacity: 1; transform: scale(1) translateY(0); }
-          to { opacity: 0; transform: scale(0.96) translateY(8px); }
+          from { opacity: 1; transform: none; }
+          to { opacity: 0; transform: scale(0.97) translateY(8px); }
         }
 
         .item-modal-header {
@@ -5481,17 +5866,18 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
         .item-modal-close-btn {
           align-self: flex-start;
           margin-top: 2px;
-          height: 26px;
-          padding: 0 7px 0 6px;
+          width: 28px;
+          height: 28px;
+          padding: 0;
           background: rgba(255, 255, 255, 0.04);
           border: 1px solid rgba(255, 255, 255, 0.08);
           color: #94a3b8;
           cursor: pointer;
-          border-radius: 6px;
+          border-radius: 7px;
           display: inline-flex;
           align-items: center;
-          gap: 5px;
-          transition: all 0.14s cubic-bezier(0.16, 1, 0.3, 1);
+          justify-content: center;
+          transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
           flex-shrink: 0;
           box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
           user-select: none;
@@ -5499,39 +5885,14 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
 
         .item-modal-close-btn:hover {
           color: #f8fafc;
-          background: rgba(255, 255, 255, 0.08);
+          background: rgba(255, 255, 255, 0.09);
           border-color: rgba(255, 255, 255, 0.18);
+          transform: translateY(-0.5px);
         }
 
         .item-modal-close-btn:active {
           transform: translateY(0.5px);
-          background: rgba(255, 255, 255, 0.12);
-        }
-
-        .item-modal-close-btn .modal-esc-hint,
-        .modal-esc-hint {
-          font-size: 9px;
-          font-weight: 600;
-          letter-spacing: 0.04em;
-          color: #64748b;
-          background: rgba(255, 255, 255, 0.05);
-          border: 1px solid rgba(255, 255, 255, 0.1);
-          box-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
-          padding: 1px 4.5px;
-          border-radius: 3.5px;
-          line-height: 1;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          height: 15px;
-          box-sizing: border-box;
-          transition: all 0.14s ease;
-        }
-
-        .item-modal-close-btn:hover .modal-esc-hint {
-          color: #e2e8f0;
-          background: rgba(255, 255, 255, 0.09);
-          border-color: rgba(255, 255, 255, 0.2);
+          background: rgba(255, 255, 255, 0.14);
         }
 
         .item-modal-body {
@@ -6143,3 +6504,24 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
     </div>
   );
 };
+
+export const SkillsView = React.memo(SkillsViewComponent, (prev, next) => {
+  if (prev.isActive === false && next.isActive === false) {
+    return true;
+  }
+  if (prev.isActive !== next.isActive) {
+    return false;
+  }
+  return (
+    prev.skills === next.skills &&
+    prev.selectedAgents === next.selectedAgents &&
+    prev.allAgents === next.allAgents &&
+    prev.skillsCatalog === next.skillsCatalog &&
+    prev.searchQuery === next.searchQuery &&
+    prev.highlightedId === next.highlightedId &&
+    prev.isSyncingCatalog === next.isSyncingCatalog &&
+    prev.catalogSyncedAt === next.catalogSyncedAt &&
+    prev.activeAgentFilter === next.activeAgentFilter &&
+    prev.dependencyReport === next.dependencyReport
+  );
+});

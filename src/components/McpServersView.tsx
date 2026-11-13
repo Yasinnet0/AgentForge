@@ -3,14 +3,15 @@ import { createPortal } from 'react-dom';
 import { ScannedMcpServer, SupportedAgent } from '../types/agent';
 import { CatalogMcpServer } from '../types/catalog';
 import { MCP_CATALOG } from '../data/mcpCatalog';
-import { 
-  Server, 
-  Bot, 
-  Terminal, 
-  Plus, 
-  Globe, 
-  KeyRound, 
-  CheckCircle2, 
+import { CapabilityIcon, getDomainTheme } from './CapabilityIcon';
+import {
+  Server,
+  Bot,
+  Terminal,
+  Plus,
+  Globe,
+  KeyRound,
+  CheckCircle2,
   Package,
   Trash2,
   Loader2,
@@ -34,6 +35,9 @@ import {
   MoreVertical,
   Info,
   ExternalLink,
+  Layers,
+  Sparkles,
+  ArrowRight,
 } from 'lucide-react';
 import { formatAuthor } from '../utils/formatUtils';
 import { useModalTransition } from '../hooks/useModalTransition';
@@ -46,9 +50,35 @@ import { DependencyInstallDrawer } from './DependencyInstallDrawer';
 import { AGENT_ICON_MAP } from './AgentIcon';
 import { Tooltip } from './Tooltip';
 
+const mcpDepsCache = new Map<string, string[]>();
+function getCachedMcpDependencies(item: {
+  id: string;
+  name: string;
+  command?: string;
+  args?: string[];
+  description?: string;
+  category?: string;
+  tags?: string[];
+}): string[] {
+  let cached = mcpDepsCache.get(item.id);
+  if (!cached) {
+    cached = getRequiredDependencies({
+      name: item.name,
+      command: item.command,
+      args: item.args,
+      description: item.description,
+      category: item.category,
+      tags: item.tags,
+    });
+    mcpDepsCache.set(item.id, cached);
+  }
+  return cached;
+}
+
 interface McpServersViewProps {
   mcpServers: ScannedMcpServer[];
   selectedAgents: SupportedAgent[];
+  allAgents?: SupportedAgent[];
   mcpCatalog?: CatalogMcpServer[];
   catalogSyncedAt?: string | null;
   onAddServer?: () => void;
@@ -61,6 +91,7 @@ interface McpServersViewProps {
   onSyncCatalog?: () => void;
   dependencyReport?: DependencyReport | null;
   onRefreshDependencies?: () => Promise<void>;
+  isActive?: boolean;
 }
 
 type SegmentTab = 'all' | 'installed' | 'available';
@@ -90,9 +121,10 @@ interface UnifiedMcpCard {
   currentEnv?: Record<string, string>;
 }
 
-export const McpServersView: React.FC<McpServersViewProps> = ({
+const McpServersViewComponent: React.FC<McpServersViewProps> = ({
   mcpServers,
   selectedAgents,
+  allAgents,
   mcpCatalog,
   catalogSyncedAt,
   onAddServer,
@@ -122,6 +154,15 @@ export const McpServersView: React.FC<McpServersViewProps> = ({
   const handleViewModeChange = (mode: 'grid' | 'list') => {
     setViewMode(mode);
     localStorage.setItem('agentforge_view_mode_mcp', mode);
+  };
+
+  const [browseLayout, setBrowseLayout] = useState<'shelves' | 'stream'>(() => {
+    return (localStorage.getItem('agentforge_browse_layout_mcp') as 'shelves' | 'stream') || 'shelves';
+  });
+
+  const handleBrowseLayoutChange = (layout: 'shelves' | 'stream') => {
+    setBrowseLayout(layout);
+    localStorage.setItem('agentforge_browse_layout_mcp', layout);
   };
   const [localAgentFilter, setLocalAgentFilter] = useState<string[]>([]);
   const currentAgentFilter = propActiveAgentFilter !== undefined ? propActiveAgentFilter : localAgentFilter;
@@ -436,10 +477,11 @@ export const McpServersView: React.FC<McpServersViewProps> = ({
   }, [categories, categorySearchQuery]);
 
   const filteredTargetAgents = useMemo(() => {
-    if (!agentSearchQuery.trim()) return selectedAgents;
+    const list = selectedAgents.length > 0 ? selectedAgents : (allAgents || []);
+    if (!agentSearchQuery.trim()) return list;
     const q = agentSearchQuery.trim().toLowerCase();
-    return selectedAgents.filter((ag) => ag.name.toLowerCase().includes(q) || ag.id.toLowerCase().includes(q));
-  }, [selectedAgents, agentSearchQuery]);
+    return list.filter((ag) => ag.name.toLowerCase().includes(q) || ag.id.toLowerCase().includes(q));
+  }, [selectedAgents, allAgents, agentSearchQuery]);
 
   const counts = useMemo(() => {
     const installed = unifiedServers.filter((s) => s.installedAgents.length > 0).length;
@@ -458,24 +500,52 @@ export const McpServersView: React.FC<McpServersViewProps> = ({
     if (!activeBtn) return;
     const containerRect = container.getBoundingClientRect();
     const btnRect = activeBtn.getBoundingClientRect();
-    setSegmentPillStyle({
-      left: btnRect.left - containerRect.left,
-      width: btnRect.width,
-      isReady: true,
+    if (btnRect.width <= 10 || containerRect.width <= 10) return;
+    const nextLeft = Math.round(btnRect.left - containerRect.left);
+    const nextWidth = Math.round(btnRect.width);
+
+    setSegmentPillStyle((prev) => {
+      if (prev.isReady && Math.abs(prev.left - nextLeft) < 1 && Math.abs(prev.width - nextWidth) < 1) {
+        return prev;
+      }
+      return {
+        left: nextLeft,
+        width: nextWidth,
+        isReady: true,
+      };
     });
   }, []);
 
   useLayoutEffect(() => {
     updateSegmentPill();
-  }, [updateSegmentPill, activeSegment, counts]);
+  }, [updateSegmentPill, activeSegment]);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
+    const container = segmentedControlsRef.current;
+    if (!container) return;
+
+    updateSegmentPill();
+
+    let ro: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(() => {
+        updateSegmentPill();
+      });
+      ro.observe(container);
+    }
+
+    const t1 = setTimeout(updateSegmentPill, 50);
+    const t2 = setTimeout(updateSegmentPill, 150);
+    const t3 = setTimeout(() => {
       isPillAnimatedRef.current = true;
-    }, 60);
+    }, 100);
+
     window.addEventListener('resize', updateSegmentPill);
     return () => {
-      clearTimeout(timer);
+      if (ro) ro.disconnect();
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
       window.removeEventListener('resize', updateSegmentPill);
     };
   }, [updateSegmentPill]);
@@ -692,34 +762,10 @@ export const McpServersView: React.FC<McpServersViewProps> = ({
       }
     }
 
-    let title = 'TARGET AGENTS';
-    let badgeText = '';
-    if (installedAgents.length > 0) {
-      if (selectedAgents.length > 0) {
-        title = installedAgents.length >= selectedAgents.length ? 'Active in' : 'Active / Target';
-        badgeText = `${installedAgents.length}/${selectedAgents.length}`;
-      } else {
-        title = 'Active in';
-        badgeText = `${installedAgents.length}`;
-      }
-    } else if (selectedAgents.length > 0) {
-      title = selectedAgents.length === 1 ? 'Target agent' : 'Target agents';
-      badgeText = `${selectedAgents.length}`;
-    } else {
-      title = 'Target agents';
-      badgeText = '0';
-    }
-
     if (items.length === 0) {
       return (
         <div className="agent-deck-container empty">
-          <div className="agent-deck-header">
-            <div className="agent-deck-label-group">
-              <Bot size={11} className="agent-deck-icon" />
-              <span className="agent-deck-title font-mono">{title}</span>
-            </div>
-          </div>
-          <div className="agent-deck-empty-hint font-mono">No target agents selected</div>
+          <span className="uninstalled-muted-label font-mono">No target agents</span>
         </div>
       );
     }
@@ -740,19 +786,6 @@ export const McpServersView: React.FC<McpServersViewProps> = ({
 
     return (
       <div className={`agent-deck-container ${installedAgents.length === 0 ? 'pending-only' : ''}`}>
-        <div className="agent-deck-header">
-          <div className="agent-deck-label-group">
-            <Bot size={11} className="agent-deck-icon" />
-            <span className="agent-deck-title font-mono">{title}</span>
-            <span className="agent-deck-count-badge font-mono">{badgeText}</span>
-          </div>
-          {items.length > 0 && (
-            <span className="agent-deck-filter-hint font-mono">
-              {currentAgentFilter.length > 0 && items.some((i) => i.isFiltered) ? 'filtered' : 'click to filter'}
-            </span>
-          )}
-        </div>
-
         <div className="agent-deck-pills">
           <div className="agent-deck-base-row">
             {initialItems.map(({ agent: ag, isInstalled, isFiltered }) => {
@@ -762,19 +795,6 @@ export const McpServersView: React.FC<McpServersViewProps> = ({
                   type="button"
                   key={ag.id}
                   className={`agent-deck-pill ${isInstalled ? 'installed' : 'pending'} ${isFiltered ? 'is-filtered' : ''}`}
-                  style={{
-                    color: ag.color,
-                    borderColor: isFiltered
-                      ? `${ag.color}75`
-                      : isInstalled
-                      ? `${ag.color}40`
-                      : `${ag.color}28`,
-                    background: isFiltered
-                      ? `${ag.color}16`
-                      : isInstalled
-                      ? `${ag.color}0e`
-                      : `${ag.color}06`,
-                  }}
                   onClick={(e) => {
                     e.stopPropagation();
                     handleAgentPillClick(ag.id);
@@ -783,12 +803,12 @@ export const McpServersView: React.FC<McpServersViewProps> = ({
                     isFiltered
                       ? `Filtered by ${ag.name} (click to clear)`
                       : isInstalled
-                      ? `Active in ${ag.name} (click to filter)`
-                      : `Pending target: ${ag.name} (click to filter)`
+                        ? `Active in ${ag.name} (click to filter)`
+                        : `Pending target: ${ag.name} (click to filter)`
                   }
                 >
-                  <AgentIcon size={11} className="pill-brand-icon" />
-                  <span className="pill-name">{isInstalled ? ag.name : `+${ag.name}`}</span>
+                  <AgentIcon size={11} className="pill-brand-icon" style={{ color: ag.color }} />
+                  <span className="pill-name">{ag.name}</span>
                   {isFiltered && <Check size={9} className="pill-check-icon" />}
                 </button>
               );
@@ -819,17 +839,6 @@ export const McpServersView: React.FC<McpServersViewProps> = ({
                         key={ag.id}
                         className={`agent-deck-pill ${isInstalled ? 'installed' : 'pending'} ${isFiltered ? 'is-filtered' : ''}`}
                         style={{
-                          color: ag.color,
-                          borderColor: isFiltered
-                            ? `${ag.color}75`
-                            : isInstalled
-                            ? `${ag.color}40`
-                            : `${ag.color}28`,
-                          background: isFiltered
-                            ? `${ag.color}16`
-                            : isInstalled
-                            ? `${ag.color}0e`
-                            : `${ag.color}06`,
                           animationDelay: `${idx * 28}ms`,
                         }}
                         onClick={(e) => {
@@ -840,12 +849,12 @@ export const McpServersView: React.FC<McpServersViewProps> = ({
                           isFiltered
                             ? `Filtered by ${ag.name} (click to clear)`
                             : isInstalled
-                            ? `Active in ${ag.name} (click to filter)`
-                            : `Pending target: ${ag.name} (click to filter)`
+                              ? `Active in ${ag.name} (click to filter)`
+                              : `Pending target: ${ag.name} (click to filter)`
                         }
                       >
-                        <AgentIcon size={11} className="pill-brand-icon" />
-                        <span className="pill-name">{isInstalled ? ag.name : `+${ag.name}`}</span>
+                        <AgentIcon size={11} className="pill-brand-icon" style={{ color: ag.color }} />
+                        <span className="pill-name">{ag.name}</span>
                         {isFiltered && <Check size={9} className="pill-check-icon" />}
                       </button>
                     );
@@ -929,19 +938,6 @@ export const McpServersView: React.FC<McpServersViewProps> = ({
                 type="button"
                 key={ag.id}
                 className={`agent-deck-pill compact ${isInstalled ? 'installed' : 'pending'} ${isFiltered ? 'is-filtered' : ''}`}
-                style={{
-                  color: ag.color,
-                  borderColor: isFiltered
-                    ? `${ag.color}75`
-                    : isInstalled
-                    ? `${ag.color}40`
-                    : `${ag.color}28`,
-                  background: isFiltered
-                    ? `${ag.color}16`
-                    : isInstalled
-                    ? `${ag.color}0e`
-                    : `${ag.color}06`,
-                }}
                 onClick={(e) => {
                   e.stopPropagation();
                   handleAgentPillClick(ag.id);
@@ -950,12 +946,12 @@ export const McpServersView: React.FC<McpServersViewProps> = ({
                   isFiltered
                     ? `Filtered by ${ag.name} (click to clear)`
                     : isInstalled
-                    ? `Active in ${ag.name} (click to filter)`
-                    : `Pending target: ${ag.name} (click to filter)`
+                      ? `Active in ${ag.name} (click to filter)`
+                      : `Pending target: ${ag.name} (click to filter)`
                 }
               >
-                <AgentIcon size={10} className="pill-brand-icon" />
-                <span className="pill-name">{isInstalled ? ag.name : `+${ag.name}`}</span>
+                <AgentIcon size={10} className="pill-brand-icon" style={{ color: ag.color }} />
+                <span className="pill-name">{ag.name}</span>
                 {isFiltered && <Check size={8} className="pill-check-icon" />}
               </button>
             );
@@ -990,17 +986,6 @@ export const McpServersView: React.FC<McpServersViewProps> = ({
                       key={ag.id}
                       className={`agent-deck-pill compact ${isInstalled ? 'installed' : 'pending'} ${isFiltered ? 'is-filtered' : ''}`}
                       style={{
-                        color: ag.color,
-                        borderColor: isFiltered
-                          ? `${ag.color}75`
-                          : isInstalled
-                          ? `${ag.color}40`
-                          : `${ag.color}28`,
-                        background: isFiltered
-                          ? `${ag.color}16`
-                          : isInstalled
-                          ? `${ag.color}0e`
-                          : `${ag.color}06`,
                         animationDelay: `${idx * 24}ms`,
                       }}
                       onClick={(e) => {
@@ -1011,12 +996,12 @@ export const McpServersView: React.FC<McpServersViewProps> = ({
                         isFiltered
                           ? `Filtered by ${ag.name} (click to clear)`
                           : isInstalled
-                          ? `Active in ${ag.name} (click to filter)`
-                          : `Pending target: ${ag.name} (click to filter)`
+                            ? `Active in ${ag.name} (click to filter)`
+                            : `Pending target: ${ag.name} (click to filter)`
                       }
                     >
-                      <AgentIcon size={10} className="pill-brand-icon" />
-                      <span className="pill-name">{isInstalled ? ag.name : `+${ag.name}`}</span>
+                      <AgentIcon size={10} className="pill-brand-icon" style={{ color: ag.color }} />
+                      <span className="pill-name">{ag.name}</span>
                       {isFiltered && <Check size={8} className="pill-check-icon" />}
                     </button>
                   );
@@ -1371,8 +1356,8 @@ export const McpServersView: React.FC<McpServersViewProps> = ({
                   {isPartiallyInstalled
                     ? `Add (${selectedAgents.length - server.installedAgents.length})`
                     : selectedAgents.length > 1
-                    ? `Add to ${selectedAgents.length}`
-                    : 'Add to Agent'}
+                      ? `Add to ${selectedAgents.length}`
+                      : 'Add to Agent'}
                 </span>
               </>
             )}
@@ -1411,6 +1396,300 @@ export const McpServersView: React.FC<McpServersViewProps> = ({
     </div>
   );
 
+  const isShelvesActive =
+    viewMode === 'grid' &&
+    browseLayout === 'shelves' &&
+    selectedCategory === 'All' &&
+    !deferredSearchQuery.trim() &&
+    currentAgentFilter.length === 0;
+
+  const spotlightMcpServers = useMemo(() => {
+    if (!isShelvesActive) return [];
+    const STARTER_SLUGS = [
+      'github',
+      'fetch',
+      'filesystem',
+      'brave-search',
+      'sqlite',
+      'docker',
+      'postgres',
+    ];
+    const serverMap = new Map<string, UnifiedMcpCard>();
+    for (let i = 0; i < filteredServers.length; i++) {
+      const s = filteredServers[i];
+      serverMap.set(s.id.toLowerCase(), s);
+    }
+    const picked: UnifiedMcpCard[] = [];
+    for (let i = 0; i < STARTER_SLUGS.length; i++) {
+      const match = serverMap.get(STARTER_SLUGS[i]);
+      if (match) {
+        picked.push(match);
+      }
+      if (picked.length >= 3) break;
+    }
+    if (picked.length < 3) {
+      for (let i = 0; i < filteredServers.length && picked.length < 3; i++) {
+        const s = filteredServers[i];
+        if (!picked.some((p) => p.id === s.id)) {
+          picked.push(s);
+        }
+      }
+    }
+    return picked;
+  }, [filteredServers, isShelvesActive]);
+
+  const shelfGroups = useMemo(() => {
+    if (!isShelvesActive) return [];
+    const map = new Map<string, UnifiedMcpCard[]>();
+    for (let i = 0; i < filteredServers.length; i++) {
+      const s = filteredServers[i];
+      const cat = s.category || 'General';
+      let arr = map.get(cat);
+      if (!arr) {
+        arr = [];
+        map.set(cat, arr);
+      }
+      arr.push(s);
+    }
+    const groups: {
+      category: string;
+      items: UnifiedMcpCard[];
+      displayItems: UnifiedMcpCard[];
+    }[] = [];
+
+    for (const [category, items] of map.entries()) {
+      groups.push({
+        category,
+        items,
+        displayItems: items.slice(0, 4),
+      });
+    }
+    const categoryOrder = [
+      'Developer Tools',
+      'Browser & Web',
+      'AI & Multi-Agent',
+      'Cloud & Infrastructure',
+      'Creative & 3D',
+      'System & Automation',
+      'Database',
+      'Research & Science',
+      'Productivity',
+      'Gaming & Simulation',
+    ];
+    groups.sort((a, b) => {
+      const idxA = categoryOrder.indexOf(a.category);
+      const idxB = categoryOrder.indexOf(b.category);
+      if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+      if (idxA !== -1) return -1;
+      if (idxB !== -1) return 1;
+      return a.category.localeCompare(b.category);
+    });
+    return groups;
+  }, [filteredServers, isShelvesActive]);
+
+  const renderMcpCard = (server: UnifiedMcpCard, isSpotlight = false) => {
+    const isInstalledOnAll =
+      selectedAgents.length > 0 && server.installedAgents.length === selectedAgents.length;
+    const isPartiallyInstalled =
+      server.installedAgents.length > 0 && server.installedAgents.length < selectedAgents.length;
+    const isHighlighted = targetMcpMatch
+      ? targetMcpMatch.id === server.id
+      : highlightedId === server.id ||
+      mcpServers.some((s) => s.id === highlightedId && s.name.toLowerCase() === server.id.toLowerCase());
+    const isLoading = loadingServerKey === server.id;
+
+    const fullCommand = server.command
+      ? `${server.command} ${(server.args || []).join(' ')}`.trim()
+      : server.url || 'Configured Server';
+
+    const requiredBinaries = getCachedMcpDependencies(server);
+    const depStatus = evaluateDependencyStatus(requiredBinaries, dependencyReport || null);
+    const domainTheme = getDomainTheme(server.category, 'mcp');
+
+    return (
+      <div
+        key={isSpotlight ? `spotlight-${server.id}` : server.id}
+        id={isSpotlight ? `spotlight-card-${server.id}` : `mcp-card-${server.id}`}
+        className={`mcp-card ${isHighlighted ? 'item-card-highlighted' : ''} ${server.isDisabled ? 'is-card-disabled' : ''} ${isSpotlight ? 'is-spotlight-card' : ''}`}
+        onClick={() => setSelectedMcpForDetails(server)}
+      >
+        {/* 1. Header: Icon Avatar + Title/Category + Status Pill */}
+        <div className="card-header-cluster">
+          <div className="card-header-left">
+            <div
+              className="card-icon-avatar mcp"
+              style={{
+                background: domainTheme.bg,
+                borderColor: domainTheme.border,
+              }}
+            >
+              <CapabilityIcon type="mcp" category={server.category} name={server.name} size={16} />
+            </div>
+            <div className="card-identity-text">
+              <div className="card-title-row">
+                <span className="card-item-name" title={server.name}>{server.name}</span>
+                <span className={`transport-badge font-mono ${server.transport}`}>
+                  {server.transport.toUpperCase()}
+                </span>
+              </div>
+              <div className="card-sub-meta">
+                {server.category && (
+                  <span className="card-cat-text font-mono" style={{ color: domainTheme.color }}>
+                    {server.category}
+                  </span>
+                )}
+                {isSpotlight && (
+                  <span className="card-spotlight-badge font-mono">
+                    <Sparkles size={9} />
+                    <span>STARTER</span>
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="card-header-right">
+            {isInstalledOnAll ? (
+              <button
+                type="button"
+                className={`status-pill-clean ${server.isDisabled ? 'disabled' : 'installed'} font-mono clickable`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleToggleMcp(server);
+                }}
+                title={server.isDisabled ? 'MCP server is disabled. Click to enable.' : 'MCP server is enabled. Click to disable.'}
+              >
+                <span className={`status-dot ${server.isDisabled ? 'disabled' : 'installed'}`} />
+                <span>{server.isDisabled ? 'DISABLED' : 'CONFIGURED'}</span>
+              </button>
+            ) : isPartiallyInstalled ? (
+              <button
+                type="button"
+                className={`status-pill-clean ${server.isDisabled ? 'disabled' : 'partial'} font-mono clickable`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleToggleMcp(server);
+                }}
+                title={server.isDisabled ? 'MCP server is disabled. Click to enable.' : `Configured in ${server.installedAgents.length}/${selectedAgents.length} agents. Click to toggle.`}
+              >
+                <span className={`status-dot ${server.isDisabled ? 'disabled' : 'partial'}`} />
+                <span>{server.isDisabled ? 'DISABLED' : `PARTIAL (${server.installedAgents.length}/${selectedAgents.length})`}</span>
+              </button>
+            ) : (
+              <span className="status-pill-clean available font-mono">
+                <span className="status-dot available" />
+                <span>AVAILABLE</span>
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* 2. Body: Description + Prerequisite Alert (if missing) + Command Preview + Equipped Agents */}
+        <div className="card-content-body">
+          <p className={`card-description-text ${!server.description ? 'empty-desc' : ''}`}>
+            {server.description || 'No description provided for this MCP server.'}
+          </p>
+
+          {depStatus.status === 'missing' && depStatus.firstMissing && (
+            <div className="card-prereq-alert font-mono">
+              <div
+                className="prereq-alert-label"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setDepDrawerTarget({
+                    targetName: server.name,
+                    requiredBinaries,
+                  });
+                }}
+                title={`Prerequisites missing: ${depStatus.missingBinaries.join(', ')}. Click to inspect install instructions.`}
+              >
+                <AlertCircle size={11} className="prereq-alert-icon" />
+                <span>Requires: <strong>{depStatus.firstMissing}</strong></span>
+              </div>
+              <button
+                type="button"
+                className={`prereq-quick-copy ${copiedDepKey === `dep-${server.id}` ? 'copied' : ''}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleCopyMissingDep(`dep-${server.id}`, depStatus.firstMissing!);
+                }}
+                title={`Copy install command: ${getInstallSnippetForPlatform(depStatus.firstMissing)}`}
+                aria-label="Copy install command"
+              >
+                {copiedDepKey === `dep-${server.id}` ? <Check size={10} /> : <Copy size={10} />}
+                <span>{copiedDepKey === `dep-${server.id}` ? 'COPIED' : 'INSTALL'}</span>
+              </button>
+            </div>
+          )}
+
+          <div className="command-snippet">
+            {server.transport === 'sse' ? (
+              <Globe size={12} className="cmd-icon sse" />
+            ) : (
+              <Terminal size={12} className="cmd-icon" />
+            )}
+            <span className="cmd-text font-mono" title={fullCommand}>
+              {fullCommand}
+            </span>
+            <button
+              type="button"
+              className={`cmd-copy-btn ${copiedCmdId === server.id ? 'copied' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleCopyCommand(server.id, fullCommand);
+              }}
+              title="Copy command to run or install manually in terminal"
+              aria-label="Copy command"
+            >
+              {copiedCmdId === server.id ? (
+                <>
+                  <Check size={9} />
+                  <span>COPIED</span>
+                </>
+              ) : (
+                <>
+                  <Copy size={9} />
+                  <span>COPY</span>
+                </>
+              )}
+            </button>
+          </div>
+
+          {renderAgentTargetsDeck(server.installedAgents, server.id)}
+        </div>
+
+        {/* 3. Bottom Toolbar: Metadata chips (left) + Action Group (right) */}
+        <div className="card-bottom-toolbar">
+          <div className="toolbar-left-chips">
+            {server.sourceRegistry && (
+              <span
+                className="meta-subtle-badge source-badge font-mono"
+                title={`Source: ${server.sourceRegistry} (${server.license || 'MIT / Apache-2.0'})`}
+              >
+                <Globe size={11} />
+                <span>{server.sourceRegistry}</span>
+              </span>
+            )}
+            {server.pluginName && (
+              <span className="meta-subtle-badge font-mono" title={`Part of ${server.pluginName}`}>
+                <Package size={11} />
+                <span>{server.pluginName}</span>
+              </span>
+            )}
+            {server.envKeys && server.envKeys.length > 0 && (
+              <span className="meta-subtle-badge env-chip font-mono" title={`Environment variables: ${server.envKeys.join(', ')}`}>
+                <KeyRound size={11} />
+                <span>{server.envKeys.length} ENV</span>
+              </span>
+            )}
+          </div>
+
+          {renderMcpActions(server, isInstalledOnAll, isPartiallyInstalled, isLoading)}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="mcp-view-container">
       {/* Header */}
@@ -1445,7 +1724,7 @@ export const McpServersView: React.FC<McpServersViewProps> = ({
               style={{
                 transform: `translateX(${segmentPillStyle.left}px)`,
                 width: `${segmentPillStyle.width}px`,
-                opacity: segmentPillStyle.isReady ? 1 : 0,
+                opacity: segmentPillStyle.isReady && segmentPillStyle.width > 10 ? 1 : 0,
                 transition: isPillAnimatedRef.current
                   ? 'transform 0.24s cubic-bezier(0.16, 1, 0.3, 1), width 0.24s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.15s ease'
                   : 'opacity 0.15s ease',
@@ -1649,31 +1928,33 @@ export const McpServersView: React.FC<McpServersViewProps> = ({
           </div>
 
           {/* Agent Filter Dropdown Chip */}
-          {selectedAgents.length > 1 && (() => {
+          {(selectedAgents.length > 0 || (allAgents && allAgents.length > 0)) && (() => {
+            const availableAgents = selectedAgents.length > 0 ? selectedAgents : (allAgents || []);
             const singleFilteredAgent = currentAgentFilter.length === 1
-              ? selectedAgents.find((a) => a.id === currentAgentFilter[0])
+              ? availableAgents.find((a) => a.id === currentAgentFilter[0])
               : null;
-            const AgentTriggerIcon = singleFilteredAgent
-              ? (AGENT_ICON_MAP[singleFilteredAgent.id] || AGENT_ICON_MAP[singleFilteredAgent.iconName] || Bot)
+            const activeAgent = singleFilteredAgent || (currentAgentFilter.length === 0 && availableAgents.length === 1 ? availableAgents[0] : null);
+            const AgentTriggerIcon = activeAgent
+              ? (AGENT_ICON_MAP[activeAgent.id] || AGENT_ICON_MAP[activeAgent.iconName] || Bot)
               : Bot;
 
             return (
               <div className="filter-dropdown-wrapper agent-dropdown-wrapper" ref={agentMenuRef}>
                 <button
                   type="button"
-                  className={`filter-chip-trigger ${currentAgentFilter.length > 0 ? 'active' : ''}`}
+                  className={`filter-chip-trigger ${currentAgentFilter.length > 0 || (availableAgents.length === 1 && currentAgentFilter.length === 0) ? 'active' : ''}`}
                   style={
-                    singleFilteredAgent
+                    activeAgent
                       ? {
-                          borderColor: `${singleFilteredAgent.color}55`,
-                          background: `${singleFilteredAgent.color}14`,
-                        }
+                        borderColor: `${activeAgent.color}55`,
+                        background: `${activeAgent.color}14`,
+                      }
                       : currentAgentFilter.length > 1
-                      ? {
+                        ? {
                           borderColor: 'rgba(139, 92, 246, 0.4)',
                           background: 'rgba(139, 92, 246, 0.1)',
                         }
-                      : undefined
+                        : undefined
                   }
                   onClick={() => {
                     setIsAgentMenuOpen((prev) => !prev);
@@ -1695,20 +1976,20 @@ export const McpServersView: React.FC<McpServersViewProps> = ({
                   <AgentTriggerIcon
                     size={12}
                     style={
-                      singleFilteredAgent
-                        ? { color: singleFilteredAgent.color }
+                      activeAgent
+                        ? { color: activeAgent.color }
                         : currentAgentFilter.length > 1
-                        ? { color: '#8b5cf6' }
-                        : { color: '#94a3b8' }
+                          ? { color: '#8b5cf6' }
+                          : { color: '#94a3b8' }
                     }
                   />
                   <span className="filter-chip-label">Agent:</span>
                   <span
                     className="filter-chip-value"
-                    style={singleFilteredAgent ? { color: singleFilteredAgent.color } : undefined}
+                    style={activeAgent ? { color: activeAgent.color } : undefined}
                   >
                     {currentAgentFilter.length === 0
-                      ? `All (${selectedAgents.length})`
+                      ? (availableAgents.length === 1 ? availableAgents[0].name : `All (${availableAgents.length})`)
                       : singleFilteredAgent?.name || (currentAgentFilter.length === 1 ? '1 Agent' : `${currentAgentFilter.length} Agents`)}
                   </span>
                   <ChevronDown
@@ -1768,7 +2049,7 @@ export const McpServersView: React.FC<McpServersViewProps> = ({
                     </div>
 
                     <div className="toolbar-dropdown-list">
-                      {(!agentSearchQuery.trim() || 'all selected agents'.includes(agentSearchQuery.toLowerCase())) && (
+                      {(!agentSearchQuery.trim() || 'all agents'.includes(agentSearchQuery.toLowerCase())) && (
                         <button
                           type="button"
                           className={`toolbar-dropdown-item ${currentAgentFilter.length === 0 ? 'selected' : ''}`}
@@ -1779,16 +2060,16 @@ export const McpServersView: React.FC<McpServersViewProps> = ({
                         >
                           <div className="toolbar-dropdown-item-left">
                             <Bot size={13} className="text-muted" />
-                            <span className="toolbar-dropdown-item-name">All Selected Agents</span>
+                            <span className="toolbar-dropdown-item-name">All Agents</span>
                           </div>
                           <div className="toolbar-dropdown-item-right">
-                            <span className="toolbar-dropdown-item-count">{selectedAgents.length}</span>
+                            <span className="toolbar-dropdown-item-count">{availableAgents.length}</span>
                             {currentAgentFilter.length === 0 && <Check size={12} className="toolbar-dropdown-item-check text-cyan" />}
                           </div>
                         </button>
                       )}
 
-                      {(!agentSearchQuery.trim() || 'all selected agents'.includes(agentSearchQuery.toLowerCase())) && filteredTargetAgents.length > 0 && (
+                      {(!agentSearchQuery.trim() || 'all agents'.includes(agentSearchQuery.toLowerCase())) && filteredTargetAgents.length > 0 && (
                         <div className="toolbar-dropdown-divider" />
                       )}
 
@@ -1854,6 +2135,34 @@ export const McpServersView: React.FC<McpServersViewProps> = ({
           <span className="toolbar-items-count font-mono">
             {filteredServers.length} {filteredServers.length === 1 ? 'server' : 'servers'}
           </span>
+
+          {viewMode === 'grid' && selectedCategory === 'All' && !deferredSearchQuery.trim() && currentAgentFilter.length === 0 && (
+            <div className="browse-layout-toggle font-mono" role="group" aria-label="Browse layout">
+              <Tooltip content="Browse by organized category shelves">
+                <button
+                  type="button"
+                  className={`layout-pill-btn ${browseLayout === 'shelves' ? 'active' : ''}`}
+                  onClick={() => handleBrowseLayoutChange('shelves')}
+                  aria-label="Shelves view"
+                >
+                  <Layers size={11} />
+                  <span>Shelves</span>
+                </button>
+              </Tooltip>
+              <Tooltip content="Continuous stream grid">
+                <button
+                  type="button"
+                  className={`layout-pill-btn ${browseLayout === 'stream' ? 'active' : ''}`}
+                  onClick={() => handleBrowseLayoutChange('stream')}
+                  aria-label="Stream view"
+                >
+                  <LayoutGrid size={11} />
+                  <span>Stream</span>
+                </button>
+              </Tooltip>
+            </div>
+          )}
+
           <div className="view-mode-toggle font-mono" role="group" aria-label="View mode">
             <Tooltip content="Grid view">
               <button
@@ -1902,410 +2211,278 @@ export const McpServersView: React.FC<McpServersViewProps> = ({
             {searchQuery
               ? `No servers match "${searchQuery}". Try a different search query.`
               : activeSegment === 'installed'
-              ? 'No MCP servers are configured in your selected agents. Switch to "Available in Catalog" to add servers with 1-click.'
-              : 'All catalog MCP servers are already configured in your selected agents.'}
+                ? 'No MCP servers are configured in your selected agents. Switch to "Available in Catalog" to add servers with 1-click.'
+                : 'All catalog MCP servers are already configured in your selected agents.'}
           </div>
         </div>
       ) : (
         <>
-          {viewMode === 'grid' ? (
-            <div key={`${activeSegment}-grid`} className="mcp-grid segment-content-animated">
-          {displayedServers.map((server) => {
-            const isInstalledOnAll =
-              selectedAgents.length > 0 && server.installedAgents.length === selectedAgents.length;
-            const isPartiallyInstalled =
-              server.installedAgents.length > 0 && server.installedAgents.length < selectedAgents.length;
-            const isHighlighted = targetMcpMatch
-              ? targetMcpMatch.id === server.id
-              : highlightedId === server.id ||
-                mcpServers.some((s) => s.id === highlightedId && s.name.toLowerCase() === server.id.toLowerCase());
-            const isLoading = loadingServerKey === server.id;
-
-            const fullCommand = server.command
-              ? `${server.command} ${(server.args || []).join(' ')}`.trim()
-              : server.url || 'Configured Server';
-
-            const requiredBinaries = getRequiredDependencies({
-              command: server.command,
-              args: server.args,
-              tags: server.tags,
-              category: server.category,
-              description: server.description,
-              name: server.name,
-            });
-            const depStatus = evaluateDependencyStatus(requiredBinaries, dependencyReport || null);
-
-            return (
-              <div
-                key={server.id}
-                id={`mcp-card-${server.id}`}
-                className={`mcp-card ${isHighlighted ? 'item-card-highlighted' : ''} ${server.isDisabled ? 'is-card-disabled' : ''}`}
-                onClick={() => setSelectedMcpForDetails(server)}
-              >
-                {/* 1. Header: Icon Avatar + Title/Category + Status Pill */}
-                <div className="card-header-cluster">
-                  <div className="card-header-left">
-                    <div className="card-icon-avatar mcp">
-                      <Server size={16} />
-                    </div>
-                    <div className="card-identity-text">
-                      <div className="card-title-row">
-                        <span className="card-item-name" title={server.name}>{server.name}</span>
-                        <span className={`transport-badge font-mono ${server.transport}`}>
-                          {server.transport.toUpperCase()}
-                        </span>
+          {isShelvesActive ? (
+            <div key={`${activeSegment}-shelves`} className="mcp-shelves-view segment-content-animated">
+              {/* 1. Curated Starter Spotlight Row */}
+              {activeSegment !== 'installed' && spotlightMcpServers.length > 0 && (
+                <div className="shelves-spotlight-section">
+                  <div className="spotlight-header-cluster">
+                    <div className="spotlight-header-left">
+                      <div className="spotlight-badge-pill font-mono">
+                        <Sparkles size={11} className="text-cyan" />
+                        <span>ESSENTIAL PROTOCOL CONNECTORS</span>
                       </div>
-                      <div className="card-sub-meta">
-                        {server.category && (
-                          <span className="card-cat-text font-mono">{server.category}</span>
-                        )}
-                        {server.category && server.author && (
-                          <span className="card-meta-dot">·</span>
-                        )}
-                        {server.author && (
-                          <span className="author-text font-mono">by {server.author}</span>
-                        )}
-                      </div>
+                      <h3 className="spotlight-title">Starter MCP Servers</h3>
+                      <p className="spotlight-subtitle">Zero-config foundational servers to connect web search, filesystem, local DBs, and GitHub</p>
                     </div>
                   </div>
-
-                  <div className="card-header-right">
-                    {isInstalledOnAll ? (
-                      <button
-                        type="button"
-                        className={`status-pill-clean ${server.isDisabled ? 'disabled' : 'installed'} font-mono clickable`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleToggleMcp(server);
-                        }}
-                        title={server.isDisabled ? 'MCP server is disabled. Click to enable.' : 'MCP server is enabled. Click to disable.'}
-                      >
-                        <span className={`status-dot ${server.isDisabled ? 'disabled' : 'installed'}`} />
-                        <span>{server.isDisabled ? 'DISABLED' : 'CONFIGURED'}</span>
-                      </button>
-                    ) : isPartiallyInstalled ? (
-                      <button
-                        type="button"
-                        className={`status-pill-clean ${server.isDisabled ? 'disabled' : 'partial'} font-mono clickable`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleToggleMcp(server);
-                        }}
-                        title={server.isDisabled ? 'MCP server is disabled. Click to enable.' : `Configured in ${server.installedAgents.length}/${selectedAgents.length} agents. Click to toggle.`}
-                      >
-                        <span className={`status-dot ${server.isDisabled ? 'disabled' : 'partial'}`} />
-                        <span>{server.isDisabled ? 'DISABLED' : `PARTIAL (${server.installedAgents.length}/${selectedAgents.length})`}</span>
-                      </button>
-                    ) : (
-                      <span className="status-pill-clean available font-mono">
-                        <span className="status-dot available" />
-                        <span>AVAILABLE</span>
-                      </span>
-                    )}
+                  <div className="mcp-grid spotlight-grid">
+                    {spotlightMcpServers.map((s) => renderMcpCard(s, true))}
                   </div>
                 </div>
+              )}
 
-                {/* 2. Body: Description + Prerequisite Alert (if missing) + Command Preview + Equipped Agents */}
-                <div className="card-content-body">
-                  <p className={`card-description-text ${!server.description ? 'empty-desc' : ''}`}>
-                    {server.description || 'No description provided for this MCP server.'}
-                  </p>
+              {/* 2. Grouped Category Shelves */}
+              <div className="category-shelves-container">
+                {shelfGroups.map(({ category, items, displayItems }) => {
+                  const domainTheme = getDomainTheme(category, 'mcp');
+                  return (
+                    <div key={category} className="shelf-group-section">
+                      <div className="shelf-section-header">
+                        <div className="shelf-header-left">
+                          <div
+                            className="shelf-icon-avatar"
+                            style={{
+                              background: domainTheme.bg,
+                              borderColor: domainTheme.border,
+                              color: domainTheme.color,
+                            }}
+                          >
+                            <CapabilityIcon type="mcp" category={category} name={category} size={14} />
+                          </div>
+                          <div className="shelf-title-group">
+                            <span className="shelf-title">{category}</span>
+                            <span className="shelf-count-pill font-mono">{items.length} {items.length === 1 ? 'server' : 'servers'}</span>
+                          </div>
+                        </div>
 
-                  {depStatus.status === 'missing' && depStatus.firstMissing && (
-                    <div className="card-prereq-alert font-mono">
-                      <div
-                        className="prereq-alert-label"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setDepDrawerTarget({
-                            targetName: server.name,
-                            requiredBinaries,
-                          });
-                        }}
-                        title={`Prerequisites missing: ${depStatus.missingBinaries.join(', ')}. Click to inspect install instructions.`}
-                      >
-                        <AlertCircle size={11} className="prereq-alert-icon" />
-                        <span>Requires: <strong>{depStatus.firstMissing}</strong></span>
-                      </div>
-                      <button
-                        type="button"
-                        className={`prereq-quick-copy ${copiedDepKey === `dep-${server.id}` ? 'copied' : ''}`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleCopyMissingDep(`dep-${server.id}`, depStatus.firstMissing!);
-                        }}
-                        title={`Copy install command: ${getInstallSnippetForPlatform(depStatus.firstMissing)}`}
-                        aria-label="Copy install command"
-                      >
-                        {copiedDepKey === `dep-${server.id}` ? <Check size={10} /> : <Copy size={10} />}
-                        <span>{copiedDepKey === `dep-${server.id}` ? 'COPIED' : 'INSTALL'}</span>
-                      </button>
-                    </div>
-                  )}
+                        <div className="shelf-hairline-divider" />
 
-                  <div className="command-snippet">
-                    {server.transport === 'sse' ? (
-                      <Globe size={12} className="cmd-icon sse" />
-                    ) : (
-                      <Terminal size={12} className="cmd-icon" />
-                    )}
-                    <span className="cmd-text font-mono" title={fullCommand}>
-                      {fullCommand}
-                    </span>
-                    <button
-                      type="button"
-                      className={`cmd-copy-btn ${copiedCmdId === server.id ? 'copied' : ''}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleCopyCommand(server.id, fullCommand);
-                      }}
-                      title="Copy command to run or install manually in terminal"
-                      aria-label="Copy command"
-                    >
-                      {copiedCmdId === server.id ? (
-                        <>
-                          <Check size={9} />
-                          <span>COPIED</span>
-                        </>
-                      ) : (
-                        <>
-                          <Copy size={9} />
-                          <span>COPY</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-
-                  {renderAgentTargetsDeck(server.installedAgents, server.id)}
-                </div>
-
-                {/* 3. Bottom Toolbar: Metadata chips (left) + Action Group (right) */}
-                <div className="card-bottom-toolbar">
-                  <div className="toolbar-left-chips">
-                    {server.sourceRegistry && (
-                      <span
-                        className="meta-subtle-badge source-badge font-mono"
-                        title={`Source: ${server.sourceRegistry} (${server.license || 'MIT / Apache-2.0'})`}
-                      >
-                        <Globe size={11} />
-                        <span>{server.sourceRegistry}</span>
-                      </span>
-                    )}
-                    {server.pluginName && (
-                      <span className="meta-subtle-badge font-mono" title={`Part of ${server.pluginName}`}>
-                        <Package size={11} />
-                        <span>{server.pluginName}</span>
-                      </span>
-                    )}
-                    {server.envKeys && server.envKeys.length > 0 && (
-                      <span className="meta-subtle-badge env-chip font-mono" title={`Environment variables: ${server.envKeys.join(', ')}`}>
-                        <KeyRound size={11} />
-                        <span>{server.envKeys.length} ENV</span>
-                      </span>
-                    )}
-                  </div>
-
-                  {renderMcpActions(server, isInstalledOnAll, isPartiallyInstalled, isLoading)}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      ) : (
-        <div key={`${activeSegment}-list`} className="mcp-list segment-content-animated">
-          <div className="mcp-list-header font-mono">
-            <span className="col-identity">MCP SERVER & COMMAND</span>
-            <span className="col-meta">CATEGORY & SOURCE</span>
-            <span className="col-agents">EQUIPPED IN</span>
-            <span className="col-status">STATUS / PREREQ</span>
-            <span className="col-actions right">ACTIONS</span>
-          </div>
-          {displayedServers.map((server) => {
-            const isInstalledOnAll =
-              selectedAgents.length > 0 && server.installedAgents.length === selectedAgents.length;
-            const isPartiallyInstalled =
-              server.installedAgents.length > 0 && server.installedAgents.length < selectedAgents.length;
-            const isHighlighted = targetMcpMatch
-              ? targetMcpMatch.id === server.id
-              : highlightedId === server.id ||
-                mcpServers.some((s) => s.id === highlightedId && s.name.toLowerCase() === server.id.toLowerCase());
-            const isLoading = loadingServerKey === server.id;
-
-            const fullCommand = server.command
-              ? `${server.command} ${(server.args || []).join(' ')}`.trim()
-              : server.url || 'stdio-process';
-
-            const requiredBinaries = getRequiredDependencies({
-              name: server.name,
-              command: server.command,
-              description: server.description,
-              category: server.category,
-              tags: server.tags,
-            });
-            const depStatus = evaluateDependencyStatus(requiredBinaries, dependencyReport || null);
-
-            return (
-              <div
-                key={server.id}
-                id={`mcp-card-${server.id}`}
-                className={`mcp-row-card ${isHighlighted ? 'item-card-highlighted' : ''} ${server.isDisabled ? 'is-card-disabled' : ''}`}
-                onClick={() => setSelectedMcpForDetails(server)}
-              >
-                {/* Identity Col */}
-                <div className="list-col col-identity">
-                  <div className="card-icon-avatar list-avatar mcp">
-                    {server.transport === 'sse' ? <Globe size={15} /> : <Server size={15} />}
-                  </div>
-                  <div className="list-identity-text">
-                    <div className="list-title-row">
-                      <span className="card-item-name" title={server.name}>{server.name}</span>
-                      <span className={`transport-badge font-mono ${server.transport || 'stdio'}`}>
-                        {(server.transport || 'stdio').toUpperCase()}
-                      </span>
-                      {server.envKeys && server.envKeys.length > 0 && (
-                        <span className="meta-subtle-badge env-chip font-mono" title={`Environment variables: ${server.envKeys.join(', ')}`}>
-                          <KeyRound size={9} />
-                          <span>{server.envKeys.length} ENV</span>
-                        </span>
-                      )}
-                    </div>
-                    <div className="list-subline">
-                      {server.description && (
-                        <span className="list-description-snippet" title={server.description}>{server.description}</span>
-                      )}
-                      <div
-                        className="list-cmd-chip font-mono clickable"
-                        title={`Click to copy execution command: ${fullCommand}`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleCopyCommand(server.id, fullCommand);
-                        }}
-                      >
-                        {server.transport === 'sse' ? (
-                          <Globe size={9} className="cmd-icon sse" />
-                        ) : (
-                          <Terminal size={9} className="cmd-icon" />
-                        )}
-                        <span className="list-cmd-text">{fullCommand}</span>
-                        <span className={`list-cmd-copy-icon ${copiedCmdId === server.id ? 'copied' : ''}`}>
-                          {copiedCmdId === server.id ? <Check size={8} /> : <Copy size={8} />}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Meta Col */}
-                <div className="list-col col-meta">
-                  {server.category && (
-                    <span className="mcp-list-cat-pill font-mono">{server.category}</span>
-                  )}
-                  <div className="mcp-list-meta-subrow font-mono">
-                    {server.sourceRegistry && (() => {
-                      const badge = formatSourceBadge(server.sourceRegistry);
-                      return (
-                        <span
-                          className={`source-registry-pill ${badge.badgeClass}`}
-                          title={`${badge.tooltip} · License: ${server.license || 'MIT'}`}
+                        <button
+                          type="button"
+                          className="shelf-view-all-btn font-mono"
+                          onClick={() => setSelectedCategory(category)}
+                          title={`View all ${items.length} servers in ${category}`}
                         >
-                          {badge.badgeText}
-                        </span>
-                      );
-                    })()}
-                    {server.author && (
-                      <span className="mcp-author-text font-mono" title={`Author: ${server.author}`}>
-                        by {server.author}
-                      </span>
-                    )}
-                    {server.pluginName && (
-                      <span className="mcp-list-plugin-badge font-mono" title={`Part of ${server.pluginName}`}>
-                        <Package size={8} />
-                        <span>{server.pluginName}</span>
-                      </span>
-                    )}
-                  </div>
-                </div>
+                          <span>Explore all {items.length}</span>
+                          <ArrowRight size={11} />
+                        </button>
+                      </div>
 
-                {/* Equipped Agents Col */}
-                <div className="list-col col-agents">
-                  {renderListAgentTargetsDeck(server.installedAgents, server.id)}
-                </div>
-
-                {/* Status & Prereqs Col */}
-                <div className="list-col col-status">
-                  {isInstalledOnAll ? (
-                    <button
-                      type="button"
-                      className={`status-pill-clean ${server.isDisabled ? 'disabled' : 'installed'} font-mono clickable`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleToggleMcp(server);
-                      }}
-                      title={server.isDisabled ? 'MCP server is disabled. Click to enable.' : 'MCP server is enabled. Click to disable.'}
-                    >
-                      <span className={`status-dot ${server.isDisabled ? 'disabled' : 'installed'}`} />
-                      <span>{server.isDisabled ? 'DISABLED' : 'CONFIGURED'}</span>
-                    </button>
-                  ) : isPartiallyInstalled ? (
-                    <button
-                      type="button"
-                      className={`status-pill-clean ${server.isDisabled ? 'disabled' : 'partial'} font-mono clickable`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleToggleMcp(server);
-                      }}
-                      title={server.isDisabled ? 'MCP server is disabled. Click to enable.' : `Configured in ${server.installedAgents.length}/${selectedAgents.length} agents.`}
-                    >
-                      <span className={`status-dot ${server.isDisabled ? 'disabled' : 'partial'}`} />
-                      <span>{server.isDisabled ? 'DISABLED' : `PARTIAL (${server.installedAgents.length}/${selectedAgents.length})`}</span>
-                    </button>
-                  ) : (
-                    <span className="status-pill-clean available font-mono">
-                      <span className="status-dot available" />
-                      <span>AVAILABLE</span>
-                    </span>
-                  )}
-
-                  {depStatus.status === 'missing' && depStatus.firstMissing && (
-                    <button
-                      type="button"
-                      className="mcp-list-dep-alert font-mono"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setDepDrawerTarget({
-                          targetName: server.name,
-                          requiredBinaries,
-                        });
-                      }}
-                      title={`Missing prerequisite: ${depStatus.missingBinaries.join(', ')}. Click to inspect install instructions.`}
-                    >
-                      <AlertCircle size={10} className="dep-alert-icon" />
-                      <span>Missing: {depStatus.firstMissing}</span>
-                    </button>
-                  )}
-                </div>
-
-                {/* Actions Col */}
-                <div className="list-col col-actions right">
-                  {renderMcpActions(server, isInstalledOnAll, isPartiallyInstalled, isLoading)}
-                </div>
+                      <div className="mcp-grid shelf-items-grid">
+                        {displayItems.map((s) => renderMcpCard(s, false))}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-            );
-          })}
-        </div>
-      )}
+            </div>
+          ) : viewMode === 'grid' ? (
+            <div key={`${activeSegment}-grid`} className="mcp-grid segment-content-animated">
+              {displayedServers.map((server) => renderMcpCard(server, false))}
+            </div>
+          ) : (
+            <div key={`${activeSegment}-list`} className="mcp-list segment-content-animated">
+              <div className="mcp-list-header font-mono">
+                <span className="col-identity">MCP SERVER & COMMAND</span>
+                <span className="col-meta">CATEGORY & SOURCE</span>
+                <span className="col-agents">EQUIPPED IN</span>
+                <span className="col-status">STATUS / PREREQ</span>
+                <span className="col-actions right">ACTIONS</span>
+              </div>
+              {displayedServers.map((server) => {
+                const isInstalledOnAll =
+                  selectedAgents.length > 0 && server.installedAgents.length === selectedAgents.length;
+                const isPartiallyInstalled =
+                  server.installedAgents.length > 0 && server.installedAgents.length < selectedAgents.length;
+                const isHighlighted = targetMcpMatch
+                  ? targetMcpMatch.id === server.id
+                  : highlightedId === server.id ||
+                  mcpServers.some((s) => s.id === highlightedId && s.name.toLowerCase() === server.id.toLowerCase());
+                const isLoading = loadingServerKey === server.id;
 
-        {filteredServers.length > visibleCount && (
-          <div className="load-more-wrap">
-            <button
-              type="button"
-              className="load-more-btn font-mono"
-              onClick={() => setVisibleCount((prev) => prev + 36)}
-            >
-              <span>Show more MCPs ({displayedServers.length} of {filteredServers.length})</span>
-            </button>
-          </div>
-        )}
+                const fullCommand = server.command
+                  ? `${server.command} ${(server.args || []).join(' ')}`.trim()
+                  : server.url || 'stdio-process';
+
+                const requiredBinaries = getCachedMcpDependencies(server);
+                const depStatus = evaluateDependencyStatus(requiredBinaries, dependencyReport || null);
+                const domainTheme = getDomainTheme(server.category, 'mcp');
+
+                return (
+                  <div
+                    key={server.id}
+                    id={`mcp-card-${server.id}`}
+                    className={`mcp-row-card ${isHighlighted ? 'item-card-highlighted' : ''} ${server.isDisabled ? 'is-card-disabled' : ''}`}
+                    onClick={() => setSelectedMcpForDetails(server)}
+                  >
+                    {/* Identity Col */}
+                    <div className="list-col col-identity">
+                      <div
+                        className="card-icon-avatar list-avatar mcp"
+                        style={{
+                          background: domainTheme.bg,
+                          borderColor: domainTheme.border,
+                        }}
+                      >
+                        <CapabilityIcon type="mcp" category={server.category} name={server.name} size={15} />
+                      </div>
+                      <div className="list-identity-text">
+                        <div className="list-title-row">
+                          <span className="card-item-name" title={server.name}>{server.name}</span>
+                          <span className={`transport-badge font-mono ${server.transport || 'stdio'}`}>
+                            {(server.transport || 'stdio').toUpperCase()}
+                          </span>
+                          {server.envKeys && server.envKeys.length > 0 && (
+                            <span className="meta-subtle-badge env-chip font-mono" title={`Environment variables: ${server.envKeys.join(', ')}`}>
+                              <KeyRound size={9} />
+                              <span>{server.envKeys.length} ENV</span>
+                            </span>
+                          )}
+                        </div>
+                        <div className="list-subline">
+                          {server.description && (
+                            <span className="list-description-snippet" title={server.description}>{server.description}</span>
+                          )}
+                          <div
+                            className="list-cmd-chip font-mono clickable"
+                            title={`Click to copy execution command: ${fullCommand}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleCopyCommand(server.id, fullCommand);
+                            }}
+                          >
+                            {server.transport === 'sse' ? (
+                              <Globe size={9} className="cmd-icon sse" />
+                            ) : (
+                              <Terminal size={9} className="cmd-icon" />
+                            )}
+                            <span className="list-cmd-text">{fullCommand}</span>
+                            <span className={`list-cmd-copy-icon ${copiedCmdId === server.id ? 'copied' : ''}`}>
+                              {copiedCmdId === server.id ? <Check size={8} /> : <Copy size={8} />}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Meta Col */}
+                    <div className="list-col col-meta">
+                      {server.category && (
+                        <span className="mcp-list-cat-pill font-mono" style={{ color: domainTheme.color }}>{server.category}</span>
+                      )}
+                      <div className="mcp-list-meta-subrow font-mono">
+                        {server.sourceRegistry && (() => {
+                          const badge = formatSourceBadge(server.sourceRegistry);
+                          return (
+                            <span
+                              className={`source-registry-pill ${badge.badgeClass}`}
+                              title={`${badge.tooltip} · License: ${server.license || 'MIT'}`}
+                            >
+                              {badge.badgeText}
+                            </span>
+                          );
+                        })()}
+                        {server.author && (
+                          <span className="mcp-author-text font-mono" title={`Author: ${server.author}`}>
+                            by {server.author}
+                          </span>
+                        )}
+                        {server.pluginName && (
+                          <span className="mcp-list-plugin-badge font-mono" title={`Part of ${server.pluginName}`}>
+                            <Package size={8} />
+                            <span>{server.pluginName}</span>
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Equipped Agents Col */}
+                    <div className="list-col col-agents">
+                      {renderListAgentTargetsDeck(server.installedAgents, server.id)}
+                    </div>
+
+                    {/* Status & Prereqs Col */}
+                    <div className="list-col col-status">
+                      {isInstalledOnAll ? (
+                        <button
+                          type="button"
+                          className={`status-pill-clean ${server.isDisabled ? 'disabled' : 'installed'} font-mono clickable`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleToggleMcp(server);
+                          }}
+                          title={server.isDisabled ? 'MCP server is disabled. Click to enable.' : 'MCP server is enabled. Click to disable.'}
+                        >
+                          <span className={`status-dot ${server.isDisabled ? 'disabled' : 'installed'}`} />
+                          <span>{server.isDisabled ? 'DISABLED' : 'CONFIGURED'}</span>
+                        </button>
+                      ) : isPartiallyInstalled ? (
+                        <button
+                          type="button"
+                          className={`status-pill-clean ${server.isDisabled ? 'disabled' : 'partial'} font-mono clickable`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleToggleMcp(server);
+                          }}
+                          title={server.isDisabled ? 'MCP server is disabled. Click to enable.' : `Configured in ${server.installedAgents.length}/${selectedAgents.length} agents.`}
+                        >
+                          <span className={`status-dot ${server.isDisabled ? 'disabled' : 'partial'}`} />
+                          <span>{server.isDisabled ? 'DISABLED' : `PARTIAL (${server.installedAgents.length}/${selectedAgents.length})`}</span>
+                        </button>
+                      ) : (
+                        <span className="status-pill-clean available font-mono">
+                          <span className="status-dot available" />
+                          <span>AVAILABLE</span>
+                        </span>
+                      )}
+
+                      {depStatus.status === 'missing' && depStatus.firstMissing && (
+                        <button
+                          type="button"
+                          className="mcp-list-dep-alert font-mono"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDepDrawerTarget({
+                              targetName: server.name,
+                              requiredBinaries,
+                            });
+                          }}
+                          title={`Missing prerequisite: ${depStatus.missingBinaries.join(', ')}. Click to inspect install instructions.`}
+                        >
+                          <AlertCircle size={10} className="dep-alert-icon" />
+                          <span>Missing: {depStatus.firstMissing}</span>
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Actions Col */}
+                    <div className="list-col col-actions right">
+                      {renderMcpActions(server, isInstalledOnAll, isPartiallyInstalled, isLoading)}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {filteredServers.length > visibleCount && (
+            <div className="load-more-wrap">
+              <button
+                type="button"
+                className="load-more-btn font-mono"
+                onClick={() => setVisibleCount((prev) => prev + 36)}
+              >
+                <span>Show more MCPs ({displayedServers.length} of {filteredServers.length})</span>
+              </button>
+            </div>
+          )}
         </>
       )}
 
@@ -2423,7 +2600,12 @@ export const McpServersView: React.FC<McpServersViewProps> = ({
             <div className="item-modal-header">
               <div className="item-modal-title-area">
                 <div className="item-modal-icon-wrap mcp">
-                  {selectedMcpForDetails.transport === 'sse' ? <Globe size={20} /> : <Server size={20} />}
+                  <CapabilityIcon
+                    type="mcp"
+                    category={selectedMcpForDetails.category}
+                    name={selectedMcpForDetails.name}
+                    size={20}
+                  />
                 </div>
                 <div className="item-modal-title-content">
                   <div className="item-modal-title-row">
@@ -2469,8 +2651,7 @@ export const McpServersView: React.FC<McpServersViewProps> = ({
                 title="Close (Esc)"
                 aria-label="Close modal"
               >
-                <X size={12} strokeWidth={2.2} />
-                <kbd className="modal-esc-hint font-mono">ESC</kbd>
+                <X size={15} strokeWidth={2} />
               </button>
             </div>
 
@@ -2590,20 +2771,20 @@ export const McpServersView: React.FC<McpServersViewProps> = ({
               {/* Environment Variables */}
               {((selectedMcpForDetails.envKeys && selectedMcpForDetails.envKeys.length > 0) ||
                 (selectedMcpForDetails.currentEnv && Object.keys(selectedMcpForDetails.currentEnv).length > 0)) && (
-                <div className="detail-section">
-                  <div className="detail-label-row">
-                    <span className="detail-label">ENVIRONMENT KEYS</span>
+                  <div className="detail-section">
+                    <div className="detail-label-row">
+                      <span className="detail-label">ENVIRONMENT KEYS</span>
+                    </div>
+                    <div className="detail-tags-flow">
+                      {(selectedMcpForDetails.envKeys || Object.keys(selectedMcpForDetails.currentEnv || {})).map((k) => (
+                        <span key={k} className="meta-subtle-badge font-mono" style={{ color: '#38bdf8' }}>
+                          <KeyRound size={10} style={{ marginRight: '3px' }} />
+                          {k}
+                        </span>
+                      ))}
+                    </div>
                   </div>
-                  <div className="detail-tags-flow">
-                    {(selectedMcpForDetails.envKeys || Object.keys(selectedMcpForDetails.currentEnv || {})).map((k) => (
-                      <span key={k} className="meta-subtle-badge font-mono" style={{ color: '#38bdf8' }}>
-                        <KeyRound size={10} style={{ marginRight: '3px' }} />
-                        {k}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
+                )}
 
               {/* Metadata Grid */}
               <div className="detail-meta-grid">
@@ -3054,7 +3235,6 @@ export const McpServersView: React.FC<McpServersViewProps> = ({
 
         .segment-content-animated {
           animation: segmentContentEnter 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
-          will-change: opacity, transform;
         }
 
         @keyframes segmentContentEnter {
@@ -3255,7 +3435,10 @@ export const McpServersView: React.FC<McpServersViewProps> = ({
         }
 
         .filter-chip-label {
+          display: inline-flex;
+          align-items: center;
           font-size: 11px;
+          line-height: 1;
           font-weight: 500;
           color: #64748b;
           letter-spacing: 0.01em;
@@ -3263,7 +3446,10 @@ export const McpServersView: React.FC<McpServersViewProps> = ({
         }
 
         .filter-chip-value {
-          font-size: 11.5px;
+          display: inline-flex;
+          align-items: center;
+          font-size: 11px;
+          line-height: 1;
           font-weight: 600;
           color: #e2e8f0;
           flex: 1;
@@ -3759,6 +3945,9 @@ export const McpServersView: React.FC<McpServersViewProps> = ({
           box-sizing: border-box;
           box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
           cursor: pointer;
+          contain: layout style;
+          content-visibility: auto;
+          contain-intrinsic-size: auto 56px;
         }
 
         .mcp-row-card:hover {
@@ -3796,17 +3985,18 @@ export const McpServersView: React.FC<McpServersViewProps> = ({
           display: flex;
           align-items: center;
           justify-content: center;
-          background: linear-gradient(135deg, rgba(56, 189, 248, 0.18), rgba(14, 165, 233, 0.08));
-          border: 1px solid rgba(56, 189, 248, 0.3);
-          color: #38bdf8;
+          background: rgba(255, 255, 255, 0.035);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          color: #94a3b8;
           box-shadow: none;
           flex-shrink: 0;
-          transition: border-color 0.15s ease;
+          transition: all 0.15s ease;
         }
 
         .mcp-row-card:hover .card-icon-avatar.list-avatar.mcp {
-          border-color: rgba(56, 189, 248, 0.55);
-          color: #7dd3fc;
+          border-color: rgba(168, 85, 247, 0.45);
+          color: #f8fafc;
+          background: rgba(255, 255, 255, 0.06);
           box-shadow: none;
           transform: none;
         }
@@ -4064,13 +4254,15 @@ export const McpServersView: React.FC<McpServersViewProps> = ({
         }
 
         .list-col.col-agents .agent-pill.compact.unequipped {
-          border-style: dashed !important;
-          opacity: 0.85;
+          border: 1px solid rgba(255, 255, 255, 0.06) !important;
+          background: rgba(255, 255, 255, 0.018) !important;
+          color: #64748b !important;
         }
 
         .list-col.col-agents .agent-pill.compact.unequipped:hover {
-          opacity: 1 !important;
-          border-style: solid !important;
+          color: #94a3b8 !important;
+          border-color: rgba(255, 255, 255, 0.14) !important;
+          background: rgba(255, 255, 255, 0.05) !important;
         }
 
         /* Status & Prereqs Column */
@@ -4145,7 +4337,7 @@ export const McpServersView: React.FC<McpServersViewProps> = ({
         }
 
         .mcp-card {
-          background: #0f1626;
+          background: linear-gradient(180deg, #131b2f 0%, #0d1424 100%);
           border: 1px solid rgba(255, 255, 255, 0.07);
           border-radius: 12px;
           padding: 16px 18px;
@@ -4154,17 +4346,23 @@ export const McpServersView: React.FC<McpServersViewProps> = ({
           min-width: 0;
           min-height: 226px;
           box-sizing: border-box;
-          transition: border-color 0.12s ease, background 0.12s ease;
+          transition: border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+                      box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+                      background 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+                      opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1);
           position: relative;
           overflow: hidden;
-          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+          box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 2px 8px rgba(0, 0, 0, 0.28);
           cursor: pointer;
+          contain: layout style;
+          content-visibility: auto;
+          contain-intrinsic-size: auto 226px;
         }
 
         .mcp-card:hover {
-          border-color: rgba(56, 189, 248, 0.32);
-          background: #131c30;
-          box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+          border-color: rgba(56, 189, 248, 0.42);
+          background: linear-gradient(180deg, #16203a 0%, #0f182c 100%);
+          box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.09), 0 8px 24px -4px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(56, 189, 248, 0.2);
         }
 
         /* Header: Natural, non-colliding flex row */
@@ -4190,21 +4388,17 @@ export const McpServersView: React.FC<McpServersViewProps> = ({
           width: 36px;
           height: 36px;
           border-radius: 9px;
-          background: linear-gradient(135deg, rgba(56, 189, 248, 0.18), rgba(14, 165, 233, 0.08));
-          border: 1px solid rgba(56, 189, 248, 0.32);
-          color: #38bdf8;
+          border: 1px solid rgba(255, 255, 255, 0.08);
           display: flex;
           align-items: center;
           justify-content: center;
           flex-shrink: 0;
           box-shadow: none;
-          transition: border-color 0.15s ease;
+          transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
         .mcp-card:hover .card-icon-avatar.mcp {
-          border-color: rgba(56, 189, 248, 0.55);
-          box-shadow: none;
-          transform: none;
+          box-shadow: 0 0 16px -2px rgba(56, 189, 248, 0.35);
         }
 
         .card-identity-text {
@@ -4286,30 +4480,21 @@ export const McpServersView: React.FC<McpServersViewProps> = ({
 
         .transport-badge {
           font-size: 8.5px;
-          font-weight: 700;
+          font-weight: 600;
           padding: 1px 5px;
           border-radius: 4px;
           flex-shrink: 0;
           white-space: nowrap;
-        }
-
-        .transport-badge.stdio {
-          color: #38bdf8;
-          background: rgba(56, 189, 248, 0.12);
-          border: 1px solid rgba(56, 189, 248, 0.25);
-        }
-
-        .transport-badge.sse {
-          color: #34d399;
-          background: rgba(52, 211, 153, 0.12);
-          border: 1px solid rgba(52, 211, 153, 0.25);
+          color: #94a3b8;
+          background: rgba(255, 255, 255, 0.04);
+          border: 1px solid rgba(255, 255, 255, 0.08);
         }
 
         .source-registry-pill {
           font-size: 8.5px;
-          color: #38bdf8;
-          background: rgba(56, 189, 248, 0.08);
-          border: 1px solid rgba(56, 189, 248, 0.22);
+          color: #94a3b8;
+          background: rgba(255, 255, 255, 0.035);
+          border: 1px solid rgba(255, 255, 255, 0.08);
           padding: 0.5px 5px;
           border-radius: 4px;
           font-weight: 600;
@@ -4320,48 +4505,13 @@ export const McpServersView: React.FC<McpServersViewProps> = ({
           white-space: nowrap;
           max-width: 140px;
           flex-shrink: 0;
+          transition: all 0.12s ease;
         }
 
-        .source-registry-pill.pill-aas {
-          color: #c084fc;
-          background: rgba(192, 132, 252, 0.12);
-          border-color: rgba(192, 132, 252, 0.28);
-        }
-
-        .source-registry-pill.pill-official {
-          color: #38bdf8;
-          background: rgba(56, 189, 248, 0.12);
-          border-color: rgba(56, 189, 248, 0.28);
-        }
-
-        .source-registry-pill.pill-addy {
-          color: #fbbf24;
-          background: rgba(251, 191, 36, 0.12);
-          border-color: rgba(251, 191, 36, 0.28);
-        }
-
-        .source-registry-pill.pill-custom {
-          color: #34d399;
-          background: rgba(52, 211, 153, 0.12);
-          border-color: rgba(52, 211, 153, 0.28);
-        }
-
-        .source-registry-pill.pill-smithery {
-          color: #fb923c;
-          background: rgba(251, 146, 60, 0.12);
-          border-color: rgba(251, 146, 60, 0.28);
-        }
-
-        .source-registry-pill.pill-community {
-          color: #2dd4bf;
-          background: rgba(45, 212, 191, 0.12);
-          border-color: rgba(45, 212, 191, 0.28);
-        }
-
-        .source-registry-pill.pill-core {
-          color: #818cf8;
-          background: rgba(129, 140, 248, 0.12);
-          border-color: rgba(129, 140, 248, 0.28);
+        .source-registry-pill:hover {
+          color: #f1f5f9;
+          border-color: rgba(255, 255, 255, 0.16);
+          background: rgba(255, 255, 255, 0.06);
         }
 
         .card-header-right {
@@ -4445,35 +4595,42 @@ export const McpServersView: React.FC<McpServersViewProps> = ({
           padding: 0 8px;
           border-radius: 4px;
           font-size: 9.5px;
-          font-weight: 700;
-          letter-spacing: 0.03em;
+          font-weight: 600;
+          letter-spacing: 0.02em;
           white-space: nowrap;
           flex-shrink: 0;
           box-sizing: border-box;
+          background: rgba(255, 255, 255, 0.035);
+          border: 1px solid rgba(255, 255, 255, 0.07);
+          color: #94a3b8;
+          transition: background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+                      border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+                      color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+                      box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
         .status-pill-clean.installed {
-          color: #34d399;
-          background: rgba(16, 185, 129, 0.08);
-          border: 1px solid rgba(16, 185, 129, 0.25);
+          color: #e2e8f0;
+          background: rgba(16, 185, 129, 0.06);
+          border-color: rgba(16, 185, 129, 0.18);
         }
 
         .status-pill-clean.disabled {
           color: #fb7185;
-          background: rgba(244, 63, 94, 0.08);
-          border: 1px solid rgba(244, 63, 94, 0.28);
+          background: rgba(244, 63, 94, 0.06);
+          border-color: rgba(244, 63, 94, 0.2);
         }
 
         .status-pill-clean.partial {
-          color: #fbbf24;
-          background: rgba(245, 158, 11, 0.08);
-          border: 1px solid rgba(245, 158, 11, 0.25);
+          color: #e2e8f0;
+          background: rgba(245, 158, 11, 0.06);
+          border-color: rgba(245, 158, 11, 0.18);
         }
 
         .status-pill-clean.available {
-          color: #818cf8;
-          background: rgba(129, 140, 248, 0.08);
-          border: 1px solid rgba(129, 140, 248, 0.25);
+          color: #64748b;
+          background: rgba(255, 255, 255, 0.025);
+          border-color: rgba(255, 255, 255, 0.05);
         }
 
         .status-pill-clean.clickable {
@@ -4576,92 +4733,16 @@ export const McpServersView: React.FC<McpServersViewProps> = ({
         .agent-deck-container {
           display: flex;
           flex-direction: column;
-          gap: 7px;
-          background: rgba(15, 23, 42, 0.45);
-          border: 1px solid rgba(255, 255, 255, 0.05);
-          border-radius: 8px;
-          padding: 8px 10px;
+          gap: 5px;
+          background: transparent;
+          border: none;
+          padding: 2px 0;
           box-sizing: border-box;
           width: 100%;
           min-width: 0;
-          transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-
-        .agent-deck-container:hover {
-          background: rgba(15, 23, 42, 0.65);
-          border-color: rgba(255, 255, 255, 0.09);
-        }
-
-        .agent-deck-container.pending-only {
-          background: rgba(15, 23, 42, 0.25);
-          border-color: rgba(255, 255, 255, 0.035);
-          border-style: dashed;
         }
 
         .agent-deck-container.empty {
-          padding: 7px 10px;
-        }
-
-        .agent-deck-header {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 8px;
-          width: 100%;
-          min-width: 0;
-        }
-
-        .agent-deck-label-group {
-          display: flex;
-          align-items: center;
-          gap: 5.5px;
-          min-width: 0;
-        }
-
-        .agent-deck-icon {
-          color: #64748b;
-          flex-shrink: 0;
-        }
-
-        .agent-deck-title {
-          font-size: 9.5px;
-          font-weight: 700;
-          letter-spacing: 0.05em;
-          color: #718096;
-          text-transform: uppercase;
-          white-space: nowrap;
-        }
-
-        .agent-deck-count-badge {
-          display: inline-flex;
-          align-items: center;
-          font-size: 9px;
-          font-weight: 600;
-          color: #94a3b8;
-          background: rgba(255, 255, 255, 0.06);
-          border: 1px solid rgba(255, 255, 255, 0.07);
-          padding: 0 5px;
-          border-radius: 9999px;
-          line-height: 14px;
-        }
-
-        .agent-deck-filter-hint {
-          font-size: 9px;
-          color: #475569;
-          font-style: italic;
-          white-space: nowrap;
-          letter-spacing: 0.01em;
-          transition: color 0.15s ease;
-        }
-
-        .agent-deck-container:hover .agent-deck-filter-hint {
-          color: #64748b;
-        }
-
-        .agent-deck-empty-hint {
-          font-size: 10px;
-          color: #475569;
-          font-style: italic;
           padding: 2px 0;
         }
 
@@ -4752,33 +4833,55 @@ export const McpServersView: React.FC<McpServersViewProps> = ({
           padding: 2.5px 7.5px;
           border-radius: 5px;
           font-size: 10px;
-          font-weight: 600;
-          border: 1px solid;
+          font-weight: 500;
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          background: rgba(255, 255, 255, 0.035);
+          color: #94a3b8;
           cursor: pointer;
           user-select: none;
           white-space: nowrap;
           flex-shrink: 0;
           line-height: 14px;
+          outline: none !important;
+          box-shadow: none !important;
           transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
+        .agent-deck-pill:focus,
+        .agent-deck-pill:focus-visible {
+          outline: none !important;
+          box-shadow: none !important;
+        }
+
         .agent-deck-pill:hover {
-          filter: brightness(1.12);
+          background: rgba(255, 255, 255, 0.07);
+          border-color: rgba(255, 255, 255, 0.16);
+          color: #f1f5f9;
+        }
+
+        .agent-deck-pill.installed {
+          color: #cbd5e1;
+          border-color: rgba(255, 255, 255, 0.1);
         }
 
         .agent-deck-pill.pending {
-          border-style: dashed !important;
-          opacity: 0.85;
+          color: #64748b;
+          border: 1px solid rgba(255, 255, 255, 0.06) !important;
+          background: rgba(255, 255, 255, 0.018) !important;
         }
 
         .agent-deck-pill.pending:hover {
-          opacity: 1;
-          border-style: solid !important;
+          color: #94a3b8;
+          border-color: rgba(255, 255, 255, 0.14) !important;
+          background: rgba(255, 255, 255, 0.05) !important;
         }
 
         .agent-deck-pill.is-filtered {
           font-weight: 600;
-          box-shadow: none;
+          border-color: rgba(168, 85, 247, 0.45) !important;
+          background: rgba(168, 85, 247, 0.12) !important;
+          color: #f3e8ff !important;
+        }
         }
 
         .agent-deck-pill .pill-brand-icon {
@@ -4916,13 +5019,15 @@ export const McpServersView: React.FC<McpServersViewProps> = ({
         }
 
         .agent-pill.unequipped {
-          border-style: dashed !important;
-          opacity: 0.85;
+          border: 1px solid rgba(255, 255, 255, 0.06) !important;
+          background: rgba(255, 255, 255, 0.018) !important;
+          color: #64748b !important;
         }
 
         .agent-pill.unequipped:hover {
-          opacity: 1 !important;
-          border-style: solid !important;
+          color: #94a3b8 !important;
+          border-color: rgba(255, 255, 255, 0.14) !important;
+          background: rgba(255, 255, 255, 0.05) !important;
         }
 
         .uninstalled-muted-label {
@@ -5148,9 +5253,9 @@ export const McpServersView: React.FC<McpServersViewProps> = ({
         .mcp-key-modal-overlay {
           position: fixed;
           inset: 0;
-          background: rgba(4, 7, 14, 0.75);
-          backdrop-filter: blur(8px);
-          -webkit-backdrop-filter: blur(8px);
+          background: radial-gradient(ellipse at 50% 40%, rgba(13, 19, 36, 0.62) 0%, rgba(4, 7, 15, 0.74) 100%);
+          backdrop-filter: blur(16px) saturate(180%) contrast(105%);
+          -webkit-backdrop-filter: blur(16px) saturate(180%) contrast(105%);
           display: flex;
           align-items: center;
           justify-content: center;
@@ -5567,9 +5672,9 @@ export const McpServersView: React.FC<McpServersViewProps> = ({
         .item-modal-backdrop {
           position: fixed;
           inset: 0;
-          background: rgba(3, 7, 18, 0.78);
-          backdrop-filter: blur(12px);
-          -webkit-backdrop-filter: blur(12px);
+          background: radial-gradient(ellipse at 50% 40%, rgba(13, 19, 36, 0.62) 0%, rgba(4, 7, 15, 0.74) 100%);
+          backdrop-filter: blur(16px) saturate(180%) contrast(105%);
+          -webkit-backdrop-filter: blur(16px) saturate(180%) contrast(105%);
           display: flex;
           align-items: center;
           justify-content: center;
@@ -5606,7 +5711,6 @@ export const McpServersView: React.FC<McpServersViewProps> = ({
           overflow: hidden;
           overflow-x: hidden;
           animation: itemModalScaleIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-          will-change: transform, opacity;
           display: flex;
           flex-direction: column;
           max-height: min(94vh, calc(100vh - 36px));
@@ -5618,13 +5722,13 @@ export const McpServersView: React.FC<McpServersViewProps> = ({
         }
 
         @keyframes itemModalScaleIn {
-          from { opacity: 0; transform: scale(0.96) translateY(8px); }
-          to { opacity: 1; transform: scale(1) translateY(0); }
+          from { opacity: 0; transform: scale(0.97) translateY(8px); }
+          to { opacity: 1; transform: none; }
         }
 
         @keyframes itemModalScaleOut {
-          from { opacity: 1; transform: scale(1) translateY(0); }
-          to { opacity: 0; transform: scale(0.96) translateY(8px); }
+          from { opacity: 1; transform: none; }
+          to { opacity: 0; transform: scale(0.97) translateY(8px); }
         }
 
         .item-modal-header {
@@ -5742,17 +5846,18 @@ export const McpServersView: React.FC<McpServersViewProps> = ({
         .item-modal-close-btn {
           align-self: flex-start;
           margin-top: 2px;
-          height: 26px;
-          padding: 0 7px 0 6px;
+          width: 28px;
+          height: 28px;
+          padding: 0;
           background: rgba(255, 255, 255, 0.04);
           border: 1px solid rgba(255, 255, 255, 0.08);
           color: #94a3b8;
           cursor: pointer;
-          border-radius: 6px;
+          border-radius: 7px;
           display: inline-flex;
           align-items: center;
-          gap: 5px;
-          transition: all 0.14s cubic-bezier(0.16, 1, 0.3, 1);
+          justify-content: center;
+          transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
           flex-shrink: 0;
           box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
           user-select: none;
@@ -5760,39 +5865,14 @@ export const McpServersView: React.FC<McpServersViewProps> = ({
 
         .item-modal-close-btn:hover {
           color: #f8fafc;
-          background: rgba(255, 255, 255, 0.08);
+          background: rgba(255, 255, 255, 0.09);
           border-color: rgba(255, 255, 255, 0.18);
+          transform: translateY(-0.5px);
         }
 
         .item-modal-close-btn:active {
           transform: translateY(0.5px);
-          background: rgba(255, 255, 255, 0.12);
-        }
-
-        .item-modal-close-btn .modal-esc-hint,
-        .modal-esc-hint {
-          font-size: 9px;
-          font-weight: 600;
-          letter-spacing: 0.04em;
-          color: #64748b;
-          background: rgba(255, 255, 255, 0.05);
-          border: 1px solid rgba(255, 255, 255, 0.1);
-          box-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
-          padding: 1px 4.5px;
-          border-radius: 3.5px;
-          line-height: 1;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          height: 15px;
-          box-sizing: border-box;
-          transition: all 0.14s ease;
-        }
-
-        .item-modal-close-btn:hover .modal-esc-hint {
-          color: #e2e8f0;
-          background: rgba(255, 255, 255, 0.09);
-          border-color: rgba(255, 255, 255, 0.2);
+          background: rgba(255, 255, 255, 0.14);
         }
 
         .item-modal-body {
@@ -6112,6 +6192,255 @@ export const McpServersView: React.FC<McpServersViewProps> = ({
           color: #ffffff;
         }
 
+        /* Curated Shelves & Spotlight Styles for MCP */
+        .mcp-shelves-view {
+          display: flex;
+          flex-direction: column;
+          gap: 34px;
+        }
+
+        .shelves-spotlight-section {
+          background: #0b101d;
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          border-radius: 14px;
+          padding: 20px 22px 22px;
+          position: relative;
+          overflow: hidden;
+          box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 4px 20px rgba(0, 0, 0, 0.35);
+        }
+
+        .shelves-spotlight-section::before {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          height: 1px;
+          background: linear-gradient(90deg, transparent, rgba(56, 189, 248, 0.5), transparent);
+          pointer-events: none;
+        }
+
+        .spotlight-header-cluster {
+          margin-bottom: 16px;
+        }
+
+        .spotlight-header-left {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+        }
+
+        .spotlight-badge-pill {
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          font-size: 10px;
+          font-weight: 700;
+          color: #38bdf8;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+        }
+
+        .spotlight-title {
+          font-size: 18px;
+          font-weight: 700;
+          color: #f8fafc;
+          letter-spacing: -0.02em;
+          margin: 0;
+          line-height: 1.2;
+        }
+
+        .spotlight-subtitle {
+          font-size: 12px;
+          color: #94a3b8;
+          margin: 0;
+          line-height: 1.4;
+        }
+
+        .category-shelves-container {
+          display: flex;
+          flex-direction: column;
+          gap: 30px;
+        }
+
+        .shelf-group-section {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+          transition: opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .shelf-section-header {
+          display: flex;
+          align-items: center;
+          gap: 14px;
+          padding: 0 4px;
+        }
+
+        .shelf-header-left {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          flex-shrink: 0;
+        }
+
+        .shelf-icon-avatar {
+          width: 26px;
+          height: 26px;
+          border-radius: 7px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+        }
+
+        .shelf-title-group {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+
+        .shelf-title {
+          font-size: 14px;
+          font-weight: 700;
+          color: #f8fafc;
+          letter-spacing: -0.01em;
+          white-space: nowrap;
+        }
+
+        .shelf-count-pill {
+          font-size: 10.5px;
+          font-weight: 600;
+          color: #8899ac;
+          background: rgba(255, 255, 255, 0.04);
+          border: 1px solid rgba(255, 255, 255, 0.07);
+          padding: 1.5px 7px;
+          border-radius: 999px;
+          white-space: nowrap;
+          transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+        }
+
+        .shelf-hairline-divider {
+          flex: 1;
+          height: 1px;
+          background: linear-gradient(90deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%);
+          min-width: 20px;
+        }
+
+        .shelf-view-all-btn {
+          font-size: 11.5px;
+          font-weight: 600;
+          color: #38bdf8;
+          background: rgba(56, 189, 248, 0.06);
+          border: 1px solid rgba(56, 189, 248, 0.18);
+          border-radius: 6px;
+          padding: 4px 10px;
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          cursor: pointer;
+          transition: all 0.15s ease;
+          white-space: nowrap;
+          flex-shrink: 0;
+        }
+
+        .shelf-view-all-btn:hover {
+          background: rgba(56, 189, 248, 0.15);
+          border-color: rgba(56, 189, 248, 0.35);
+          color: #e0f2fe;
+        }
+
+        .shelf-more-footer {
+          display: flex;
+          justify-content: flex-end;
+          padding: 4px 6px 0;
+          transition: opacity 0.2s ease;
+        }
+
+        .shelf-more-btn {
+          font-size: 11px;
+          font-weight: 600;
+          color: #94a3b8;
+          background: transparent;
+          border: none;
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          cursor: pointer;
+          transition: color 0.15s ease;
+          padding: 2px 4px;
+        }
+
+        .shelf-more-btn:hover {
+          color: #38bdf8;
+        }
+
+        .card-spotlight-badge {
+          font-size: 9px;
+          font-weight: 700;
+          color: #38bdf8;
+          background: rgba(56, 189, 248, 0.12);
+          border: 1px solid rgba(56, 189, 248, 0.28);
+          border-radius: 4px;
+          padding: 1px 5px;
+          display: inline-flex;
+          align-items: center;
+          gap: 3px;
+          line-height: 1;
+        }
+
+        .browse-layout-toggle {
+          display: flex;
+          align-items: center;
+          background: rgba(15, 23, 42, 0.8);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          border-radius: 6px;
+          padding: 2px;
+          gap: 2px;
+        }
+
+        .layout-pill-btn {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          padding: 3px 7px;
+          font-size: 11px;
+          font-weight: 600;
+          border-radius: 4px;
+          border: none;
+          background: transparent;
+          color: #94a3b8;
+          cursor: pointer;
+          transition: all 0.15s ease;
+        }
+
+        .layout-pill-btn:hover {
+          color: #ffffff;
+          background: rgba(255, 255, 255, 0.05);
+        }
+
+        .layout-pill-btn.active {
+          background: rgba(56, 189, 248, 0.16);
+          color: #38bdf8;
+          box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+        }
+
+        .mcp-grid.shelf-items-grid {
+          contain: none;
+        }
+
+        .mcp-card.is-spotlight-card {
+          border-color: rgba(56, 189, 248, 0.18);
+          background: #0d1322;
+          box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 2px 8px rgba(0, 0, 0, 0.25);
+        }
+
+        .mcp-card.is-spotlight-card:hover {
+          border-color: rgba(56, 189, 248, 0.6) !important;
+          background: #151e36 !important;
+          box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 6px 16px rgba(0, 0, 0, 0.45) !important;
+        }
+
         @media (max-width: 620px) {
           .item-modal-footer {
             flex-direction: column-reverse;
@@ -6131,3 +6460,24 @@ export const McpServersView: React.FC<McpServersViewProps> = ({
     </div>
   );
 };
+
+export const McpServersView = React.memo(McpServersViewComponent, (prev, next) => {
+  if (prev.isActive === false && next.isActive === false) {
+    return true;
+  }
+  if (prev.isActive !== next.isActive) {
+    return false;
+  }
+  return (
+    prev.mcpServers === next.mcpServers &&
+    prev.selectedAgents === next.selectedAgents &&
+    prev.allAgents === next.allAgents &&
+    prev.mcpCatalog === next.mcpCatalog &&
+    prev.searchQuery === next.searchQuery &&
+    prev.highlightedId === next.highlightedId &&
+    prev.isSyncingCatalog === next.isSyncingCatalog &&
+    prev.catalogSyncedAt === next.catalogSyncedAt &&
+    prev.activeAgentFilter === next.activeAgentFilter &&
+    prev.dependencyReport === next.dependencyReport
+  );
+});
