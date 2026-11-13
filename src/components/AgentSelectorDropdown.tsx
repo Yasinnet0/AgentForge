@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo, startTransition } from 'react';
 import { SupportedAgent } from '../types/agent';
 import { ChevronDown, Check, Bot } from 'lucide-react';
 import { AGENT_ICON_MAP } from './AgentIcon';
@@ -11,7 +11,66 @@ interface AgentSelectorDropdownProps {
 
 const ICON_MAP = AGENT_ICON_MAP;
 
-export const AgentSelectorDropdown: React.FC<AgentSelectorDropdownProps> = ({
+interface AgentRowProps {
+  agent: SupportedAgent;
+  onToggle: (id: string) => void;
+  onOnly: (id: string) => void;
+}
+
+const AgentRow = React.memo<AgentRowProps>(({ agent, onToggle, onOnly }) => {
+  const Icon = ICON_MAP[agent.id] || ICON_MAP[agent.iconName] || Bot;
+  const effectiveBase = agent.resolvedPaths?.baseDir || agent.paths.baseDir;
+
+  return (
+    <div
+      className={`agent-dropdown-row ${agent.selected ? 'selected' : ''}`}
+      onClick={() => onToggle(agent.id)}
+    >
+      <div
+        className={`custom-checkbox ${agent.selected ? 'checked' : ''}`}
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggle(agent.id);
+        }}
+      >
+        {agent.selected && <Check size={11} strokeWidth={2.8} />}
+      </div>
+
+      <div className="agent-icon-pill" style={{ color: agent.color, background: `${agent.color}15` }}>
+        <Icon size={14} />
+      </div>
+
+      <div className="agent-row-info">
+        <div className="agent-row-name-line">
+          <span className="agent-row-name" title={agent.name}>{agent.name}</span>
+          {agent.detected && <span className="detected-badge font-mono">DETECTED</span>}
+        </div>
+        <span className="agent-row-path font-mono" title={effectiveBase}>{effectiveBase}</span>
+      </div>
+
+      <button
+        className="only-btn font-mono"
+        onClick={(e) => {
+          e.stopPropagation();
+          onOnly(agent.id);
+        }}
+        title={`Select only ${agent.name}`}
+      >
+        only
+      </button>
+    </div>
+  );
+}, (prev, next) => {
+  return (
+    prev.agent.id === next.agent.id &&
+    prev.agent.selected === next.agent.selected &&
+    prev.agent.detected === next.agent.detected &&
+    prev.agent.paths.baseDir === next.agent.paths.baseDir &&
+    prev.agent.color === next.agent.color
+  );
+});
+
+const AgentSelectorDropdownComponent: React.FC<AgentSelectorDropdownProps> = ({
   agents,
   onToggleAgent,
   onSelectOnly,
@@ -23,10 +82,55 @@ export const AgentSelectorDropdown: React.FC<AgentSelectorDropdownProps> = ({
   const isOpenRef = useRef(false);
   const isClosingRef = useRef(false);
 
+  // Optimistic local state: updates instantly in 0ms without waiting for heavy background tree renders
+  const [localAgents, setLocalAgents] = useState<SupportedAgent[]>(agents);
+  const syncTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const isPendingSyncRef = useRef(false);
+  const pendingQueueRef = useRef<string[]>([]);
+
+  useEffect(() => {
+    if (!isPendingSyncRef.current) {
+      setLocalAgents((prev) => {
+        if (
+          prev.length === agents.length &&
+          prev.every(
+            (p, i) =>
+              p.id === agents[i].id &&
+              p.selected === agents[i].selected &&
+              p.detected === agents[i].detected
+          )
+        ) {
+          return prev;
+        }
+        return agents;
+      });
+    }
+  }, [agents]);
+
   useEffect(() => {
     isOpenRef.current = isOpen;
     isClosingRef.current = isClosing;
   }, [isOpen, isClosing]);
+
+  const flushPending = useCallback(() => {
+    if (pendingQueueRef.current.length === 0) return;
+    const queue = [...new Set(pendingQueueRef.current)];
+    pendingQueueRef.current = [];
+    isPendingSyncRef.current = false;
+    startTransition(() => {
+      for (const id of queue) {
+        onToggleAgent(id);
+      }
+    });
+  }, [onToggleAgent]);
+
+  useEffect(() => {
+    return () => {
+      if (syncTimerRef.current) {
+        clearTimeout(syncTimerRef.current);
+      }
+    };
+  }, []);
 
   const openDropdown = () => {
     if (closeTimerRef.current) {
@@ -40,6 +144,11 @@ export const AgentSelectorDropdown: React.FC<AgentSelectorDropdownProps> = ({
   const closeDropdown = () => {
     if (!isOpenRef.current || isClosingRef.current) return;
     setIsClosing(true);
+    if (syncTimerRef.current) {
+      clearTimeout(syncTimerRef.current);
+      syncTimerRef.current = null;
+    }
+    flushPending();
     closeTimerRef.current = setTimeout(() => {
       setIsOpen(false);
       setIsClosing(false);
@@ -55,7 +164,43 @@ export const AgentSelectorDropdown: React.FC<AgentSelectorDropdownProps> = ({
     }
   };
 
-  const selectedAgents = agents.filter((a) => a.selected);
+  const handleToggle = useCallback((id: string) => {
+    // 1. Instant local toggle: only the clicked row re-renders in 0ms immediately
+    setLocalAgents((prev) =>
+      prev.map((a) => (a.id === id ? { ...a, selected: !a.selected } : a))
+    );
+    isPendingSyncRef.current = true;
+    pendingQueueRef.current.push(id);
+
+    // 2. Schedule non-blocking flush after paint
+    if (syncTimerRef.current) {
+      clearTimeout(syncTimerRef.current);
+    }
+    syncTimerRef.current = setTimeout(() => {
+      flushPending();
+    }, 30);
+  }, [flushPending]);
+
+  const handleOnly = useCallback((id: string) => {
+    // 1. Instant local select only
+    setLocalAgents((prev) =>
+      prev.map((a) => ({ ...a, selected: a.id === id }))
+    );
+    isPendingSyncRef.current = true;
+    pendingQueueRef.current = [];
+
+    if (syncTimerRef.current) {
+      clearTimeout(syncTimerRef.current);
+    }
+    syncTimerRef.current = setTimeout(() => {
+      isPendingSyncRef.current = false;
+      startTransition(() => {
+        onSelectOnly(id);
+      });
+    }, 30);
+  }, [onSelectOnly]);
+
+  const selectedAgents = useMemo(() => localAgents.filter((a) => a.selected), [localAgents]);
   const selectedCount = selectedAgents.length;
 
   useEffect(() => {
@@ -65,8 +210,13 @@ export const AgentSelectorDropdown: React.FC<AgentSelectorDropdownProps> = ({
       }
     };
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
+      if (event.key === 'Escape' && isOpenRef.current) {
+        event.preventDefault();
+        event.stopPropagation();
         closeDropdown();
+        if (document.activeElement instanceof HTMLElement) {
+          document.activeElement.blur();
+        }
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -119,50 +269,14 @@ export const AgentSelectorDropdown: React.FC<AgentSelectorDropdownProps> = ({
           </div>
 
           <div className="agent-items-list">
-            {agents.map((agent) => {
-              const Icon = ICON_MAP[agent.id] || ICON_MAP[agent.iconName] || Bot;
-              const effectiveBase = agent.resolvedPaths?.baseDir || agent.paths.baseDir;
-              return (
-                <div
-                  key={agent.id}
-                  className={`agent-dropdown-row ${agent.selected ? 'selected' : ''}`}
-                  onClick={() => onToggleAgent(agent.id)}
-                >
-                  <div
-                    className={`custom-checkbox ${agent.selected ? 'checked' : ''}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onToggleAgent(agent.id);
-                    }}
-                  >
-                    {agent.selected && <Check size={11} />}
-                  </div>
-
-                  <div className="agent-icon-pill" style={{ color: agent.color, background: `${agent.color}15` }}>
-                    <Icon size={14} />
-                  </div>
-
-                  <div className="agent-row-info">
-                    <div className="agent-row-name-line">
-                      <span className="agent-row-name" title={agent.name}>{agent.name}</span>
-                      {agent.detected && <span className="detected-badge font-mono">DETECTED</span>}
-                    </div>
-                    <span className="agent-row-path font-mono" title={effectiveBase}>{effectiveBase}</span>
-                  </div>
-
-                  <button
-                    className="only-btn font-mono"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onSelectOnly(agent.id);
-                    }}
-                    title={`Select only ${agent.name}`}
-                  >
-                    only
-                  </button>
-                </div>
-              );
-            })}
+            {localAgents.map((agent) => (
+              <AgentRow
+                key={agent.id}
+                agent={agent}
+                onToggle={handleToggle}
+                onOnly={handleOnly}
+              />
+            ))}
           </div>
         </div>
       )}
@@ -315,9 +429,7 @@ export const AgentSelectorDropdown: React.FC<AgentSelectorDropdownProps> = ({
           min-width: 100%;
           max-width: 100%;
           box-sizing: border-box;
-          background: rgba(13, 18, 31, 0.96);
-          backdrop-filter: blur(18px);
-          -webkit-backdrop-filter: blur(18px);
+          background: #0d121f;
           border: 1px solid #1e283d;
           border-radius: 10px;
           box-shadow: 0 16px 36px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.05);
@@ -327,13 +439,12 @@ export const AgentSelectorDropdown: React.FC<AgentSelectorDropdownProps> = ({
           flex-direction: column;
           gap: 6px;
           transform-origin: top center;
-          animation: agentDropdownOpen 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-          will-change: transform, opacity;
+          animation: agentDropdownOpen 0.16s cubic-bezier(0.16, 1, 0.3, 1) forwards;
           overflow: hidden;
         }
 
         .agent-selector-wrapper .agent-dropdown-menu.closing {
-          animation: agentDropdownClose 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+          animation: agentDropdownClose 0.16s cubic-bezier(0.16, 1, 0.3, 1) forwards;
           pointer-events: none;
         }
 
@@ -378,17 +489,6 @@ export const AgentSelectorDropdown: React.FC<AgentSelectorDropdownProps> = ({
           width: 0 !important;
         }
 
-        @keyframes agentRowFadeIn {
-          0% {
-            opacity: 0;
-            transform: translateY(3px);
-          }
-          100% {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-
         .agent-dropdown-row {
           display: flex;
           align-items: center;
@@ -396,23 +496,20 @@ export const AgentSelectorDropdown: React.FC<AgentSelectorDropdownProps> = ({
           padding: 7px 8px;
           border-radius: 6px;
           cursor: pointer;
-          transition: background 0.15s ease, border-color 0.15s ease;
+          transition: background-color 0.06s ease, border-color 0.06s ease;
           white-space: nowrap;
-          animation: agentRowFadeIn 0.18s cubic-bezier(0.16, 1, 0.3, 1) backwards;
           box-sizing: border-box;
           width: 100%;
           max-width: 100%;
           min-width: 0;
           border: 1px solid transparent;
+          user-select: none;
+          contain: layout style;
         }
 
         .agent-dropdown-row:hover {
           background: #141c2c;
           border-color: rgba(99, 102, 241, 0.2);
-        }
-
-        .agent-dropdown-row:active {
-          transform: scale(0.99);
         }
 
         .agent-dropdown-row.selected {
@@ -429,14 +526,20 @@ export const AgentSelectorDropdown: React.FC<AgentSelectorDropdownProps> = ({
           display: flex;
           align-items: center;
           justify-content: center;
-          color: white;
+          color: #ffffff;
           flex-shrink: 0;
-          transition: all 0.15s ease;
+          transition: background-color 0.05s ease, border-color 0.05s ease;
+          contain: layout paint;
         }
 
         .custom-checkbox.checked {
           background: #6366f1;
           border-color: #6366f1;
+        }
+
+        .custom-checkbox svg {
+          display: block;
+          flex-shrink: 0;
         }
 
         .agent-icon-pill {
@@ -528,3 +631,5 @@ export const AgentSelectorDropdown: React.FC<AgentSelectorDropdownProps> = ({
     </div>
   );
 };
+
+export const AgentSelectorDropdown = React.memo(AgentSelectorDropdownComponent);

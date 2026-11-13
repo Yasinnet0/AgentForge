@@ -1,17 +1,17 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
 import {
-  LayoutDashboard,
+  LayoutGrid,
   Bot,
-  Server,
-  Sparkles,
-  Shield,
-  Webhook,
+  Cable,
+  Zap,
+  Package,
+  FileCode,
+  RefreshCw,
+  GitFork,
   Layers,
-  Lock,
-  Settings,
-  Boxes,
-  ArrowUpCircle,
+  ShieldAlert,
+  SlidersHorizontal,
   PanelLeftClose,
   PanelLeftOpen
 } from 'lucide-react';
@@ -47,6 +47,8 @@ interface SidebarProps {
   };
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
+  isSettingsOpen?: boolean;
+  onOpenSettings?: () => void;
 }
 
 interface TooltipData {
@@ -64,6 +66,8 @@ const SidebarComponent: React.FC<SidebarProps> = ({
   badgeCounts,
   isCollapsed: isCollapsedProp,
   onToggleCollapse,
+  isSettingsOpen = false,
+  onOpenSettings,
 }) => {
   const [internalCollapsed, setInternalCollapsed] = React.useState<boolean>(() => {
     try {
@@ -76,7 +80,7 @@ const SidebarComponent: React.FC<SidebarProps> = ({
   const isCollapsed = isCollapsedProp !== undefined ? isCollapsedProp : internalCollapsed;
 
   const [tooltipState, setTooltipState] = React.useState<TooltipData | null>(null);
-  const [appVersion, setAppVersion] = React.useState<string>('0.1.0');
+  const [appVersion, setAppVersion] = React.useState<string>('0.2.0');
 
   React.useEffect(() => {
     if (window.electronAPI?.getAppVersion) {
@@ -138,25 +142,27 @@ const SidebarComponent: React.FC<SidebarProps> = ({
   }, [isCollapsed]);
 
   const mainNavItems: NavItem[] = [
-    { id: 'overview' as NavTab, label: 'Overview', icon: LayoutDashboard },
+    { id: 'overview' as NavTab, label: 'Overview', icon: LayoutGrid },
     { id: 'agents' as NavTab, label: 'Agents', icon: Bot, badge: badgeCounts?.agents !== undefined ? String(badgeCounts.agents) : undefined },
-    { id: 'mcp' as NavTab, label: 'MCP Servers', icon: Server, badge: badgeCounts?.mcp !== undefined ? String(badgeCounts.mcp) : undefined },
-    { id: 'skills' as NavTab, label: 'Skills', icon: Sparkles, badge: badgeCounts?.skills !== undefined ? String(badgeCounts.skills) : undefined },
-    { id: 'plugins' as NavTab, label: 'Plugins', icon: Boxes, badge: badgeCounts?.plugins !== undefined ? String(badgeCounts.plugins) : undefined },
-    { id: 'rules' as NavTab, label: 'Rules', icon: Shield },
-    { id: 'updates' as NavTab, label: 'Updates', icon: ArrowUpCircle },
-    { id: 'hooks' as NavTab, label: 'Hooks', icon: Webhook },
+    { id: 'mcp' as NavTab, label: 'MCP Servers', icon: Cable, badge: badgeCounts?.mcp !== undefined ? String(badgeCounts.mcp) : undefined },
+    { id: 'skills' as NavTab, label: 'Skills', icon: Zap, badge: badgeCounts?.skills !== undefined ? String(badgeCounts.skills) : undefined },
+    { id: 'plugins' as NavTab, label: 'Plugins', icon: Package, badge: badgeCounts?.plugins !== undefined ? String(badgeCounts.plugins) : undefined },
+    { id: 'rules' as NavTab, label: 'Rules', icon: FileCode },
+    { id: 'updates' as NavTab, label: 'Updates', icon: RefreshCw },
+    { id: 'hooks' as NavTab, label: 'Hooks', icon: GitFork },
     { id: 'environments' as NavTab, label: 'Environments', icon: Layers },
   ];
 
   const bottomNavItems: NavItem[] = [
-    { id: 'security' as NavTab, label: 'Security', icon: Lock },
-    { id: 'settings' as NavTab, label: 'Settings', icon: Settings },
+    { id: 'security' as NavTab, label: 'Security', icon: ShieldAlert },
+    { id: 'settings' as NavTab, label: 'Settings', icon: SlidersHorizontal },
   ];
 
   const renderNavButton = (item: NavItem) => {
     const Icon = item.icon;
-    const isActive = activeTab === item.id;
+    const isSettings = item.id === 'settings';
+    const isActive = isSettings ? Boolean(isSettingsOpen) : activeTab === item.id;
+    const shortcut = isSettings ? 'Ctrl+,' : undefined;
     return (
       <button
         key={item.id}
@@ -164,14 +170,18 @@ const SidebarComponent: React.FC<SidebarProps> = ({
         className={`nav-button ${isActive ? 'active' : ''}`}
         onClick={() => {
           hideTooltip();
-          onTabChange(item.id);
+          if (isSettings && onOpenSettings) {
+            onOpenSettings();
+          } else {
+            onTabChange(item.id);
+          }
         }}
-        onMouseEnter={(e) => showTooltip(e, item.label, { badge: item.badge, isActive })}
+        onMouseEnter={(e) => showTooltip(e, item.label, { badge: item.badge, shortcut, isActive })}
         onMouseLeave={hideTooltip}
         aria-label={item.label}
       >
         <div className="nav-icon-label">
-          <Icon size={16} className={`nav-icon ${isActive ? 'active-icon' : ''}`} />
+          <Icon size={16} strokeWidth={1.7} className={`nav-icon ${isActive ? 'active-icon' : ''}`} />
           {!isCollapsed && <span className="nav-label">{item.label}</span>}
         </div>
         {item.badge && (
@@ -195,7 +205,7 @@ const SidebarComponent: React.FC<SidebarProps> = ({
             aria-label="Collapse sidebar"
           >
             <div className="toggle-action-left">
-              <PanelLeftClose size={15} className="toggle-action-icon" />
+              <PanelLeftClose size={15} strokeWidth={1.7} className="toggle-action-icon" />
               <span className="toggle-action-label">Collapse</span>
             </div>
             <kbd className="toggle-shortcut-badge font-mono">Ctrl+B</kbd>
@@ -209,7 +219,7 @@ const SidebarComponent: React.FC<SidebarProps> = ({
             onMouseLeave={hideTooltip}
             aria-label="Expand sidebar"
           >
-            <PanelLeftOpen size={16} className="toggle-action-icon" />
+            <PanelLeftOpen size={16} strokeWidth={1.7} className="toggle-action-icon" />
           </button>
         )}
         <div className="sidebar-top-divider" />
@@ -359,7 +369,7 @@ const SidebarComponent: React.FC<SidebarProps> = ({
         }
 
         .toggle-shortcut-badge {
-          font-size: 9.5px;
+          font-size: 10px;
           color: #475569;
           background: rgba(255, 255, 255, 0.03);
           border: 1px solid rgba(255, 255, 255, 0.07);
@@ -450,7 +460,7 @@ const SidebarComponent: React.FC<SidebarProps> = ({
           border: 1px solid transparent;
           background: transparent;
           color: #8899ac;
-          font-size: 12.5px;
+          font-size: 13px;
           font-weight: 500;
           cursor: pointer;
           transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
@@ -524,7 +534,7 @@ const SidebarComponent: React.FC<SidebarProps> = ({
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
-          font-size: 12.5px;
+          font-size: 13px;
         }
 
         .nav-count {
@@ -682,7 +692,7 @@ const SidebarComponent: React.FC<SidebarProps> = ({
         }
 
         .sidebar-floating-tooltip .tooltip-active-tag {
-          font-size: 9.5px;
+          font-size: 10px;
           font-weight: 600;
           padding: 1.5px 5px;
           border-radius: 4px;

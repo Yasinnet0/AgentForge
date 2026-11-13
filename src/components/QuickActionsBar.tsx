@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sparkles, Boxes, Server, Shield, Lock, ChevronRight } from 'lucide-react';
+import { Zap, Package, Cable, FileCode, ShieldCheck, ChevronRight } from 'lucide-react';
 import { NavTab } from './Sidebar';
 
 interface QuickActionsBarProps {
@@ -12,50 +12,35 @@ const QuickActionsBarComponent: React.FC<QuickActionsBarProps> = ({ onNavigate }
       id: 'create-skill',
       title: 'Create Skill',
       description: 'Author custom capability',
-      icon: Sparkles,
-      iconColor: '#c084fc',
-      bgColor: 'rgba(192, 132, 252, 0.08)',
-      borderColor: 'rgba(192, 132, 252, 0.2)',
+      icon: Zap,
       tab: 'skills' as NavTab,
     },
     {
       id: 'bundle-kit',
       title: 'Bundle Kit',
       description: 'Package multi-tool kits',
-      icon: Boxes,
-      iconColor: '#fbbf24',
-      bgColor: 'rgba(245, 158, 11, 0.08)',
-      borderColor: 'rgba(245, 158, 11, 0.2)',
+      icon: Package,
       tab: 'plugins' as NavTab,
     },
     {
       id: 'add-mcp',
       title: 'Add MCP Server',
       description: 'Connect stdio / SSE server',
-      icon: Server,
-      iconColor: '#38bdf8',
-      bgColor: 'rgba(56, 189, 248, 0.08)',
-      borderColor: 'rgba(56, 189, 248, 0.2)',
+      icon: Cable,
       tab: 'mcp' as NavTab,
     },
     {
       id: 'add-rule',
       title: 'Context Rule',
       description: 'Define prompt boundaries',
-      icon: Shield,
-      iconColor: '#34d399',
-      bgColor: 'rgba(52, 211, 153, 0.08)',
-      borderColor: 'rgba(52, 211, 153, 0.2)',
+      icon: FileCode,
       tab: 'rules' as NavTab,
     },
     {
       id: 'security-hub',
       title: 'Security Hub',
       description: 'Audit safety & isolation',
-      icon: Lock,
-      iconColor: '#818cf8',
-      bgColor: 'rgba(129, 140, 248, 0.08)',
-      borderColor: 'rgba(129, 140, 248, 0.2)',
+      icon: ShieldCheck,
       tab: 'security' as NavTab,
     },
   ];
@@ -77,21 +62,14 @@ const QuickActionsBarComponent: React.FC<QuickActionsBarProps> = ({ onNavigate }
               onClick={() => onNavigate(act.tab)}
               title={`Go to ${act.title}`}
             >
-              <div
-                className="action-icon-wrap"
-                style={{
-                  color: act.iconColor,
-                  background: act.bgColor,
-                  borderColor: act.borderColor,
-                }}
-              >
-                <Icon size={16} />
+              <div className="action-icon-wrap">
+                <Icon size={16} strokeWidth={1.75} />
               </div>
 
               <div className="action-text-group">
                 <div className="action-title-row">
                   <span className="action-title">{act.title}</span>
-                  <ChevronRight size={12} className="action-arrow" />
+                  <ChevronRight size={12} strokeWidth={1.75} className="action-arrow" />
                 </div>
                 <span className="action-desc">{act.description}</span>
               </div>
@@ -166,8 +144,14 @@ const QuickActionsBarComponent: React.FC<QuickActionsBarProps> = ({ onNavigate }
 
         .quick-action-card:hover {
           background: #151e30;
-          border-color: #2b3a56;
+          border-color: rgba(168, 85, 247, 0.35);
           transform: translateY(-1px);
+        }
+
+        .quick-action-card:hover .action-icon-wrap {
+          color: #ffffff;
+          background: rgba(168, 85, 247, 0.14);
+          border-color: rgba(168, 85, 247, 0.4);
         }
 
         .quick-action-card:hover .action-arrow {
@@ -179,11 +163,14 @@ const QuickActionsBarComponent: React.FC<QuickActionsBarProps> = ({ onNavigate }
           width: 32px;
           height: 32px;
           border-radius: 7px;
-          border: 1px solid transparent;
+          background: rgba(255, 255, 255, 0.035);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          color: #94a3b8;
           display: flex;
           align-items: center;
           justify-content: center;
           flex-shrink: 0;
+          transition: all 0.15s ease;
         }
 
         .action-text-group {

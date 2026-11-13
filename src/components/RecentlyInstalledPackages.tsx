@@ -25,6 +25,7 @@ import { useToast } from '../context/ToastContext';
 import { SupportedAgent } from '../types/agent';
 import { useModalTransition } from '../hooks/useModalTransition';
 import { AGENT_ICON_MAP } from './AgentIcon';
+import { CapabilityIcon } from './CapabilityIcon';
 
 export interface InstalledPackage {
   id: string;
@@ -42,6 +43,7 @@ export interface InstalledPackage {
   sourceAgentColor?: string;
   sourceAgentIcon?: string;
   folderName?: string;
+  category?: string;
   description?: string;
   command?: string;
   args?: string[];
@@ -536,13 +538,12 @@ export const RecentlyInstalledPackagesComponent: React.FC<RecentlyInstalledPacka
                   <div className="card-header-cluster">
                     <div className="card-header-left">
                       <div className={`card-icon-avatar ${typeClass}`}>
-                        {isMcp ? (
-                          <Server size={17} />
-                        ) : isPlugin ? (
-                          <Boxes size={17} />
-                        ) : (
-                          <Sparkles size={17} />
-                        )}
+                        <CapabilityIcon
+                          type={isMcp ? 'mcp' : isPlugin ? 'plugin' : 'skill'}
+                          name={pkg.name}
+                          category={pkg.category}
+                          size={17}
+                        />
                       </div>
                       <div className="card-identity-text">
                         <div className="card-title-row">
@@ -575,25 +576,11 @@ export const RecentlyInstalledPackagesComponent: React.FC<RecentlyInstalledPacka
                       {pkg.description || 'Installed package component.'}
                     </p>
 
-                    <div className={`agent-deck-container ${!agentName ? 'pending-only' : ''}`}>
-                      <div className="agent-deck-header">
-                        <div className="agent-deck-label-group">
-                          <Bot size={11} className="agent-deck-icon" />
-                          <span className="agent-deck-title font-mono">{agentName ? 'Active in' : 'Scope'}</span>
-                          <span className="agent-deck-count-badge font-mono">{agentName ? '1' : 'Global'}</span>
-                        </div>
-                      </div>
+                    <div className="agent-deck-container">
                       <div className="agent-deck-pills">
                         {agentName ? (
-                          <div
-                            className="agent-deck-pill installed font-mono"
-                            style={{
-                              color: agentColor,
-                              borderColor: `${agentColor}45`,
-                              background: `${agentColor}14`,
-                            }}
-                          >
-                            <AgentIcon size={11} className="pill-brand-icon" />
+                          <div className="agent-deck-pill installed font-mono">
+                            <AgentIcon size={11} className="pill-brand-icon" style={{ color: agentColor }} />
                             <span className="pill-name">{agentName}</span>
                           </div>
                         ) : (
@@ -612,14 +599,7 @@ export const RecentlyInstalledPackagesComponent: React.FC<RecentlyInstalledPacka
                         className={`meta-subtle-badge font-mono badge-${typeClass}`}
                         title={`Package Type: ${typeLabel}`}
                       >
-                        {isMcp ? (
-                          <Server size={11} />
-                        ) : isPlugin ? (
-                          <Boxes size={11} />
-                        ) : (
-                          <Sparkles size={11} />
-                        )}
-                        <span>{isMcp ? 'MCP SERVER' : isPlugin ? 'PLUGIN' : 'SKILL'}</span>
+                        <span>{typeLabel}</span>
                       </span>
 
                       {pkg.source && (
@@ -765,15 +745,8 @@ export const RecentlyInstalledPackagesComponent: React.FC<RecentlyInstalledPacka
                       </td>
                       <td>
                         {agentName ? (
-                          <span
-                            className="agent-pill font-mono"
-                            style={{
-                              color: agentColor,
-                              borderColor: `${agentColor}35`,
-                              background: `${agentColor}0d`,
-                            }}
-                          >
-                            <AgentIcon size={10} />
+                          <span className="agent-pill font-mono">
+                            <AgentIcon size={10} style={{ color: agentColor }} />
                             <span>{agentName}</span>
                           </span>
                         ) : (
@@ -992,13 +965,18 @@ export const RecentlyInstalledPackagesComponent: React.FC<RecentlyInstalledPacka
                       : 'skill'
                   }`}
                 >
-                  {activePackageForDetails.rawType === 'mcp' || activePackageForDetails.type === 'MCP SERVER' ? (
-                    activePackageForDetails.transport === 'sse' ? <Globe size={20} /> : <Server size={20} />
-                  ) : activePackageForDetails.rawType === 'plugin' || activePackageForDetails.type === 'PLUGIN' || (activePackageForDetails.type as string) === 'SKILL BUNDLE' ? (
-                    <Boxes size={20} />
-                  ) : (
-                    <Sparkles size={20} />
-                  )}
+                  <CapabilityIcon
+                    type={
+                      activePackageForDetails.rawType === 'mcp' || activePackageForDetails.type === 'MCP SERVER'
+                        ? 'mcp'
+                        : activePackageForDetails.rawType === 'plugin' || activePackageForDetails.type === 'PLUGIN' || (activePackageForDetails.type as string) === 'SKILL BUNDLE'
+                        ? 'plugin'
+                        : 'skill'
+                    }
+                    name={activePackageForDetails.name}
+                    category={activePackageForDetails.category}
+                    size={20}
+                  />
                 </div>
                 <div className="pkg-modal-title-content">
                   <div className="pkg-modal-title-row">
@@ -1048,8 +1026,7 @@ export const RecentlyInstalledPackagesComponent: React.FC<RecentlyInstalledPacka
                 title="Close (Esc)"
                 aria-label="Close modal"
               >
-                <X size={12} strokeWidth={2.2} />
-                <kbd className="modal-esc-hint font-mono">ESC</kbd>
+                <X size={15} strokeWidth={2} />
               </button>
             </div>
 
@@ -1433,44 +1410,16 @@ export const RecentlyInstalledPackagesComponent: React.FC<RecentlyInstalledPacka
           justify-content: center;
           flex-shrink: 0;
           box-shadow: none;
-          transition: border-color 0.15s ease;
+          background: rgba(255, 255, 255, 0.035);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          color: #94a3b8;
+          transition: all 0.15s ease;
         }
 
-        .card-icon-avatar.mcp {
-          background: linear-gradient(135deg, rgba(56, 189, 248, 0.18), rgba(14, 165, 233, 0.08));
-          border: 1px solid rgba(56, 189, 248, 0.32);
-          color: #38bdf8;
-          box-shadow: none;
-        }
-
-        .package-grid-card.type-mcp:hover .card-icon-avatar {
-          border-color: rgba(56, 189, 248, 0.55);
-          box-shadow: none;
-          transform: none;
-        }
-
-        .card-icon-avatar.plugin {
-          background: linear-gradient(135deg, rgba(245, 158, 11, 0.18), rgba(217, 119, 6, 0.08));
-          border: 1px solid rgba(245, 158, 11, 0.32);
-          color: #fbbf24;
-          box-shadow: none;
-        }
-
-        .package-grid-card.type-plugin:hover .card-icon-avatar {
-          border-color: rgba(245, 158, 11, 0.55);
-          box-shadow: none;
-          transform: none;
-        }
-
-        .card-icon-avatar.skill {
-          background: linear-gradient(135deg, rgba(168, 85, 247, 0.18), rgba(99, 102, 241, 0.08));
-          border: 1px solid rgba(168, 85, 247, 0.32);
-          color: #c084fc;
-          box-shadow: none;
-        }
-
-        .package-grid-card.type-skill:hover .card-icon-avatar {
-          border-color: rgba(168, 85, 247, 0.55);
+        .package-grid-card:hover .card-icon-avatar {
+          border-color: rgba(168, 85, 247, 0.45);
+          color: #f8fafc;
+          background: rgba(255, 255, 255, 0.06);
           box-shadow: none;
           transform: none;
         }
@@ -1619,22 +1568,38 @@ export const RecentlyInstalledPackagesComponent: React.FC<RecentlyInstalledPacka
           flex-shrink: 0;
         }
 
+        .status-pill-clean {
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          padding: 2.5px 8px;
+          border-radius: 4px;
+          font-size: 9.5px;
+          font-weight: 600;
+          letter-spacing: 0.02em;
+          white-space: nowrap;
+          flex-shrink: 0;
+          background: rgba(255, 255, 255, 0.035);
+          border: 1px solid rgba(255, 255, 255, 0.07);
+          color: #94a3b8;
+        }
+
         .status-pill-clean.installed {
-          color: #34d399;
-          background: rgba(16, 185, 129, 0.08);
-          border: 1px solid rgba(16, 185, 129, 0.22);
+          color: #e2e8f0;
+          background: rgba(16, 185, 129, 0.06);
+          border-color: rgba(16, 185, 129, 0.18);
         }
 
         .status-pill-clean.partial {
-          color: #fbbf24;
-          background: rgba(245, 158, 11, 0.08);
-          border: 1px solid rgba(245, 158, 11, 0.22);
+          color: #e2e8f0;
+          background: rgba(245, 158, 11, 0.06);
+          border-color: rgba(245, 158, 11, 0.18);
         }
 
         .status-pill-clean.available {
-          color: #c084fc;
-          background: rgba(147, 51, 234, 0.1);
-          border: 1px solid rgba(147, 51, 234, 0.25);
+          color: #64748b;
+          background: rgba(255, 255, 255, 0.025);
+          border-color: rgba(255, 255, 255, 0.05);
         }
 
         .status-dot {
@@ -1655,8 +1620,7 @@ export const RecentlyInstalledPackagesComponent: React.FC<RecentlyInstalledPacka
         }
 
         .status-dot.available {
-          background: #a855f7;
-          box-shadow: 0 0 6px rgba(168, 85, 247, 0.6);
+          background: #475569;
         }
 
         /* Body */
@@ -1693,69 +1657,13 @@ export const RecentlyInstalledPackagesComponent: React.FC<RecentlyInstalledPacka
         .agent-deck-container {
           display: flex;
           flex-direction: column;
-          gap: 6px;
-          background: rgba(15, 23, 42, 0.45);
-          border: 1px solid rgba(255, 255, 255, 0.05);
-          border-radius: 8px;
-          padding: 7px 9px;
+          gap: 5px;
+          background: transparent;
+          border: none;
+          padding: 2px 0;
           box-sizing: border-box;
           width: 100%;
           min-width: 0;
-          transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-
-        .agent-deck-container:hover {
-          background: rgba(15, 23, 42, 0.65);
-          border-color: rgba(255, 255, 255, 0.09);
-        }
-
-        .agent-deck-container.pending-only {
-          background: rgba(15, 23, 42, 0.25);
-          border-color: rgba(255, 255, 255, 0.035);
-          border-style: dashed;
-        }
-
-        .agent-deck-header {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 8px;
-          width: 100%;
-          min-width: 0;
-        }
-
-        .agent-deck-label-group {
-          display: flex;
-          align-items: center;
-          gap: 5.5px;
-          min-width: 0;
-        }
-
-        .agent-deck-icon {
-          color: #64748b;
-          flex-shrink: 0;
-        }
-
-        .agent-deck-title {
-          font-size: 9.5px;
-          font-weight: 700;
-          letter-spacing: 0.05em;
-          color: #718096;
-          text-transform: uppercase;
-          white-space: nowrap;
-        }
-
-        .agent-deck-count-badge {
-          display: inline-flex;
-          align-items: center;
-          font-size: 9px;
-          font-weight: 600;
-          color: #94a3b8;
-          background: rgba(255, 255, 255, 0.06);
-          border: 1px solid rgba(255, 255, 255, 0.07);
-          padding: 0 5px;
-          border-radius: 9999px;
-          line-height: 14px;
         }
 
         .agent-deck-pills {
@@ -1774,19 +1682,47 @@ export const RecentlyInstalledPackagesComponent: React.FC<RecentlyInstalledPacka
           padding: 2.5px 7.5px;
           border-radius: 5px;
           font-size: 10px;
-          font-weight: 600;
-          border: 1px solid;
+          font-weight: 500;
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          background: rgba(255, 255, 255, 0.035);
+          color: #94a3b8;
+          cursor: pointer;
+          user-select: none;
           white-space: nowrap;
           flex-shrink: 0;
           line-height: 14px;
+          outline: none !important;
+          box-shadow: none !important;
+          transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .agent-deck-pill:focus,
+        .agent-deck-pill:focus-visible {
+          outline: none !important;
+          box-shadow: none !important;
+        }
+
+        .agent-deck-pill:hover {
+          background: rgba(255, 255, 255, 0.07);
+          border-color: rgba(255, 255, 255, 0.16);
+          color: #f1f5f9;
+        }
+
+        .agent-deck-pill.installed {
+          color: #cbd5e1;
+          border-color: rgba(255, 255, 255, 0.1);
         }
 
         .agent-deck-pill.pending {
-          border-style: dashed !important;
-          opacity: 0.85;
+          color: #64748b;
+          border: 1px solid rgba(255, 255, 255, 0.06) !important;
+          background: rgba(255, 255, 255, 0.018) !important;
+        }
+
+        .agent-deck-pill.pending:hover {
           color: #94a3b8;
-          background: rgba(255, 255, 255, 0.04);
-          border-color: rgba(255, 255, 255, 0.1);
+          border-color: rgba(255, 255, 255, 0.14) !important;
+          background: rgba(255, 255, 255, 0.05) !important;
         }
 
         .agent-deck-pill .pill-brand-icon {
@@ -1841,19 +1777,39 @@ export const RecentlyInstalledPackagesComponent: React.FC<RecentlyInstalledPacka
           padding: 1.5px 6px;
           border-radius: 4px;
           font-size: 9.5px;
-          font-weight: 600;
-          border: 1px solid;
+          font-weight: 500;
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          background: rgba(255, 255, 255, 0.035);
+          color: #cbd5e1;
           transition: all 0.15s ease;
           white-space: nowrap;
           flex-shrink: 0;
+          outline: none !important;
+          box-shadow: none !important;
+        }
+
+        .agent-pill:focus,
+        .agent-pill:focus-visible {
+          outline: none !important;
+          box-shadow: none !important;
+        }
+
+        .agent-pill:hover {
+          background: rgba(255, 255, 255, 0.07);
+          border-color: rgba(255, 255, 255, 0.16);
+          color: #f1f5f9;
         }
 
         .agent-pill.unequipped {
-          border-style: dashed !important;
-          opacity: 0.85;
           color: #64748b !important;
-          border-color: rgba(100, 116, 139, 0.3) !important;
-          background: rgba(255, 255, 255, 0.03) !important;
+          border: 1px solid rgba(255, 255, 255, 0.06) !important;
+          background: rgba(255, 255, 255, 0.018) !important;
+        }
+
+        .agent-pill.unequipped:hover {
+          color: #94a3b8 !important;
+          border-color: rgba(255, 255, 255, 0.14) !important;
+          background: rgba(255, 255, 255, 0.05) !important;
         }
 
         /* Bottom Toolbar: Clean 36px height, consistent across tabs */
@@ -2358,9 +2314,9 @@ export const RecentlyInstalledPackagesComponent: React.FC<RecentlyInstalledPacka
         .pkg-modal-backdrop {
           position: fixed;
           inset: 0;
-          background: rgba(3, 7, 18, 0.78);
-          backdrop-filter: blur(12px);
-          -webkit-backdrop-filter: blur(12px);
+          background: radial-gradient(ellipse at 50% 40%, rgba(13, 19, 36, 0.62) 0%, rgba(4, 7, 15, 0.74) 100%);
+          backdrop-filter: blur(16px) saturate(180%) contrast(105%);
+          -webkit-backdrop-filter: blur(16px) saturate(180%) contrast(105%);
           display: flex;
           align-items: center;
           justify-content: center;
@@ -2386,7 +2342,6 @@ export const RecentlyInstalledPackagesComponent: React.FC<RecentlyInstalledPacka
           box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5), 0 25px 65px -12px rgba(0, 0, 0, 0.85), inset 0 1px 0 0 rgba(255, 255, 255, 0.1);
           overflow: hidden;
           animation: modalScaleIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-          will-change: transform, opacity;
           display: flex;
           flex-direction: column;
           max-height: min(94vh, calc(100vh - 36px));
@@ -2401,22 +2356,22 @@ export const RecentlyInstalledPackagesComponent: React.FC<RecentlyInstalledPacka
         @keyframes modalScaleIn {
           from {
             opacity: 0;
-            transform: scale(0.96) translateY(8px);
+            transform: scale(0.97) translateY(8px);
           }
           to {
             opacity: 1;
-            transform: scale(1) translateY(0);
+            transform: none;
           }
         }
 
         @keyframes modalScaleOut {
           from {
             opacity: 1;
-            transform: scale(1) translateY(0);
+            transform: none;
           }
           to {
             opacity: 0;
-            transform: scale(0.96) translateY(8px);
+            transform: scale(0.97) translateY(8px);
           }
         }
 
@@ -2534,17 +2489,18 @@ export const RecentlyInstalledPackagesComponent: React.FC<RecentlyInstalledPacka
         .pkg-modal-close-btn {
           align-self: flex-start;
           margin-top: 2px;
-          height: 26px;
-          padding: 0 7px 0 6px;
+          width: 28px;
+          height: 28px;
+          padding: 0;
           background: rgba(255, 255, 255, 0.04);
           border: 1px solid rgba(255, 255, 255, 0.08);
           color: #94a3b8;
           cursor: pointer;
-          border-radius: 6px;
+          border-radius: 7px;
           display: inline-flex;
           align-items: center;
-          gap: 5px;
-          transition: all 0.14s cubic-bezier(0.16, 1, 0.3, 1);
+          justify-content: center;
+          transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
           flex-shrink: 0;
           box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
           user-select: none;
@@ -2552,38 +2508,14 @@ export const RecentlyInstalledPackagesComponent: React.FC<RecentlyInstalledPacka
 
         .pkg-modal-close-btn:hover {
           color: #f8fafc;
-          background: rgba(255, 255, 255, 0.08);
+          background: rgba(255, 255, 255, 0.09);
           border-color: rgba(255, 255, 255, 0.18);
+          transform: translateY(-0.5px);
         }
 
         .pkg-modal-close-btn:active {
           transform: translateY(0.5px);
-          background: rgba(255, 255, 255, 0.12);
-        }
-
-        .pkg-modal-close-btn .modal-esc-hint {
-          font-size: 9px;
-          font-weight: 600;
-          letter-spacing: 0.04em;
-          color: #64748b;
-          background: rgba(255, 255, 255, 0.05);
-          border: 1px solid rgba(255, 255, 255, 0.1);
-          box-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
-          padding: 1px 4.5px;
-          border-radius: 3.5px;
-          line-height: 1;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          height: 15px;
-          box-sizing: border-box;
-          transition: all 0.14s ease;
-        }
-
-        .pkg-modal-close-btn:hover .modal-esc-hint {
-          color: #e2e8f0;
-          background: rgba(255, 255, 255, 0.09);
-          border-color: rgba(255, 255, 255, 0.2);
+          background: rgba(255, 255, 255, 0.14);
         }
 
         .pkg-modal-body {
@@ -2894,7 +2826,7 @@ export const RecentlyInstalledPackagesComponent: React.FC<RecentlyInstalledPacka
           align-items: center;
           justify-content: center;
           padding: 36px 20px;
-          border: 1px dashed #1e283d;
+          border: 1px solid rgba(255, 255, 255, 0.06);
           border-radius: 8px;
           background: rgba(13, 18, 31, 0.5);
           text-align: center;

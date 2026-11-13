@@ -1,5 +1,5 @@
 import React from 'react';
-import { Bot, Server, Sparkles, ShieldAlert } from 'lucide-react';
+import { Bot, Cable, Zap, FileCode } from 'lucide-react';
 
 interface StatCardItem {
   id: string;
@@ -33,35 +33,35 @@ const StatCardsComponent: React.FC<StatCardsProps> = ({ stats }) => {
       count: agentsCount,
       subtitle: agentsCount > 0 ? `${agentsCount} selected active` : 'None active',
       icon: Bot,
-      accentColor: '#818cf8',
-      borderColor: 'rgba(129, 140, 248, 0.25)',
+      accentColor: '#94a3b8',
+      borderColor: 'rgba(255, 255, 255, 0.08)',
     },
     {
       id: 'mcp',
       title: 'MCP SERVERS',
       count: mcpCount,
       subtitle: mcpCount > 0 ? `${mcpCount} servers connected` : 'None connected',
-      icon: Server,
-      accentColor: '#38bdf8',
-      borderColor: 'rgba(56, 189, 248, 0.25)',
+      icon: Cable,
+      accentColor: '#94a3b8',
+      borderColor: 'rgba(255, 255, 255, 0.08)',
     },
     {
       id: 'skills',
       title: 'ACTIVE SKILLS',
       count: skillsCount,
       subtitle: skillsCount > 0 ? `${skillsCount} skills indexed` : 'None discovered',
-      icon: Sparkles,
-      accentColor: '#c084fc',
-      borderColor: 'rgba(192, 132, 252, 0.25)',
+      icon: Zap,
+      accentColor: '#94a3b8',
+      borderColor: 'rgba(255, 255, 255, 0.08)',
     },
     {
       id: 'rules',
       title: 'ACTIVE RULES',
       count: rulesCount,
       subtitle: rulesCount > 0 ? `${rulesCount} rules loaded` : 'None configured',
-      icon: ShieldAlert,
-      accentColor: '#34d399',
-      borderColor: 'rgba(52, 211, 153, 0.25)',
+      icon: FileCode,
+      accentColor: '#94a3b8',
+      borderColor: 'rgba(255, 255, 255, 0.08)',
     },
   ];
 
@@ -76,12 +76,8 @@ const StatCardsComponent: React.FC<StatCardsProps> = ({ stats }) => {
               <span className="stat-card-title">{card.title}</span>
               <div
                 className="stat-icon-wrapper"
-                style={{
-                  background: `${card.accentColor}18`,
-                  borderColor: card.borderColor,
-                }}
               >
-                <Icon size={14} className="stat-icon" style={{ color: card.accentColor }} />
+                <Icon size={14} strokeWidth={1.75} className="stat-icon" />
               </div>
             </div>
 

@@ -498,9 +498,14 @@ const TopBarComponent: React.FC<TopBarProps> = ({
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
       setIsDropdownOpen(false);
       handleClearSearch();
       searchInputRef.current?.blur();
+      if (document.activeElement instanceof HTMLElement) {
+        document.activeElement.blur();
+      }
     } else if (e.key === 'ArrowDown') {
       e.preventDefault();
       setIsDropdownOpen(true);
@@ -1272,8 +1277,6 @@ const TopBarComponent: React.FC<TopBarProps> = ({
           display: flex;
           flex-direction: column;
           animation: popoverSlideIn 0.12s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-          -webkit-font-smoothing: antialiased;
-          -moz-osx-font-smoothing: grayscale;
           text-rendering: optimizeLegibility;
         }
 

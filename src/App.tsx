@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef, useTransition } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef, useTransition, useDeferredValue } from 'react';
 import { ArrowUp } from 'lucide-react';
 import { TopBar } from './components/TopBar';
 import { Sidebar, NavTab } from './components/Sidebar';
@@ -23,26 +23,50 @@ import { PluginsView } from './components/PluginsView';
 import { RulesBuilderView } from './components/RulesBuilderView';
 import { ComingSoonView } from './components/ComingSoonView';
 import { SecurityView } from './components/SecurityView';
-import { SettingsView } from './components/SettingsView';
+import { SettingsModal } from './components/SettingsModal';
 import { Tooltip } from './components/Tooltip';
 
 export const App: React.FC = () => {
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
   const [activeTab, setActiveTab] = useState<NavTab>(() => {
     try {
       const remember = localStorage.getItem('agentforge_remember_last_tab') === 'true';
       if (remember) {
         const last = localStorage.getItem('agentforge_last_active_tab') as NavTab;
-        if (last) return last;
+        if (last && last !== 'settings') return last;
       }
       const def = localStorage.getItem('agentforge_default_tab') as NavTab;
-      if (def) return def;
+      if (def && def !== 'settings') return def;
     } catch {}
     return 'overview';
   });
 
+  const handleNavigateTab = useCallback((tab: NavTab) => {
+    if (tab === 'settings') {
+      setIsSettingsOpen(true);
+    } else {
+      setActiveTab(tab);
+    }
+  }, []);
+
+  // Global Keyboard Shortcut: Ctrl+, or Cmd+, to toggle Settings Modal
+  useEffect(() => {
+    const handleGlobalShortcuts = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === ',') {
+        e.preventDefault();
+        setIsSettingsOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleGlobalShortcuts);
+    return () => window.removeEventListener('keydown', handleGlobalShortcuts);
+  }, []);
+
   useEffect(() => {
     try {
-      localStorage.setItem('agentforge_last_active_tab', activeTab);
+      if (activeTab !== 'settings') {
+        localStorage.setItem('agentforge_last_active_tab', activeTab);
+      }
     } catch {}
   }, [activeTab]);
   const [currentEnv, setCurrentEnv] = useState('Default');
@@ -197,11 +221,11 @@ export const App: React.FC = () => {
     }
   }, [highlightTarget]);
 
-  const handleSelectSearchResult = (tab: NavTab, itemId: string) => {
+  const handleSelectSearchResult = useCallback((tab: NavTab, itemId: string) => {
     setSearchQuery('');
     setActiveTab(tab);
     setHighlightTarget({ tab, id: itemId });
-  };
+  }, []);
 
   const handleNavigateFromOverview = useCallback((tab: NavTab, itemId?: string) => {
     setActiveTab(tab);
@@ -346,72 +370,117 @@ export const App: React.FC = () => {
     detectAndLoadAgents();
   }, []);
 
-  const handleToggleAgent = (id: string) => {
-    setAgents((prev) => {
-      const updated = prev.map((agent) =>
-        agent.id === id ? { ...agent, selected: !agent.selected } : agent
-      );
-      const selectedIds = updated.filter((a) => a.selected).map((a) => a.id);
-      localStorage.setItem('agentforge_selected_agents', JSON.stringify(selectedIds));
-      return updated;
-    });
-  };
+  const [, startAgentTransition] = useTransition();
 
-  const handleSelectOnly = (id: string) => {
-    setAgents((prev) => {
-      const updated = prev.map((agent) => ({
-        ...agent,
-        selected: agent.id === id,
-      }));
-      const selectedIds = [id];
-      localStorage.setItem('agentforge_selected_agents', JSON.stringify(selectedIds));
-      return updated;
+  const handleToggleAgent = useCallback((id: string) => {
+    startAgentTransition(() => {
+      setAgents((prev) => {
+        const updated = prev.map((agent) =>
+          agent.id === id ? { ...agent, selected: !agent.selected } : agent
+        );
+        const selectedIds = updated.filter((a) => a.selected).map((a) => a.id);
+        try {
+          localStorage.setItem('agentforge_selected_agents', JSON.stringify(selectedIds));
+        } catch {}
+        return updated;
+      });
     });
-  };
+  }, [startAgentTransition]);
 
-  const handleSelectAllAgents = (select: boolean) => {
-    setAgents((prev) => {
-      const updated = prev.map((agent) => ({
-        ...agent,
-        selected: select,
-      }));
-      const selectedIds = updated.filter((a) => a.selected).map((a) => a.id);
-      localStorage.setItem('agentforge_selected_agents', JSON.stringify(selectedIds));
-      return updated;
+  const handleSelectOnly = useCallback((id: string) => {
+    startAgentTransition(() => {
+      setAgents((prev) => {
+        const updated = prev.map((agent) => ({
+          ...agent,
+          selected: agent.id === id,
+        }));
+        const selectedIds = [id];
+        try {
+          localStorage.setItem('agentforge_selected_agents', JSON.stringify(selectedIds));
+        } catch {}
+        return updated;
+      });
     });
-  };
+  }, [startAgentTransition]);
 
-  const handleEnvChange = (newEnv: string) => {
+  const handleSelectAllAgents = useCallback((select: boolean) => {
+    startAgentTransition(() => {
+      setAgents((prev) => {
+        const updated = prev.map((agent) => ({
+          ...agent,
+          selected: select,
+        }));
+        const selectedIds = updated.filter((a) => a.selected).map((a) => a.id);
+        try {
+          localStorage.setItem('agentforge_selected_agents', JSON.stringify(selectedIds));
+        } catch {}
+        return updated;
+      });
+    });
+  }, [startAgentTransition]);
+
+  const handleEnvChange = useCallback((newEnv: string) => {
     setCurrentEnv(newEnv);
-  };
+  }, []);
+
+  const handleOpenSettings = useCallback(() => {
+    setIsSettingsOpen(true);
+  }, []);
 
   // Selection filtering
   const selectedAgentIds = useMemo(() => agents.filter((a) => a.selected).map((a) => a.id), [agents]);
   const selectedAgents = useMemo(() => agents.filter((a) => a.selected), [agents]);
 
+  // Reference-stable allAgents that does not trigger re-renders on selection toggle
+  const stableAllAgents = useMemo(() => {
+    return agents;
+  }, [agents.map((a) => `${a.id}:${a.detected}:${a.paths.baseDir}`).join('|')]);
+
   // Automatically remove any filtered agents that get deselected
   useEffect(() => {
     const selectedIds = new Set(selectedAgents.map((a) => a.id));
     setActiveAgentFilter((prev) => {
-      const next = prev.filter((id) => selectedIds.has(id));
-      return next.length === prev.length ? prev : next;
+      if (prev.length === 0) return prev;
+      if (!prev.some((id) => !selectedIds.has(id))) return prev;
+      return prev.filter((id) => selectedIds.has(id));
     });
   }, [selectedAgents]);
 
+  // Defer heavy filtering so topbar dropdown click never lags
+  const deferredSelectedAgentIds = useDeferredValue(selectedAgentIds);
+  const deferredSelectedAgents = useDeferredValue(selectedAgents);
+
   const filteredSkills = useMemo(
-    () => capabilities.skills.filter((s) => selectedAgentIds.includes(s.sourceAgentId)),
-    [capabilities.skills, selectedAgentIds]
+    () => capabilities.skills.filter((s) => deferredSelectedAgentIds.includes(s.sourceAgentId)),
+    [capabilities.skills, deferredSelectedAgentIds]
   );
   const filteredMcps = useMemo(
-    () => capabilities.mcpServers.filter((m) => selectedAgentIds.includes(m.sourceAgentId)),
-    [capabilities.mcpServers, selectedAgentIds]
+    () => capabilities.mcpServers.filter((m) => deferredSelectedAgentIds.includes(m.sourceAgentId)),
+    [capabilities.mcpServers, deferredSelectedAgentIds]
   );
   const filteredPlugins = useMemo(
-    () => capabilities.plugins.filter((p) => selectedAgentIds.includes(p.sourceAgentId)),
-    [capabilities.plugins, selectedAgentIds]
+    () => capabilities.plugins.filter((p) => deferredSelectedAgentIds.includes(p.sourceAgentId)),
+    [capabilities.plugins, deferredSelectedAgentIds]
   );
 
+  const sidebarBadgeCounts = useMemo(() => ({
+    agents: selectedAgents.length,
+    mcp: filteredMcps.length,
+    skills: filteredSkills.length,
+    plugins: filteredPlugins.length,
+  }), [selectedAgents.length, filteredMcps.length, filteredSkills.length, filteredPlugins.length]);
+
+  const overviewStats = useMemo(() => ({
+    agentsCount: selectedAgents.length,
+    mcpCount: filteredMcps.length,
+    skillsCount: filteredSkills.length,
+    rulesCount: 0,
+  }), [selectedAgents.length, filteredMcps.length, filteredSkills.length]);
+
   const overviewPackages = useMemo<InstalledPackage[]>(() => {
+    if (activeTab !== 'overview' || !visitedTabs.has('overview')) {
+      return [];
+    }
     const list: InstalledPackage[] = [];
 
     const formatRelativeTime = (time?: number) => {
@@ -506,7 +575,7 @@ export const App: React.FC = () => {
 
     list.sort((a, b) => (b.mtimeMs || 0) - (a.mtimeMs || 0));
     return list;
-  }, [filteredMcps, filteredPlugins, filteredSkills]);
+  }, [filteredMcps, filteredPlugins, filteredSkills, activeTab]);
 
   return (
     <div className="app-container">
@@ -520,7 +589,7 @@ export const App: React.FC = () => {
         searchQuery={searchQuery}
         onSearchChange={handleSearchChange}
         activeTab={activeTab}
-        onNavigateTab={setActiveTab}
+        onNavigateTab={handleNavigateTab}
         capabilities={capabilities}
         skillsCatalog={skillsCatalog}
         mcpCatalog={mcpCatalog}
@@ -532,13 +601,10 @@ export const App: React.FC = () => {
         {/* Sidebar */}
         <Sidebar 
           activeTab={activeTab} 
-          onTabChange={setActiveTab}
-          badgeCounts={{
-            agents: selectedAgents.length,
-            mcp: filteredMcps.length,
-            skills: filteredSkills.length,
-            plugins: filteredPlugins.length,
-          }}
+          onTabChange={handleNavigateTab}
+          isSettingsOpen={isSettingsOpen}
+          onOpenSettings={handleOpenSettings}
+          badgeCounts={sidebarBadgeCounts}
           isCollapsed={isSidebarCollapsed}
           onToggleCollapse={handleToggleSidebarCollapse}
         />
@@ -553,23 +619,18 @@ export const App: React.FC = () => {
               <div className="overview-view">
                 {/* Metric Cards */}
                 <StatCards 
-                  stats={{
-                    agentsCount: selectedAgents.length,
-                    mcpCount: filteredMcps.length,
-                    skillsCount: filteredSkills.length,
-                    rulesCount: 0,
-                  }}
+                  stats={overviewStats}
                 />
 
                 {/* Quick Actions */}
-                <QuickActionsBar onNavigate={setActiveTab} />
+                <QuickActionsBar onNavigate={handleNavigateTab} />
 
                 {/* Installed Packages */}
                 <RecentlyInstalledPackages
                   packages={overviewPackages}
                   searchQuery={activeTab === 'overview' ? searchQuery : ''}
                   onNavigate={handleNavigateFromOverview}
-                  agents={agents}
+                  agents={stableAllAgents}
                   onRefreshCapabilities={refreshCapabilities}
                 />
               </div>
@@ -582,6 +643,7 @@ export const App: React.FC = () => {
               style={{ display: activeTab === 'agents' ? 'block' : 'none' }}
             >
               <AgentsManagerView
+                isActive={activeTab === 'agents'}
                 agents={agents}
                 onToggleAgent={handleToggleAgent}
                 onSelectOnly={handleSelectOnly}
@@ -598,8 +660,10 @@ export const App: React.FC = () => {
               style={{ display: activeTab === 'mcp' ? 'block' : 'none' }}
             >
               <McpServersView
+                isActive={activeTab === 'mcp'}
                 mcpServers={filteredMcps}
-                selectedAgents={selectedAgents}
+                selectedAgents={deferredSelectedAgents}
+                allAgents={stableAllAgents}
                 mcpCatalog={mcpCatalog}
                 catalogSyncedAt={catalogSyncedAt}
                 onRefreshCapabilities={refreshCapabilities}
@@ -621,9 +685,10 @@ export const App: React.FC = () => {
               style={{ display: activeTab === 'skills' ? 'block' : 'none' }}
             >
               <SkillsView
+                isActive={activeTab === 'skills'}
                 skills={filteredSkills}
-                selectedAgents={selectedAgents}
-                allAgents={agents}
+                selectedAgents={deferredSelectedAgents}
+                allAgents={stableAllAgents}
                 skillsCatalog={skillsCatalog}
                 isSyncingCatalog={isSyncingCatalog}
                 onSyncCatalog={handleSyncCloudCatalog}
@@ -645,9 +710,10 @@ export const App: React.FC = () => {
               style={{ display: activeTab === 'plugins' ? 'block' : 'none' }}
             >
               <PluginsView
+                isActive={activeTab === 'plugins'}
                 plugins={filteredPlugins}
-                selectedAgents={selectedAgents}
-                allAgents={agents}
+                selectedAgents={deferredSelectedAgents}
+                allAgents={stableAllAgents}
                 skills={filteredSkills}
                 mcpServers={filteredMcps}
                 pluginsCatalog={pluginsCatalog}
@@ -685,29 +751,13 @@ export const App: React.FC = () => {
               className={`tab-pane-container ${activeTab === 'security' ? 'active tab-pane-animated' : ''}`}
               style={{ display: activeTab === 'security' ? 'block' : 'none' }}
             >
-              <SecurityView onNavigate={setActiveTab} />
-            </div>
-          )}
-
-          {visitedTabs.has('settings') && (
-            <div
-              className={`tab-pane-container ${activeTab === 'settings' ? 'active tab-pane-animated' : ''}`}
-              style={{ display: activeTab === 'settings' ? 'block' : 'none' }}
-            >
-              <SettingsView
-                onNavigate={setActiveTab}
-                onRefreshCapabilities={refreshCapabilities}
-                onSyncCatalog={handleSyncCloudCatalog}
-                isSyncingCatalog={isSyncingCatalog}
-                catalogSyncedAt={catalogSyncedAt}
-                agents={agents}
-              />
+              <SecurityView onNavigate={handleNavigateTab} />
             </div>
           )}
 
           {['updates', 'hooks', 'environments'].includes(activeTab) && (
             <div className="tab-pane-container active tab-pane-animated">
-              <ComingSoonView tab={activeTab} onNavigate={setActiveTab} />
+              <ComingSoonView tab={activeTab} onNavigate={handleNavigateTab} />
             </div>
           )}
         </main>
@@ -727,6 +777,18 @@ export const App: React.FC = () => {
         </div>
 
       </div>
+
+      {/* Global Desktop Settings Modal */}
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        onNavigateTab={handleNavigateTab}
+        onRefreshCapabilities={refreshCapabilities}
+        onSyncCatalog={handleSyncCloudCatalog}
+        isSyncingCatalog={isSyncingCatalog}
+        catalogSyncedAt={catalogSyncedAt}
+        agents={agents}
+      />
 
       <style>{`
         .app-container {
