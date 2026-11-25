@@ -1,6 +1,6 @@
 {
   "name": "agentforge",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "AgentForge",
   "author": "Yasinnet0 <Yasinnet0@users.noreply.github.com>",
@@ -43,6 +43,13 @@
     "productName": "AgentForge",
     "icon": "build/icon.png",
     "forceCodeSigning": false,
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Yasinnet0",
+        "repo": "AgentForge"
+      }
+    ],
     "directories": {
       "output": "release"
     },
