@@ -168,15 +168,12 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           gap: 11px;
           padding: 10px 13px;
           min-height: 44px;
-          background: rgba(12, 16, 26, 0.94);
+          background: var(--bg-toast);
           backdrop-filter: blur(24px);
           -webkit-backdrop-filter: blur(24px);
-          border: 1px solid rgba(255, 255, 255, 0.09);
+          border: 1px solid var(--border-subtle);
           border-radius: 10px;
-          box-shadow: 
-            0 14px 34px -4px rgba(0, 0, 0, 0.65),
-            0 2px 8px -2px rgba(0, 0, 0, 0.4),
-            inset 0 1px 0 rgba(255, 255, 255, 0.07);
+          box-shadow: var(--shadow-dropdown);
           animation: toastSlideUp 0.18s cubic-bezier(0.16, 1, 0.3, 1);
           transition: transform 0.14s ease, opacity 0.14s ease, border-color 0.14s ease;
           position: relative;
@@ -194,36 +191,33 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         }
 
         .agentforge-toast-card:hover {
-          border-color: rgba(255, 255, 255, 0.14);
-          box-shadow: 
-            0 18px 40px -4px rgba(0, 0, 0, 0.75),
-            0 2px 8px -2px rgba(0, 0, 0, 0.4),
-            inset 0 1px 0 rgba(255, 255, 255, 0.1);
+          border-color: var(--border-hover);
+          box-shadow: var(--shadow-modal);
         }
 
         /* Subtle Contextual Icon Accents (Clean, no left borders) */
         .toast-success .toast-icon-wrapper {
-          color: #34d399;
-          background: rgba(16, 185, 129, 0.12);
-          border-color: rgba(16, 185, 129, 0.22);
+          color: var(--status-green-text);
+          background: var(--status-green-dim);
+          border-color: rgba(16, 185, 129, 0.25);
         }
 
         .toast-error .toast-icon-wrapper {
-          color: #f87171;
-          background: rgba(239, 68, 68, 0.12);
-          border-color: rgba(239, 68, 68, 0.22);
+          color: var(--status-red-text);
+          background: var(--status-red-dim);
+          border-color: rgba(239, 68, 68, 0.25);
         }
 
         .toast-info .toast-icon-wrapper {
-          color: #c084fc;
-          background: rgba(168, 85, 247, 0.12);
-          border-color: rgba(168, 85, 247, 0.22);
+          color: var(--accent-purple-text);
+          background: var(--accent-purple-dim);
+          border-color: rgba(168, 85, 247, 0.25);
         }
 
         .toast-warning .toast-icon-wrapper {
-          color: #fbbf24;
-          background: rgba(245, 158, 11, 0.12);
-          border-color: rgba(245, 158, 11, 0.22);
+          color: var(--status-amber-text);
+          background: var(--status-amber-dim);
+          border-color: rgba(245, 158, 11, 0.25);
         }
 
         /* Icon */
@@ -231,7 +225,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           width: 24px;
           height: 24px;
           border-radius: 6px;
-          border: 1px solid rgba(255, 255, 255, 0.08);
+          border: 1px solid var(--border-subtle);
           display: flex;
           align-items: center;
           justify-content: center;
@@ -252,7 +246,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         .toast-title {
           font-size: 12.5px;
           font-weight: 600;
-          color: #f8fafc;
+          color: var(--text-primary);
           letter-spacing: -0.01em;
           line-height: 1.25;
         }
@@ -260,7 +254,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         .toast-message {
           font-size: 12.5px;
           font-weight: 500;
-          color: #cbd5e1;
+          color: var(--text-secondary);
           line-height: 1.35;
           word-break: break-word;
           margin: 0;
@@ -270,7 +264,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         .toast-close-btn {
           background: transparent;
           border: none;
-          color: #64748b;
+          color: var(--text-muted);
           padding: 4px;
           margin: 0;
           border-radius: 5px;
@@ -284,8 +278,8 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         }
 
         .toast-close-btn:hover {
-          color: #f1f5f9;
-          background: rgba(255, 255, 255, 0.07);
+          color: var(--text-primary);
+          background: var(--bg-surface-hover);
         }
       `}</style>
     </ToastContext.Provider>

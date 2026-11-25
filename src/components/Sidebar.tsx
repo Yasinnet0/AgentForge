@@ -80,7 +80,7 @@ const SidebarComponent: React.FC<SidebarProps> = ({
   const isCollapsed = isCollapsedProp !== undefined ? isCollapsedProp : internalCollapsed;
 
   const [tooltipState, setTooltipState] = React.useState<TooltipData | null>(null);
-  const [appVersion, setAppVersion] = React.useState<string>('0.2.0');
+  const [appVersion, setAppVersion] = React.useState<string>('0.3.0');
 
   React.useEffect(() => {
     if (window.electronAPI?.getAppVersion) {
@@ -276,8 +276,8 @@ const SidebarComponent: React.FC<SidebarProps> = ({
         .sidebar-container {
           width: 196px;
           min-width: 196px;
-          background: #0d121f;
-          border-right: 1px solid #1c2538;
+          background: var(--bg-sidebar);
+          border-right: 1px solid var(--border-subtle);
           display: flex;
           flex-direction: column;
           padding: 8px 6px;
@@ -313,7 +313,7 @@ const SidebarComponent: React.FC<SidebarProps> = ({
           border-radius: 6px;
           border: 1px solid transparent;
           background: transparent;
-          color: #64748b;
+          color: var(--text-secondary);
           cursor: pointer;
           transition: background-color 0.14s ease, border-color 0.14s ease, color 0.14s ease;
           box-sizing: border-box;
@@ -322,13 +322,13 @@ const SidebarComponent: React.FC<SidebarProps> = ({
         }
 
         .sidebar-toggle-action-btn:hover {
-          background: #141b2b;
-          color: #e2e8f0;
-          border-color: rgba(255, 255, 255, 0.05);
+          background: var(--bg-surface-hover);
+          color: var(--text-primary);
+          border-color: var(--border-subtle);
         }
 
         .sidebar-toggle-action-btn:hover .toggle-action-icon {
-          color: #94a3b8;
+          color: var(--text-primary);
         }
 
         .sidebar-container.collapsed .sidebar-toggle-action-btn {
@@ -338,15 +338,15 @@ const SidebarComponent: React.FC<SidebarProps> = ({
           margin: 0 auto 5px auto;
           justify-content: center;
           border-radius: 7px;
-          background: rgba(255, 255, 255, 0.02);
-          border-color: rgba(255, 255, 255, 0.05);
-          color: #94a3b8;
+          background: var(--bg-pill);
+          border-color: var(--border-subtle);
+          color: var(--text-secondary);
         }
 
         .sidebar-container.collapsed .sidebar-toggle-action-btn:hover {
-          background: rgba(255, 255, 255, 0.09);
-          border-color: rgba(255, 255, 255, 0.18);
-          color: #ffffff;
+          background: var(--bg-elevated-hover);
+          border-color: var(--border-hover);
+          color: var(--text-primary);
         }
 
         .toggle-action-left {
@@ -356,7 +356,7 @@ const SidebarComponent: React.FC<SidebarProps> = ({
         }
 
         .toggle-action-icon {
-          color: #64748b;
+          color: var(--text-muted);
           transition: color 0.14s ease;
           flex-shrink: 0;
         }
@@ -370,9 +370,9 @@ const SidebarComponent: React.FC<SidebarProps> = ({
 
         .toggle-shortcut-badge {
           font-size: 10px;
-          color: #475569;
-          background: rgba(255, 255, 255, 0.03);
-          border: 1px solid rgba(255, 255, 255, 0.07);
+          color: var(--text-muted);
+          background: var(--bg-pill);
+          border: 1px solid var(--border-subtle);
           border-radius: 4px;
           padding: 1.5px 5px;
           line-height: 1;
@@ -381,21 +381,21 @@ const SidebarComponent: React.FC<SidebarProps> = ({
         }
 
         .sidebar-toggle-action-btn:hover .toggle-shortcut-badge {
-          color: #94a3b8;
-          border-color: rgba(255, 255, 255, 0.12);
-          background: rgba(255, 255, 255, 0.06);
+          color: var(--text-primary);
+          border-color: var(--border-hover);
+          background: var(--bg-elevated-hover);
         }
 
         .sidebar-top-divider {
           height: 1px;
-          background: rgba(255, 255, 255, 0.05);
+          background: var(--border-subtle);
           margin: 0 4px 6px 4px;
         }
 
         .sidebar-container.collapsed .sidebar-top-divider {
           width: 22px;
           margin: 0 auto 6px auto;
-          background: rgba(255, 255, 255, 0.06);
+          background: var(--border-subtle);
         }
 
         .sidebar-nav {
@@ -439,14 +439,14 @@ const SidebarComponent: React.FC<SidebarProps> = ({
 
         .sidebar-group-divider {
           height: 1px;
-          background: rgba(255, 255, 255, 0.05);
+          background: var(--border-subtle);
           margin: 4px 6px;
         }
 
         .sidebar-container.collapsed .sidebar-group-divider {
           width: 22px;
           margin: 4px auto;
-          background: rgba(255, 255, 255, 0.06);
+          background: var(--border-subtle);
         }
 
         .nav-button {
@@ -459,7 +459,7 @@ const SidebarComponent: React.FC<SidebarProps> = ({
           border-radius: 7px;
           border: 1px solid transparent;
           background: transparent;
-          color: #8899ac;
+          color: var(--text-secondary);
           font-size: 13px;
           font-weight: 500;
           cursor: pointer;
@@ -479,25 +479,25 @@ const SidebarComponent: React.FC<SidebarProps> = ({
         }
 
         .nav-button:hover {
-          background: #141b2b;
-          color: #e2e8f0;
-          border-color: rgba(255, 255, 255, 0.04);
+          background: var(--bg-surface-hover);
+          color: var(--text-primary);
+          border-color: var(--border-subtle);
         }
 
         .nav-button:active {
-          background: #192338;
+          background: var(--bg-elevated-hover);
         }
 
         .nav-button.active {
-          background: rgba(124, 58, 237, 0.14);
-          color: #f8fafc;
+          background: var(--accent-purple-dim);
+          color: var(--accent-purple-text);
           font-weight: 600;
           border: 1px solid rgba(147, 51, 234, 0.35);
         }
 
         .nav-button.active:hover {
-          background: rgba(124, 58, 237, 0.22);
-          color: #f8fafc;
+          background: rgba(124, 58, 237, 0.20);
+          color: var(--accent-purple-text);
           border-color: rgba(168, 85, 247, 0.5);
         }
 
@@ -514,19 +514,19 @@ const SidebarComponent: React.FC<SidebarProps> = ({
         }
 
         .nav-icon {
-          color: #64748b;
+          color: var(--text-muted);
           transition: color 0.15s ease;
           flex-shrink: 0;
         }
 
         .nav-button:hover .nav-icon {
-          color: #94a3b8;
+          color: var(--text-primary);
         }
 
         .nav-button.active .nav-icon,
         .nav-button.active:hover .nav-icon,
         .nav-icon.active-icon {
-          color: #c084fc;
+          color: var(--accent-purple-text);
         }
 
         .nav-label {
@@ -542,14 +542,13 @@ const SidebarComponent: React.FC<SidebarProps> = ({
           font-family: var(--font-mono, monospace);
           font-weight: 600;
           letter-spacing: -0.01em;
-          background: rgba(255, 255, 255, 0.04);
-          color: #7e8f9f;
+          background: var(--bg-pill);
+          color: var(--text-secondary);
           min-width: 18px;
           height: 17px;
           padding: 0 5px;
           border-radius: 9999px;
-          border: 1px solid rgba(255, 255, 255, 0.07);
-          box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+          border: 1px solid var(--border-subtle);
           display: inline-flex;
           align-items: center;
           justify-content: center;
@@ -569,31 +568,29 @@ const SidebarComponent: React.FC<SidebarProps> = ({
           padding: 0 3px;
           font-size: 8px;
           margin-left: 0;
-          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
         }
 
         .nav-button:hover .nav-count {
-          background: rgba(255, 255, 255, 0.08);
-          border-color: rgba(255, 255, 255, 0.14);
-          color: #f1f5f9;
+          background: var(--bg-elevated-hover);
+          border-color: var(--border-hover);
+          color: var(--text-primary);
         }
 
         .nav-count.active-count {
-          background: rgba(168, 85, 247, 0.18);
-          color: #f3e8ff;
+          background: var(--accent-purple-dim);
+          color: var(--accent-purple-text);
           border-color: rgba(168, 85, 247, 0.4);
-          box-shadow: 0 0 8px rgba(168, 85, 247, 0.2);
         }
 
         .nav-button.active:hover .nav-count.active-count {
-          background: rgba(168, 85, 247, 0.25);
+          background: rgba(168, 85, 247, 0.24);
           border-color: rgba(168, 85, 247, 0.55);
-          color: #ffffff;
         }
 
         .sidebar-footer {
           padding: 7px 6px 2px 6px;
-          border-top: 1px solid #1c2538;
+          border-top: 1px solid var(--border-subtle);
           display: flex;
           align-items: center;
           justify-content: flex-start;
@@ -609,7 +606,7 @@ const SidebarComponent: React.FC<SidebarProps> = ({
 
         .version-tag {
           font-size: 10px;
-          color: #4b5d73;
+          color: var(--text-muted);
           font-weight: 500;
           letter-spacing: 0.02em;
           white-space: nowrap;
@@ -618,7 +615,7 @@ const SidebarComponent: React.FC<SidebarProps> = ({
 
         .version-tag.collapsed {
           font-size: 9px;
-          color: #43546a;
+          color: var(--text-muted);
         }
 
         /* Floating Tooltip */
@@ -631,15 +628,12 @@ const SidebarComponent: React.FC<SidebarProps> = ({
           align-items: center;
           gap: 6px;
           padding: 5px 9px 5px 10px;
-          background: #0d1424;
-          background: rgba(13, 20, 36, 0.96);
+          background: var(--bg-tooltip);
           backdrop-filter: blur(8px);
           -webkit-backdrop-filter: blur(8px);
-          border: 1px solid rgba(255, 255, 255, 0.12);
+          border: 1px solid rgba(255, 255, 255, 0.14);
           border-radius: 6px;
-          box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.7),
-                      0 2px 6px rgba(0, 0, 0, 0.45),
-                      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+          box-shadow: var(--shadow-tooltip);
           color: #f1f5f9;
           font-size: 12px;
           font-weight: 500;
@@ -667,9 +661,9 @@ const SidebarComponent: React.FC<SidebarProps> = ({
           margin-top: -3.5px;
           width: 7px;
           height: 7px;
-          background: #0d1424;
-          border-left: 1px solid rgba(255, 255, 255, 0.12);
-          border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+          background: var(--bg-tooltip);
+          border-left: 1px solid rgba(255, 255, 255, 0.14);
+          border-bottom: 1px solid rgba(255, 255, 255, 0.14);
           transform: rotate(45deg);
           box-sizing: border-box;
         }
@@ -685,7 +679,7 @@ const SidebarComponent: React.FC<SidebarProps> = ({
           font-weight: 600;
           padding: 1.5px 5.5px;
           border-radius: 9999px;
-          background: rgba(147, 51, 234, 0.22);
+          background: rgba(147, 51, 234, 0.25);
           color: #e9d5ff;
           border: 1px solid rgba(168, 85, 247, 0.35);
           line-height: 1;
@@ -696,7 +690,7 @@ const SidebarComponent: React.FC<SidebarProps> = ({
           font-weight: 600;
           padding: 1.5px 5px;
           border-radius: 4px;
-          background: rgba(168, 85, 247, 0.16);
+          background: rgba(168, 85, 247, 0.18);
           color: #c084fc;
           border: 1px solid rgba(168, 85, 247, 0.3);
           text-transform: uppercase;
@@ -707,9 +701,9 @@ const SidebarComponent: React.FC<SidebarProps> = ({
           font-size: 10px;
           padding: 1.5px 5px;
           border-radius: 4px;
-          background: rgba(255, 255, 255, 0.06);
-          color: #94a3b8;
-          border: 1px solid rgba(255, 255, 255, 0.1);
+          background: rgba(255, 255, 255, 0.08);
+          color: #cbd5e1;
+          border: 1px solid rgba(255, 255, 255, 0.12);
           font-family: var(--font-mono, monospace);
           letter-spacing: 0.02em;
         }

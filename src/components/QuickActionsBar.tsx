@@ -14,6 +14,9 @@ const QuickActionsBarComponent: React.FC<QuickActionsBarProps> = ({ onNavigate }
       description: 'Author custom capability',
       icon: Zap,
       tab: 'skills' as NavTab,
+      iconBg: 'var(--domain-purple-bg)',
+      iconBorder: 'var(--domain-purple-border)',
+      iconColor: 'var(--domain-purple-fg)',
     },
     {
       id: 'bundle-kit',
@@ -21,6 +24,9 @@ const QuickActionsBarComponent: React.FC<QuickActionsBarProps> = ({ onNavigate }
       description: 'Package multi-tool kits',
       icon: Package,
       tab: 'plugins' as NavTab,
+      iconBg: 'var(--domain-orange-bg)',
+      iconBorder: 'var(--domain-orange-border)',
+      iconColor: 'var(--domain-orange-fg)',
     },
     {
       id: 'add-mcp',
@@ -28,6 +34,9 @@ const QuickActionsBarComponent: React.FC<QuickActionsBarProps> = ({ onNavigate }
       description: 'Connect stdio / SSE server',
       icon: Cable,
       tab: 'mcp' as NavTab,
+      iconBg: 'var(--domain-sky-bg)',
+      iconBorder: 'var(--domain-sky-border)',
+      iconColor: 'var(--domain-sky-fg)',
     },
     {
       id: 'add-rule',
@@ -35,6 +44,9 @@ const QuickActionsBarComponent: React.FC<QuickActionsBarProps> = ({ onNavigate }
       description: 'Define prompt boundaries',
       icon: FileCode,
       tab: 'rules' as NavTab,
+      iconBg: 'var(--domain-indigo-bg)',
+      iconBorder: 'var(--domain-indigo-border)',
+      iconColor: 'var(--domain-indigo-fg)',
     },
     {
       id: 'security-hub',
@@ -42,6 +54,9 @@ const QuickActionsBarComponent: React.FC<QuickActionsBarProps> = ({ onNavigate }
       description: 'Audit safety & isolation',
       icon: ShieldCheck,
       tab: 'security' as NavTab,
+      iconBg: 'var(--domain-emerald-bg)',
+      iconBorder: 'var(--domain-emerald-border)',
+      iconColor: 'var(--domain-emerald-fg)',
     },
   ];
 
@@ -62,7 +77,14 @@ const QuickActionsBarComponent: React.FC<QuickActionsBarProps> = ({ onNavigate }
               onClick={() => onNavigate(act.tab)}
               title={`Go to ${act.title}`}
             >
-              <div className="action-icon-wrap">
+              <div
+                className="action-icon-wrap"
+                style={{
+                  background: act.iconBg,
+                  borderColor: act.iconBorder,
+                  color: act.iconColor,
+                }}
+              >
                 <Icon size={16} strokeWidth={1.75} />
               </div>
 
@@ -80,8 +102,8 @@ const QuickActionsBarComponent: React.FC<QuickActionsBarProps> = ({ onNavigate }
 
       <style>{`
         .quick-actions-container {
-          background: #121826;
-          border: 1px solid #1e283d;
+          background: var(--bg-surface);
+          border: 1px solid var(--bg-card-border);
           border-radius: 9px;
           padding: 14px 16px;
           margin-bottom: 20px;
@@ -90,6 +112,7 @@ const QuickActionsBarComponent: React.FC<QuickActionsBarProps> = ({ onNavigate }
           box-sizing: border-box;
           width: 100%;
           overflow: hidden;
+          box-shadow: var(--shadow-card);
         }
 
         .quick-actions-header {
@@ -104,14 +127,14 @@ const QuickActionsBarComponent: React.FC<QuickActionsBarProps> = ({ onNavigate }
           font-size: 10.5px;
           font-weight: 700;
           letter-spacing: 0.05em;
-          color: #64748b;
+          color: var(--text-muted);
           font-family: var(--font-mono);
           white-space: nowrap;
         }
 
         .quick-actions-hint {
           font-size: 11px;
-          color: #475569;
+          color: var(--text-muted);
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
@@ -126,8 +149,8 @@ const QuickActionsBarComponent: React.FC<QuickActionsBarProps> = ({ onNavigate }
         }
 
         .quick-action-card {
-          background: #0d121f;
-          border: 1px solid #1c2638;
+          background: var(--bg-card-inner);
+          border: 1px solid var(--border-subtle);
           border-radius: 8px;
           padding: 10px 12px;
           display: flex;
@@ -143,29 +166,29 @@ const QuickActionsBarComponent: React.FC<QuickActionsBarProps> = ({ onNavigate }
         }
 
         .quick-action-card:hover {
-          background: #151e30;
+          background: var(--bg-surface-hover);
           border-color: rgba(168, 85, 247, 0.35);
           transform: translateY(-1px);
         }
 
         .quick-action-card:hover .action-icon-wrap {
-          color: #ffffff;
-          background: rgba(168, 85, 247, 0.14);
+          color: var(--accent-purple-text);
+          background: var(--accent-purple-dim);
           border-color: rgba(168, 85, 247, 0.4);
         }
 
         .quick-action-card:hover .action-arrow {
           transform: translateX(2px);
-          color: #cbd5e1;
+          color: var(--text-primary);
         }
 
         .action-icon-wrap {
           width: 32px;
           height: 32px;
           border-radius: 7px;
-          background: rgba(255, 255, 255, 0.035);
-          border: 1px solid rgba(255, 255, 255, 0.08);
-          color: #94a3b8;
+          background: var(--bg-surface);
+          border: 1px solid var(--border-subtle);
+          color: var(--text-secondary);
           display: flex;
           align-items: center;
           justify-content: center;
@@ -193,7 +216,7 @@ const QuickActionsBarComponent: React.FC<QuickActionsBarProps> = ({ onNavigate }
         .action-title {
           font-size: 12px;
           font-weight: 600;
-          color: #f1f5f9;
+          color: var(--text-primary);
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
@@ -202,14 +225,14 @@ const QuickActionsBarComponent: React.FC<QuickActionsBarProps> = ({ onNavigate }
         }
 
         .action-arrow {
-          color: #475569;
+          color: var(--text-secondary);
           flex-shrink: 0;
           transition: all 0.15s ease;
         }
 
         .action-desc {
           font-size: 10px;
-          color: #64748b;
+          color: var(--text-secondary);
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;

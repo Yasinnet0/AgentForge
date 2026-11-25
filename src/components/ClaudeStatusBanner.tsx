@@ -73,14 +73,14 @@ export const ClaudeStatusBanner: React.FC = () => {
 
       <style>{`
         .claude-banner {
-          background: #101927;
-          border: 1px solid rgba(16, 185, 129, 0.22);
+          background: var(--bg-surface);
+          border: 1px solid rgba(16, 185, 129, 0.25);
           border-radius: 9px;
           padding: 14px 18px;
           display: flex;
           align-items: center;
           justify-content: space-between;
-          box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+          box-shadow: var(--shadow-card);
           margin-bottom: 20px;
         }
 
@@ -94,7 +94,7 @@ export const ClaudeStatusBanner: React.FC = () => {
           width: 42px;
           height: 42px;
           border-radius: 10px;
-          background: rgba(16, 185, 129, 0.12);
+          background: var(--status-green-dim);
           border: 1px solid rgba(16, 185, 129, 0.28);
           display: flex;
           align-items: center;
@@ -103,7 +103,7 @@ export const ClaudeStatusBanner: React.FC = () => {
         }
 
         .robot-icon {
-          color: #10b981;
+          color: var(--status-green);
         }
 
         .banner-info {
@@ -121,17 +121,17 @@ export const ClaudeStatusBanner: React.FC = () => {
         .banner-title {
           font-size: 15px;
           font-weight: 700;
-          color: #f8fafc;
+          color: var(--text-primary);
           letter-spacing: -0.01em;
         }
 
         .banner-subtitle {
           font-size: 12px;
-          color: #8899ac;
+          color: var(--text-secondary);
         }
 
         .proxy-tag {
-          color: #38bdf8;
+          color: var(--status-cyan-text);
           font-size: 11px;
         }
 
@@ -145,21 +145,21 @@ export const ClaudeStatusBanner: React.FC = () => {
           display: flex;
           align-items: center;
           gap: 7px;
-          background: #0b111c;
-          border: 1px solid #1c283d;
+          background: var(--bg-card-inner);
+          border: 1px solid var(--border-subtle);
           padding: 6px 12px;
           border-radius: 6px;
         }
 
         .uptime-label {
           font-size: 11px;
-          color: #64748b;
+          color: var(--text-muted);
         }
 
         .uptime-value {
           font-size: 12px;
           font-weight: 600;
-          color: #34d399;
+          color: var(--status-green-text);
         }
 
         .banner-actions {
@@ -172,9 +172,9 @@ export const ClaudeStatusBanner: React.FC = () => {
           display: flex;
           align-items: center;
           gap: 5px;
-          background: #182337;
-          border: 1px solid #283750;
-          color: #cbd5e1;
+          background: var(--bg-elevated);
+          border: 1px solid var(--border-subtle);
+          color: var(--text-primary);
           font-size: 11.5px;
           font-weight: 500;
           padding: 5px 10px;
@@ -184,9 +184,8 @@ export const ClaudeStatusBanner: React.FC = () => {
         }
 
         .action-pill-btn:hover {
-          background: #202e48;
-          color: #ffffff;
-          border-color: #3b4d6e;
+          background: var(--bg-elevated-hover);
+          border-color: var(--border-hover);
         }
 
         .action-pill-btn.spinning svg {

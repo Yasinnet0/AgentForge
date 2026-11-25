@@ -68,9 +68,9 @@ const SkillCheckRow = React.memo<SkillCheckRowProps>(({
     >
       <div className="check-box-wrap">
         {isChecked ? (
-          <CheckSquare size={15} className="text-purple-400" />
+          <CheckSquare size={15} style={{ color: 'var(--accent-purple-text)' }} />
         ) : (
-          <Square size={15} className="text-slate-600" />
+          <Square size={15} style={{ color: "var(--text-muted)" }} />
         )}
       </div>
 
@@ -671,7 +671,7 @@ export const TransferSkillsModal: React.FC<TransferSkillsModalProps> = ({
                     ) : (
                       <Bot
                         size={12}
-                        className={`transfer-combobox-icon ${currentTargetAgents.length > 0 ? 'text-purple-400' : 'text-muted'}`}
+                        className="transfer-combobox-icon" style={{ color: currentTargetAgents.length > 0 ? 'var(--accent-purple-text)' : 'var(--text-muted)' }}
                       />
                     )}
                     <span className="transfer-combobox-label">To:</span>
@@ -848,12 +848,12 @@ export const TransferSkillsModal: React.FC<TransferSkillsModalProps> = ({
               <div className="skills-checklist">
                 {sourceSkills.length === 0 ? (
                   <div className="empty-state-notice">
-                    <Bot size={18} className="text-slate-500" />
+                    <Bot size={18} style={{ color: "var(--text-muted)" }} />
                     <span>No skills found in {currentSourceAgent?.name || 'source agent'}.</span>
                   </div>
                 ) : filteredSourceSkills.length === 0 ? (
                   <div className="empty-state-notice">
-                    <Search size={16} className="text-slate-500" />
+                    <Search size={16} style={{ color: "var(--text-muted)" }} />
                     <span>No skills match "{searchQuery}"</span>
                   </div>
                 ) : (
@@ -889,7 +889,7 @@ export const TransferSkillsModal: React.FC<TransferSkillsModalProps> = ({
               <span>
                 {mode === 'copy' ? 'Copying' : 'Moving'}{' '}
                 <strong>{selectedSlugs.length} {selectedSlugs.length === 1 ? 'skill' : 'skills'}</strong> from{' '}
-                <strong className="text-purple-300">{currentSourceAgent?.name}</strong> to{' '}
+                <strong style={{ color: 'var(--accent-purple-text)' }}>{currentSourceAgent?.name}</strong> to{' '}
                 <strong>{currentTargetAgents.map((a) => a.name).join(', ') || 'selected targets'}</strong>
               </span>
             </div>
@@ -929,948 +929,948 @@ export const TransferSkillsModal: React.FC<TransferSkillsModalProps> = ({
 
         <style>{`
           @keyframes modalOverlayFadeIn {
-            0% { opacity: 0; }
-            100% { opacity: 1; }
+            0% { opacity:0; }
+            100% { opacity:1; }
           }
           @keyframes modalOverlayFadeOut {
-            0% { opacity: 1; }
-            100% { opacity: 0; }
+            0% { opacity:1; }
+            100% { opacity:0; }
           }
           @keyframes modalCardScaleIn {
             0% {
-              opacity: 0;
-              transform: translate3d(0, 22px, 0) scale(0.95);
+              opacity:0;
+              transform:translate3d(0, 22px, 0) scale(0.95);
             }
             100% {
-              opacity: 1;
-              transform: translate3d(0, 0, 0) scale(1);
+              opacity:1;
+              transform:translate3d(0, 0, 0) scale(1);
             }
           }
           @keyframes modalCardScaleOut {
             0% {
-              opacity: 1;
-              transform: translate3d(0, 0, 0) scale(1);
+              opacity:1;
+              transform:translate3d(0, 0, 0) scale(1);
             }
             100% {
-              opacity: 0;
-              transform: translate3d(0, 14px, 0) scale(0.96);
+              opacity:0;
+              transform:translate3d(0, 14px, 0) scale(0.96);
             }
           }
 
           .transfer-modal-overlay {
-            position: fixed !important;
-            top: 0 !important;
-            left: 0 !important;
-            right: 0 !important;
-            bottom: 0 !important;
-            width: 100vw !important;
-            height: 100vh !important;
-            background: radial-gradient(ellipse at 50% 40%, rgba(13, 19, 36, 0.62) 0%, rgba(4, 7, 15, 0.74) 100%) !important;
-            backdrop-filter: blur(16px) saturate(180%) contrast(105%) !important;
-            -webkit-backdrop-filter: blur(16px) saturate(180%) contrast(105%) !important;
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-            z-index: 100000 !important;
-            padding: 24px !important;
-            animation: modalOverlayFadeIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
-            box-sizing: border-box !important;
-            -webkit-app-region: no-drag !important;
+            position:fixed !important;
+            top:0 !important;
+            left:0 !important;
+            right:0 !important;
+            bottom:0 !important;
+            width:100vw !important;
+            height:100vh !important;
+            background:var(--bg-modal-overlay) !important;
+            backdrop-filter:blur(10px) !important;
+            -webkit-backdrop-filter:blur(10px) !important;
+            display:flex !important;
+            align-items:center !important;
+            justify-content:center !important;
+            z-index:100000 !important;
+            padding:24px !important;
+            animation:modalOverlayFadeIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+            box-sizing:border-box !important;
+            -webkit-app-region:no-drag !important;
           }
 
           .transfer-modal-overlay.is-closing {
-            animation: modalOverlayFadeOut 0.16s cubic-bezier(0.4, 0, 1, 1) forwards !important;
-            pointer-events: none !important;
+            animation:modalOverlayFadeOut 0.16s cubic-bezier(0.4, 0, 1, 1) forwards !important;
+            pointer-events:none !important;
           }
 
           .transfer-modal-card {
-            background: #090d16;
-            border: 1px solid #1c273c;
-            border-radius: 12px;
-            width: 100%;
-            max-width: 900px;
-            height: 82vh;
-            max-height: 700px;
-            min-height: 520px;
-            display: flex;
-            flex-direction: column;
-            box-shadow: 0 20px 48px -8px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(28, 39, 60, 0.6);
-            overflow: hidden;
-            will-change: transform, opacity;
-            transform: translate3d(0, 0, 0);
-            contain: layout;
-            animation: modalCardScaleIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
-            position: relative;
-            z-index: 100001;
-            box-sizing: border-box;
-            -webkit-app-region: no-drag !important;
-            user-select: none;
-            -webkit-user-select: none;
+            background:var(--bg-surface);
+            border:1px solid var(--border-subtle);
+            border-radius:12px;
+            width:100%;
+            max-width:900px;
+            height:82vh;
+            max-height:700px;
+            min-height:520px;
+            display:flex;
+            flex-direction:column;
+            box-shadow:var(--shadow-modal);
+            overflow:hidden;
+            will-change:transform, opacity;
+            transform:translate3d(0, 0, 0);
+            contain:layout;
+            animation:modalCardScaleIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+            position:relative;
+            z-index:100001;
+            box-sizing:border-box;
+            -webkit-app-region:no-drag !important;
+            user-select:none;
+            -webkit-user-select:none;
           }
 
           .transfer-modal-card.is-closing {
-            animation: modalCardScaleOut 0.16s cubic-bezier(0.4, 0, 1, 1) forwards !important;
-            pointer-events: none !important;
+            animation:modalCardScaleOut 0.16s cubic-bezier(0.4, 0, 1, 1) forwards !important;
+            pointer-events:none !important;
           }
 
           .transfer-modal-header {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 14px 20px;
-            border-bottom: 1px solid #172133;
-            background: #0d1320;
-            flex-shrink: 0;
-            -webkit-app-region: no-drag !important;
+            display:flex;
+            align-items:center;
+            gap:12px;
+            padding:14px 20px;
+            border-bottom:1px solid var(--border-subtle);
+            background:var(--bg-surface-alt);
+            flex-shrink:0;
+            -webkit-app-region:no-drag !important;
           }
 
           .header-icon-box {
-            width: 32px;
-            height: 32px;
-            border-radius: 8px;
-            background: linear-gradient(135deg, rgba(147, 51, 234, 0.3), rgba(124, 58, 237, 0.2));
-            border: 1px solid rgba(147, 51, 234, 0.45);
-            color: #c084fc;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            flex-shrink: 0;
+            width:32px;
+            height:32px;
+            border-radius:8px;
+            background:linear-gradient(135deg, rgba(147, 51, 234, 0.3), rgba(124, 58, 237, 0.2));
+            border:1px solid rgba(147, 51, 234, 0.45);
+            color:var(--accent-purple-text);
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            flex-shrink:0;
           }
 
           .header-text {
-            flex: 1;
-            min-width: 0;
+            flex:1;
+            min-width:0;
           }
 
           .modal-title {
-            font-size: 14.5px;
-            font-weight: 700;
-            color: #f1f5f9;
-            margin: 0;
-            letter-spacing: -0.01em;
+            font-size:14.5px;
+            font-weight:700;
+            color:var(--text-primary);
+            margin:0;
+            letter-spacing:-0.01em;
           }
 
           .modal-subtitle {
-            font-size: 11.5px;
-            color: #8899ac;
-            margin: 2px 0 0 0;
+            font-size:11.5px;
+            color:var(--text-secondary);
+            margin:2px 0 0 0;
           }
 
           .close-btn {
-            width: 28px;
-            height: 28px;
-            padding: 0;
-            background: rgba(255, 255, 255, 0.04);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            color: #94a3b8;
-            cursor: pointer;
-            border-radius: 7px;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
-            flex-shrink: 0;
-            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
-            user-select: none;
+            width:28px;
+            height:28px;
+            padding:0;
+            background:var(--bg-pill);
+            border:1px solid var(--border-subtle);
+            color:var(--text-secondary);
+            cursor:pointer;
+            border-radius:7px;
+            display:inline-flex;
+            align-items:center;
+            justify-content:center;
+            transition:all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+            flex-shrink:0;
+            box-shadow:var(--shadow-card);
+            user-select:none;
           }
 
           .close-btn:hover {
-            color: #f8fafc;
-            background: rgba(255, 255, 255, 0.09);
-            border-color: rgba(255, 255, 255, 0.18);
-            transform: translateY(-0.5px);
+            color:var(--text-primary);
+            background:var(--bg-elevated-hover);
+            border-color:var(--border-hover);
+            transform:translateY(-0.5px);
           }
 
           .close-btn:active {
-            transform: translateY(0.5px);
-            background: rgba(255, 255, 255, 0.14);
+            transform:translateY(0.5px);
+            background:var(--bg-elevated-hover);
           }
 
           .transfer-error-banner {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            background: rgba(239, 68, 68, 0.12);
-            border-bottom: 1px solid rgba(239, 68, 68, 0.25);
-            color: #fca5a5;
-            font-size: 12px;
-            padding: 8px 20px;
-            flex-shrink: 0;
+            display:flex;
+            align-items:center;
+            gap:8px;
+            background:rgba(239, 68, 68, 0.12);
+            border-bottom:1px solid rgba(239, 68, 68, 0.25);
+            color:var(--status-red-text);
+            font-size:12px;
+            padding:8px 20px;
+            flex-shrink:0;
           }
 
           .transfer-form {
-            display: flex;
-            flex-direction: column;
-            flex: 1;
-            overflow: hidden;
-            min-height: 0;
+            display:flex;
+            flex-direction:column;
+            flex:1;
+            overflow:hidden;
+            min-height:0;
           }
 
           .transfer-body {
-            display: flex;
-            flex-direction: column;
-            gap: 14px;
-            padding: 16px 20px;
-            flex: 1;
-            min-height: 0;
-            overflow: hidden;
+            display:flex;
+            flex-direction:column;
+            gap:14px;
+            padding:16px 20px;
+            flex:1;
+            min-height:0;
+            overflow:hidden;
           }
 
           /* Compact Toolbar Config Bar */
           .transfer-config-bar {
-            display: grid;
-            grid-template-columns: 1fr 1.3fr auto;
-            gap: 10px;
-            align-items: center;
-            flex-shrink: 0;
-            position: relative;
-            z-index: 30;
+            display:grid;
+            grid-template-columns:1fr 1.3fr auto;
+            gap:10px;
+            align-items:center;
+            flex-shrink:0;
+            position:relative;
+            z-index:30;
           }
 
           /* Transfer Combobox Controls */
           .transfer-combobox-wrapper {
-            position: relative;
-            width: 100%;
+            position:relative;
+            width:100%;
           }
 
           .transfer-combobox-wrapper.source-wrapper {
-            z-index: 35;
+            z-index:35;
           }
 
           .transfer-combobox-wrapper.target-wrapper {
-            z-index: 34;
+            z-index:34;
           }
 
           .transfer-combobox-trigger {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 6px;
-            width: 100%;
-            height: 30px;
-            min-height: 30px;
-            max-height: 30px;
-            padding: 0 10px;
-            background: rgba(20, 28, 45, 0.7);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: 6px;
-            color: #94a3b8;
-            font-size: 11.5px;
-            cursor: pointer;
-            transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
-            box-sizing: border-box;
-            user-select: none;
-            white-space: nowrap;
-            text-align: left;
+            display:flex;
+            align-items:center;
+            justify-content:space-between;
+            gap:6px;
+            width:100%;
+            height:30px;
+            min-height:30px;
+            max-height:30px;
+            padding:0 10px;
+            background:var(--bg-toolbar-chip);
+            border:1px solid var(--border-subtle);
+            border-radius:6px;
+            color:var(--text-secondary);
+            font-size:11.5px;
+            cursor:pointer;
+            transition:all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+            box-sizing:border-box;
+            user-select:none;
+            white-space:nowrap;
+            text-align:left;
           }
 
           .transfer-combobox-trigger:hover {
-            background: rgba(27, 38, 62, 0.9);
-            border-color: rgba(255, 255, 255, 0.16);
-            color: #f8fafc;
+            background:var(--bg-toolbar-chip-hover);
+            border-color:var(--border-hover);
+            color:var(--text-primary);
           }
 
           .transfer-combobox-trigger.open {
-            border-color: rgba(168, 85, 247, 0.55);
-            background: rgba(20, 28, 48, 0.98);
-            box-shadow: 0 0 0 1px rgba(168, 85, 247, 0.25);
+            border-color:rgba(168, 85, 247, 0.55);
+            background:var(--bg-elevated);
+            box-shadow:0 0 0 1px rgba(168, 85, 247, 0.25);
           }
 
           .transfer-combobox-trigger.active {
-            border-color: rgba(168, 85, 247, 0.35);
-            background: rgba(168, 85, 247, 0.12);
-            color: #f8fafc;
+            border-color:rgba(168, 85, 247, 0.35);
+            background:rgba(168, 85, 247, 0.12);
+            color:var(--text-primary);
           }
 
           .transfer-combobox-trigger-left {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            min-width: 0;
-            flex: 1;
-            overflow: hidden;
+            display:flex;
+            align-items:center;
+            gap:6px;
+            min-width:0;
+            flex:1;
+            overflow:hidden;
           }
 
           .transfer-combobox-trigger-right {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            flex-shrink: 0;
+            display:flex;
+            align-items:center;
+            gap:6px;
+            flex-shrink:0;
           }
 
           .transfer-combobox-dot {
-            width: 6px;
-            height: 6px;
-            border-radius: 50%;
-            flex-shrink: 0;
+            width:6px;
+            height:6px;
+            border-radius:50%;
+            flex-shrink:0;
           }
 
           .transfer-combobox-icon {
-            flex-shrink: 0;
+            flex-shrink:0;
           }
 
           .transfer-combobox-label {
-            font-size: 11px;
-            font-weight: 500;
-            color: #64748b;
-            letter-spacing: 0.01em;
-            flex-shrink: 0;
+            font-size:11px;
+            font-weight:500;
+            color:var(--text-muted);
+            letter-spacing:0.01em;
+            flex-shrink:0;
           }
 
           .transfer-combobox-value {
-            font-size: 11.5px;
-            font-weight: 500;
-            color: #e2e8f0;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
+            font-size:11.5px;
+            font-weight:500;
+            color:var(--text-primary);
+            overflow:hidden;
+            text-overflow:ellipsis;
+            white-space:nowrap;
           }
 
           .transfer-combobox-trigger.active .transfer-combobox-value {
-            color: #ffffff;
+            color:var(--text-primary);
           }
 
           .transfer-combobox-placeholder {
-            font-size: 11.5px;
-            color: #64748b;
-            font-style: italic;
+            font-size:11.5px;
+            color:var(--text-muted);
+            font-style:italic;
           }
 
           .transfer-combobox-count {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            min-width: 18px;
-            height: 16px;
-            padding: 0 4.5px;
-            font-size: 9.5px;
-            font-family: var(--font-mono, monospace);
-            font-weight: 600;
-            line-height: 1;
-            border-radius: 4px;
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            color: #7f91a7;
-            flex-shrink: 0;
-            user-select: none;
-            box-sizing: border-box;
+            display:inline-flex;
+            align-items:center;
+            justify-content:center;
+            min-width:18px;
+            height:16px;
+            padding:0 4.5px;
+            font-size:9.5px;
+            font-family:var(--font-mono, monospace);
+            font-weight:600;
+            line-height:1;
+            border-radius:4px;
+            background:var(--bg-pill);
+            border:1px solid var(--border-subtle);
+            color:var(--text-secondary);
+            flex-shrink:0;
+            user-select:none;
+            box-sizing:border-box;
           }
 
           .transfer-combobox-chevron {
-            color: #64748b;
-            transition: transform 0.18s ease;
-            flex-shrink: 0;
+            color:var(--text-muted);
+            transition:transform 0.18s ease;
+            flex-shrink:0;
           }
 
           .transfer-combobox-chevron.open {
-            transform: rotate(180deg);
-            color: #c084fc;
+            transform:rotate(180deg);
+            color:var(--accent-purple-text);
           }
 
           /* Floating Combobox Popover */
           .transfer-dropdown-menu {
-            position: absolute;
-            top: calc(100% + 5px);
-            left: 0;
-            right: 0;
-            width: 100%;
-            min-width: 250px;
-            background: #0d1322;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 8px;
-            box-shadow: 0 18px 40px -4px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.05);
-            padding: 6px;
-            z-index: 1000;
-            backdrop-filter: blur(16px);
-            animation: transferDropdownFadeIn 0.14s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-            box-sizing: border-box;
+            position:absolute;
+            top:calc(100% + 5px);
+            left:0;
+            right:0;
+            width:100%;
+            min-width:250px;
+            background:var(--bg-surface);
+            border:1px solid var(--border-hover);
+            border-radius:8px;
+            box-shadow:var(--shadow-dropdown);
+            padding:6px;
+            z-index:1000;
+            backdrop-filter:blur(16px);
+            animation:transferDropdownFadeIn 0.14s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            box-sizing:border-box;
           }
 
           @keyframes transferDropdownFadeIn {
             from {
-              opacity: 0;
-              transform: translateY(-4px);
+              opacity:0;
+              transform:translateY(-4px);
             }
             to {
-              opacity: 1;
-              transform: translateY(0);
+              opacity:1;
+              transform:translateY(0);
             }
           }
 
           .transfer-dropdown-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 4px 8px 6px;
-            font-size: 10px;
-            font-weight: 700;
-            letter-spacing: 0.06em;
-            text-transform: uppercase;
-            color: #64748b;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-            margin-bottom: 5px;
+            display:flex;
+            align-items:center;
+            justify-content:space-between;
+            padding:4px 8px 6px;
+            font-size:10px;
+            font-weight:700;
+            letter-spacing:0.06em;
+            text-transform:uppercase;
+            color:var(--text-muted);
+            border-bottom:1px solid var(--border-subtle);
+            margin-bottom:5px;
           }
 
           .transfer-dropdown-header-count {
-            font-size: 9.5px;
-            color: #64748b;
-            text-transform: none;
+            font-size:9.5px;
+            color:var(--text-muted);
+            text-transform:none;
           }
 
           .transfer-dropdown-action-btn {
-            background: transparent;
-            border: none;
-            color: #c084fc;
-            font-size: 10px;
-            font-weight: 600;
-            cursor: pointer;
-            padding: 0;
-            transition: color 0.12s ease;
+            background:transparent;
+            border:none;
+            color:var(--accent-purple-text);
+            font-size:10px;
+            font-weight:600;
+            cursor:pointer;
+            padding:0;
+            transition:color 0.12s ease;
           }
 
           .transfer-dropdown-action-btn:hover {
-            color: #e9d5ff;
-            text-decoration: underline;
+            color:var(--text-primary);
+            text-decoration:underline;
           }
 
           .transfer-combobox-search-wrap {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            height: 28px;
-            padding: 0 8px;
-            margin-bottom: 5px;
-            background: rgba(255, 255, 255, 0.04);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: 5px;
-            transition: all 0.15s ease;
-            box-sizing: border-box;
+            display:flex;
+            align-items:center;
+            gap:6px;
+            height:28px;
+            padding:0 8px;
+            margin-bottom:5px;
+            background:var(--bg-pill);
+            border:1px solid var(--border-subtle);
+            border-radius:5px;
+            transition:all 0.15s ease;
+            box-sizing:border-box;
           }
 
           .transfer-combobox-search-wrap:focus-within {
-            background: rgba(255, 255, 255, 0.07);
-            border-color: rgba(168, 85, 247, 0.55);
-            box-shadow: 0 0 0 1px rgba(168, 85, 247, 0.25);
+            background:var(--bg-elevated-hover);
+            border-color:rgba(168, 85, 247, 0.55);
+            box-shadow:0 0 0 1px rgba(168, 85, 247, 0.25);
           }
 
           .transfer-combobox-search-icon {
-            color: #64748b;
-            flex-shrink: 0;
+            color:var(--text-muted);
+            flex-shrink:0;
           }
 
           .transfer-combobox-search-input {
-            flex: 1;
-            min-width: 0;
-            background: transparent;
-            border: none;
-            outline: none;
-            color: #f1f5f9;
-            font-size: 11px;
-            font-family: inherit;
-            padding: 0;
+            flex:1;
+            min-width:0;
+            background:transparent;
+            border:none;
+            outline:none;
+            color:var(--text-primary);
+            font-size:11px;
+            font-family:inherit;
+            padding:0;
           }
 
           .transfer-combobox-search-input::placeholder {
-            color: #64748b;
-            font-size: 11px;
+            color:var(--text-muted);
+            font-size:11px;
           }
 
           .transfer-combobox-clear-btn {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: 14px;
-            height: 14px;
-            padding: 0;
-            background: rgba(255, 255, 255, 0.08);
-            border: none;
-            border-radius: 3px;
-            color: #94a3b8;
-            cursor: pointer;
-            transition: all 0.1s ease;
-            flex-shrink: 0;
+            display:inline-flex;
+            align-items:center;
+            justify-content:center;
+            width:14px;
+            height:14px;
+            padding:0;
+            background:var(--bg-elevated-hover);
+            border:none;
+            border-radius:3px;
+            color:var(--text-secondary);
+            cursor:pointer;
+            transition:all 0.1s ease;
+            flex-shrink:0;
           }
 
           .transfer-combobox-clear-btn:hover {
-            background: rgba(239, 68, 68, 0.25);
-            color: #f87171;
+            background:rgba(239, 68, 68, 0.25);
+            color:var(--status-red-text);
           }
 
           .transfer-dropdown-list {
-            display: flex;
-            flex-direction: column;
-            gap: 2px;
-            max-height: 220px;
-            overflow-y: auto;
-            overflow-x: hidden;
-            padding-right: 2px;
+            display:flex;
+            flex-direction:column;
+            gap:2px;
+            max-height:220px;
+            overflow-y:auto;
+            overflow-x:hidden;
+            padding-right:2px;
           }
 
           .transfer-dropdown-list::-webkit-scrollbar {
-            width: 4px;
+            width:4px;
           }
 
           .transfer-dropdown-list::-webkit-scrollbar-thumb {
-            background: rgba(255, 255, 255, 0.18);
-            border-radius: 4px;
+            background: var(--scrollbar-thumb);
+            border-radius:4px;
           }
 
           .transfer-dropdown-item {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 8px;
-            height: 30px;
-            padding: 0 8px;
-            border-radius: 5px;
-            background: transparent;
-            border: 1px solid transparent;
-            cursor: pointer;
-            transition: all 0.12s ease;
-            width: 100%;
-            box-sizing: border-box;
-            text-align: left;
+            display:flex;
+            align-items:center;
+            justify-content:space-between;
+            gap:8px;
+            height:30px;
+            padding:0 8px;
+            border-radius:5px;
+            background:transparent;
+            border:1px solid transparent;
+            cursor:pointer;
+            transition:all 0.12s ease;
+            width:100%;
+            box-sizing:border-box;
+            text-align:left;
           }
 
           .transfer-dropdown-item:hover {
-            background: rgba(255, 255, 255, 0.06);
-            color: #ffffff;
+            background:var(--bg-pill);
+            color:var(--text-primary);
           }
 
           .transfer-dropdown-item.selected {
-            background: rgba(168, 85, 247, 0.12);
-            border-color: rgba(168, 85, 247, 0.28);
-            color: #ffffff;
+            background:rgba(168, 85, 247, 0.12);
+            border-color:rgba(168, 85, 247, 0.28);
+            color:var(--text-primary);
           }
 
           .transfer-dropdown-item-left {
-            display: flex;
-            align-items: center;
-            gap: 7px;
-            min-width: 0;
-            flex: 1;
+            display:flex;
+            align-items:center;
+            gap:7px;
+            min-width:0;
+            flex:1;
           }
 
           .transfer-combobox-checkbox {
-            width: 13px;
-            height: 13px;
-            border-radius: 3px;
-            border: 1px solid rgba(255, 255, 255, 0.25);
-            background: rgba(255, 255, 255, 0.04);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: #ffffff;
-            flex-shrink: 0;
-            transition: all 0.12s ease;
+            width:13px;
+            height:13px;
+            border-radius:3px;
+            border:1px solid var(--border-strong);
+            background:var(--bg-pill);
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            color:var(--text-primary);
+            flex-shrink:0;
+            transition:all 0.12s ease;
           }
 
           .transfer-combobox-checkbox.checked {
-            background: #9333ea;
-            border-color: #a855f7;
+            background:#9333ea;
+            border-color:#a855f7;
           }
 
           .transfer-dropdown-item-dot {
-            width: 6px;
-            height: 6px;
-            border-radius: 50%;
-            flex-shrink: 0;
+            width:6px;
+            height:6px;
+            border-radius:50%;
+            flex-shrink:0;
           }
 
           .transfer-dropdown-item-name {
-            font-size: 11.5px;
-            font-weight: 500;
-            color: #cbd5e1;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
+            font-size:11.5px;
+            font-weight:500;
+            color:var(--text-secondary);
+            overflow:hidden;
+            text-overflow:ellipsis;
+            white-space:nowrap;
           }
 
           .transfer-dropdown-item.selected .transfer-dropdown-item-name {
-            color: #ffffff;
-            font-weight: 600;
+            color:var(--text-primary);
+            font-weight:600;
           }
 
           .transfer-dropdown-item-right {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            flex-shrink: 0;
+            display:flex;
+            align-items:center;
+            gap:6px;
+            flex-shrink:0;
           }
 
           .transfer-dropdown-item-count {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            min-width: 19px;
-            height: 16px;
-            padding: 0 4.5px;
-            font-size: 9.5px;
-            font-family: var(--font-mono, monospace);
-            font-weight: 600;
-            line-height: 1;
-            border-radius: 4px;
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            color: #7f91a7;
-            flex-shrink: 0;
-            user-select: none;
-            box-sizing: border-box;
+            display:inline-flex;
+            align-items:center;
+            justify-content:center;
+            min-width:19px;
+            height:16px;
+            padding:0 4.5px;
+            font-size:9.5px;
+            font-family:var(--font-mono, monospace);
+            font-weight:600;
+            line-height:1;
+            border-radius:4px;
+            background:var(--bg-pill);
+            border:1px solid var(--border-subtle);
+            color:var(--text-secondary);
+            flex-shrink:0;
+            user-select:none;
+            box-sizing:border-box;
           }
 
           .transfer-dropdown-item:hover .transfer-dropdown-item-count {
-            background: rgba(255, 255, 255, 0.1);
-            color: #f1f5f9;
+            background:var(--bg-elevated-hover);
+            color:var(--text-primary);
           }
 
           .transfer-dropdown-empty {
-            padding: 16px 8px;
-            text-align: center;
-            color: #64748b;
-            font-size: 11px;
-            font-style: italic;
+            padding:16px 8px;
+            text-align:center;
+            color:var(--text-muted);
+            font-size:11px;
+            font-style:italic;
           }
 
           /* Mode Toggle */
           .mode-toggle-group {
-            display: inline-flex;
-            align-items: center;
-            background: rgba(20, 28, 45, 0.7);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: 6px;
-            padding: 2px;
-            gap: 2px;
-            height: 30px;
-            min-height: 30px;
-            max-height: 30px;
-            box-sizing: border-box;
+            display:inline-flex;
+            align-items:center;
+            background:var(--bg-toolbar-chip);
+            border:1px solid var(--border-subtle);
+            border-radius:6px;
+            padding:2px;
+            gap:2px;
+            height:30px;
+            min-height:30px;
+            max-height:30px;
+            box-sizing:border-box;
           }
 
           .mode-btn {
-            display: flex;
-            align-items: center;
-            gap: 4px;
-            padding: 0 8px;
-            height: 24px;
-            border-radius: 4px;
-            background: transparent;
-            border: 1px solid transparent;
-            color: #64748b;
-            font-size: 11px;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.12s ease;
-            white-space: nowrap;
+            display:flex;
+            align-items:center;
+            gap:4px;
+            padding:0 8px;
+            height:24px;
+            border-radius:4px;
+            background:transparent;
+            border:1px solid transparent;
+            color:var(--text-muted);
+            font-size:11px;
+            font-weight:500;
+            cursor:pointer;
+            transition:all 0.12s ease;
+            white-space:nowrap;
           }
 
           .mode-btn:hover {
-            color: #cbd5e1;
+            color:var(--text-secondary);
           }
 
           .mode-btn.active {
-            background: rgba(168, 85, 247, 0.18);
-            border-color: rgba(168, 85, 247, 0.35);
-            color: #c084fc;
-            font-weight: 600;
+            background:rgba(168, 85, 247, 0.18);
+            border-color:rgba(168, 85, 247, 0.35);
+            color:var(--accent-purple-text);
+            font-weight:600;
           }
 
           /* Selection Container */
           .skills-selection-container {
-            display: flex;
-            flex-direction: column;
-            border: 1px solid #19243a;
-            border-radius: 8px;
-            background: #070b14;
-            flex: 1;
-            min-height: 0;
-            overflow: hidden;
+            display:flex;
+            flex-direction:column;
+            border:1px solid var(--border-subtle);
+            border-radius:8px;
+            background:var(--bg-surface);
+            flex:1;
+            min-height:0;
+            overflow:hidden;
           }
 
           .selection-toolbar {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 8px 12px;
-            background: #0c1220;
-            border-bottom: 1px solid #19243a;
-            gap: 12px;
+            display:flex;
+            align-items:center;
+            justify-content:space-between;
+            padding:8px 12px;
+            background:var(--bg-card-inner);
+            border-bottom:1px solid var(--border-subtle);
+            gap:12px;
           }
 
           .search-input-wrap {
-            position: relative;
-            display: flex;
-            align-items: center;
-            flex: 1;
-            max-width: 320px;
+            position:relative;
+            display:flex;
+            align-items:center;
+            flex:1;
+            max-width:320px;
           }
 
           .search-icon {
-            position: absolute;
-            left: 8px;
-            color: #64748b;
-            pointer-events: none;
+            position:absolute;
+            left:8px;
+            color:var(--text-muted);
+            pointer-events:none;
           }
 
           .search-input {
-            width: 100%;
-            background: #090e18;
-            border: 1px solid #1c273c;
-            border-radius: 5px;
-            padding: 5px 24px 5px 28px;
-            color: #e2e8f0;
-            font-size: 11.5px;
-            outline: none;
+            width:100%;
+            background:var(--bg-input);
+            border:1px solid var(--border-subtle);
+            border-radius:5px;
+            padding:5px 24px 5px 28px;
+            color:var(--text-primary);
+            font-size:11.5px;
+            outline:none;
           }
 
           .search-input:focus {
-            border-color: #7c3aed;
+            border-color:#7c3aed;
           }
 
           .clear-search-btn {
-            position: absolute;
-            right: 6px;
-            background: transparent;
-            border: none;
-            color: #64748b;
-            cursor: pointer;
-            padding: 0;
+            position:absolute;
+            right:6px;
+            background:transparent;
+            border:none;
+            color:var(--text-muted);
+            cursor:pointer;
+            padding:0;
           }
 
           .selection-actions {
-            display: flex;
-            align-items: center;
-            gap: 10px;
+            display:flex;
+            align-items:center;
+            gap:10px;
           }
 
           .select-all-btn {
-            background: transparent;
-            border: none;
-            color: #a78bfa;
-            font-size: 11px;
-            font-weight: 500;
-            cursor: pointer;
-            padding: 0;
+            background:transparent;
+            border:none;
+            color:var(--accent-purple-text);
+            font-size:11px;
+            font-weight:500;
+            cursor:pointer;
+            padding:0;
           }
 
           .select-all-btn:hover {
-            text-decoration: underline;
+            text-decoration:underline;
           }
 
           .selected-count-pill {
-            font-size: 10.5px;
-            color: #64748b;
-            background: #090e18;
-            border: 1px solid #172236;
-            padding: 2px 7px;
-            border-radius: 4px;
+            font-size:10.5px;
+            color:var(--text-muted);
+            background:var(--bg-card-inner);
+            border:1px solid var(--border-subtle);
+            padding:2px 7px;
+            border-radius:4px;
           }
 
           /* Checklist */
           .skills-checklist {
-            display: flex;
-            flex-direction: column;
-            flex: 1;
-            overflow-y: auto;
-            overscroll-behavior: contain;
-            contain: content;
-            padding: 6px;
-            gap: 4px;
-            -webkit-overflow-scrolling: touch;
-            user-select: none !important;
-            -webkit-user-select: none !important;
+            display:flex;
+            flex-direction:column;
+            flex:1;
+            overflow-y:auto;
+            overscroll-behavior:contain;
+            contain:content;
+            padding:6px;
+            gap:4px;
+            -webkit-overflow-scrolling:touch;
+            user-select:none !important;
+            -webkit-user-select:none !important;
           }
 
           .skills-checklist::-webkit-scrollbar {
-            width: 5px;
+            width:5px;
           }
 
           .skills-checklist::-webkit-scrollbar-thumb {
-            background: #1c273c;
-            border-radius: 3px;
+            background: var(--scrollbar-thumb);
+            border-radius:3px;
           }
 
           .skill-check-row {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            padding: 7px 10px;
-            border-radius: 6px;
-            background: #0b101c;
-            border: 1px solid #151e30;
-            cursor: pointer;
-            contain: layout style;
-            transition: background-color 0.08s ease, border-color 0.08s ease;
-            user-select: none !important;
-            -webkit-user-select: none !important;
+            display:flex;
+            align-items:center;
+            gap:10px;
+            padding:7px 10px;
+            border-radius:6px;
+            background:var(--bg-card-inner);
+            border:1px solid var(--border-subtle);
+            cursor:pointer;
+            contain:layout style;
+            transition:background-color 0.08s ease, border-color 0.08s ease;
+            user-select:none !important;
+            -webkit-user-select:none !important;
           }
 
           .skill-check-row:focus-visible {
-            outline: 2px solid #a855f7;
-            outline-offset: 1px;
+            outline:2px solid #a855f7;
+            outline-offset:1px;
           }
 
           .skill-check-row * {
-            user-select: none !important;
-            -webkit-user-select: none !important;
+            user-select:none !important;
+            -webkit-user-select:none !important;
           }
 
           .skill-check-row:hover {
-            background: #11182a;
-            border-color: #1f2d48;
+            background:var(--bg-card);
+            border-color:var(--border-subtle);
           }
 
           .skill-check-row.active {
-            background: rgba(147, 51, 234, 0.1);
-            border-color: rgba(168, 85, 247, 0.35);
+            background:rgba(147, 51, 234, 0.1);
+            border-color:rgba(168, 85, 247, 0.35);
           }
 
           .check-box-wrap {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            flex-shrink: 0;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            flex-shrink:0;
           }
 
           .skill-row-info {
-            flex: 1;
-            min-width: 0;
+            flex:1;
+            min-width:0;
           }
 
           .skill-row-title-bar {
-            display: flex;
-            align-items: center;
-            gap: 8px;
+            display:flex;
+            align-items:center;
+            gap:8px;
           }
 
           .skill-row-name {
-            font-size: 12px;
-            font-weight: 600;
-            color: #f1f5f9;
+            font-size:12px;
+            font-weight:600;
+            color:var(--text-primary);
           }
 
           .skill-row-slug {
-            font-size: 10.5px;
-            color: #64748b;
+            font-size:10.5px;
+            color:var(--text-muted);
           }
 
           .skill-row-desc {
-            font-size: 11px;
-            color: #8899ac;
-            margin: 2px 0 0 0;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
+            font-size:11px;
+            color:var(--text-secondary);
+            margin:2px 0 0 0;
+            white-space:nowrap;
+            overflow:hidden;
+            text-overflow:ellipsis;
           }
 
           .skill-row-meta {
-            flex-shrink: 0;
+            flex-shrink:0;
           }
 
           .already-badge {
-            font-size: 10px;
-            color: #f59e0b;
-            background: rgba(245, 158, 11, 0.1);
-            border: 1px solid rgba(245, 158, 11, 0.25);
-            padding: 1px 6px;
-            border-radius: 4px;
+            font-size:10px;
+            color:#f59e0b;
+            background:rgba(245, 158, 11, 0.1);
+            border:1px solid rgba(245, 158, 11, 0.25);
+            padding:1px 6px;
+            border-radius:4px;
           }
 
           .ready-badge {
-            font-size: 10px;
-            color: #10b981;
-            background: rgba(16, 185, 129, 0.1);
-            border: 1px solid rgba(16, 185, 129, 0.25);
-            padding: 1px 6px;
-            border-radius: 4px;
+            font-size:10px;
+            color:#10b981;
+            background:rgba(16, 185, 129, 0.1);
+            border:1px solid rgba(16, 185, 129, 0.25);
+            padding:1px 6px;
+            border-radius:4px;
           }
 
           .empty-state-notice {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            gap: 6px;
-            padding: 40px 20px;
-            color: #64748b;
-            font-size: 12px;
+            display:flex;
+            flex-direction:column;
+            align-items:center;
+            justify-content:center;
+            gap:6px;
+            padding:40px 20px;
+            color:var(--text-muted);
+            font-size:12px;
           }
 
           /* Footer */
           .transfer-modal-footer {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 12px 20px;
-            background: #0d1320;
-            border-top: 1px solid #172133;
-            flex-shrink: 0;
-            -webkit-app-region: no-drag !important;
+            display:flex;
+            align-items:center;
+            justify-content:space-between;
+            padding:12px 20px;
+            background:var(--bg-surface-alt);
+            border-top:1px solid var(--border-subtle);
+            flex-shrink:0;
+            -webkit-app-region:no-drag !important;
           }
 
           .footer-summary {
-            font-size: 11.5px;
-            color: #8899ac;
+            font-size:11.5px;
+            color:var(--text-secondary);
           }
 
           .footer-summary strong {
-            color: #e2e8f0;
+            color:var(--text-primary);
           }
 
           .footer-actions {
-            display: flex;
-            align-items: center;
-            gap: 10px;
+            display:flex;
+            align-items:center;
+            gap:10px;
           }
 
           .cancel-action-btn {
-            background: #111726;
-            border: 1px solid #1e293b;
-            color: #94a3b8;
-            font-size: 12px;
-            font-weight: 500;
-            padding: 0 14px;
-            height: 32px;
-            border-radius: 6px;
-            cursor: pointer;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            box-sizing: border-box;
-            transition: background-color 0.12s ease, color 0.12s ease;
+            background:var(--bg-card);
+            border:1px solid var(--border-subtle);
+            color:var(--text-secondary);
+            font-size:12px;
+            font-weight:500;
+            padding:0 14px;
+            height:32px;
+            border-radius:6px;
+            cursor:pointer;
+            display:inline-flex;
+            align-items:center;
+            justify-content:center;
+            box-sizing:border-box;
+            transition:background-color 0.12s ease, color 0.12s ease;
           }
 
           .cancel-action-btn:hover:not(:disabled) {
-            background: #1e293b;
-            color: #ffffff;
+            background:var(--bg-elevated);
+            color:var(--text-primary);
           }
 
           .submit-transfer-btn {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 7px;
-            background: linear-gradient(135deg, #9333ea, #7c3aed);
-            border: 1px solid rgba(147, 51, 234, 0.45);
-            color: #ffffff;
-            font-size: 12px;
-            font-weight: 600;
-            padding: 0 16px;
-            height: 32px;
-            border-radius: 6px;
-            cursor: pointer;
-            box-sizing: border-box;
-            box-shadow: 0 2px 10px rgba(147, 51, 234, 0.35);
-            transition: filter 0.12s ease, box-shadow 0.12s ease;
+            display:inline-flex;
+            align-items:center;
+            justify-content:center;
+            gap:7px;
+            background:linear-gradient(135deg, #9333ea, #7c3aed);
+            border:1px solid rgba(147, 51, 234, 0.45);
+            color:#ffffff;
+            font-size:12px;
+            font-weight:600;
+            padding:0 16px;
+            height:32px;
+            border-radius:6px;
+            cursor:pointer;
+            box-sizing:border-box;
+            box-shadow:0 2px 10px rgba(147, 51, 234, 0.35);
+            transition:filter 0.12s ease, box-shadow 0.12s ease;
           }
 
           .submit-transfer-btn:hover:not(:disabled) {
-            filter: brightness(1.1);
-            box-shadow: 0 4px 14px rgba(147, 51, 234, 0.45);
+            filter:brightness(1.1);
+            box-shadow:0 4px 14px rgba(147, 51, 234, 0.45);
           }
 
           .submit-transfer-btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
+            opacity:0.5;
+            cursor:not-allowed;
           }
         `}</style>
       </div>

@@ -281,7 +281,7 @@ const CodeBlockItem: React.FC<{ code: string; lang: string }> = ({ code, lang })
           onClick={handleCopy}
           title="Copy code"
         >
-          {copied ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+          {copied ? <Check size={12} style={{ color: 'var(--status-green-text)' }} /> : <Copy size={12} />}
           <span>{copied ? 'Copied' : 'Copy'}</span>
         </button>
       </div>
@@ -319,7 +319,7 @@ export const MarkdownViewer: React.FC<MarkdownViewerProps> = ({
   if (!parsedData) {
     return (
       <div className={`skill-viewer-container empty ${className}`}>
-        <p className="text-slate-500 italic text-xs">No content to preview.</p>
+        <p className="italic text-xs" style={{ color: "var(--text-muted)" }}>No content to preview.</p>
       </div>
     );
   }
@@ -380,9 +380,9 @@ export const MarkdownViewer: React.FC<MarkdownViewerProps> = ({
                     <div key={itemIdx} className={`skill-task-item ${item.checked ? 'completed' : ''}`}>
                       <div className="task-icon-wrap">
                         {item.checked ? (
-                          <CheckSquare size={13} className="text-purple-400" />
+                          <CheckSquare size={13} style={{ color: 'var(--accent-purple-text)' }} />
                         ) : (
-                          <Square size={13} className="text-slate-500" />
+                          <Square size={13} style={{ color: "var(--text-muted)" }} />
                         )}
                       </div>
                       <span className="task-text">{renderInlineMarkdown(item.text)}</span>
@@ -431,280 +431,280 @@ export const MarkdownViewer: React.FC<MarkdownViewerProps> = ({
 
       <style>{`
         .skill-viewer-container {
-          display: flex;
-          flex-direction: column;
-          gap: 12px;
-          color: #e2e8f0;
-          font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
-          font-size: 13px;
-          line-height: 1.6;
-          user-select: none;
-          -webkit-user-select: none;
+          display:flex;
+          flex-direction:column;
+          gap:12px;
+          color:var(--text-primary);
+          font-family:var(--font-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
+          font-size:13px;
+          line-height:1.6;
+          user-select:none;
+          -webkit-user-select:none;
         }
 
         .skill-meta-strip {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          flex-wrap: wrap;
-          padding-bottom: 8px;
-          border-bottom: 1px solid rgba(255, 255, 255, 0.07);
-          margin-bottom: 4px;
-          user-select: none;
-          -webkit-user-select: none;
+          display:flex;
+          align-items:center;
+          gap:8px;
+          flex-wrap:wrap;
+          padding-bottom:8px;
+          border-bottom:1px solid var(--border-subtle);
+          margin-bottom:4px;
+          user-select:none;
+          -webkit-user-select:none;
         }
 
         .meta-pill-slug {
-          font-size: 11px;
-          font-weight: 600;
-          color: #c084fc;
-          background: rgba(124, 58, 237, 0.12);
-          border: 1px solid rgba(124, 58, 237, 0.3);
-          padding: 2px 8px;
-          border-radius: 4px;
+          font-size:11px;
+          font-weight:600;
+          color:var(--accent-purple-text);
+          background:rgba(124, 58, 237, 0.12);
+          border:1px solid rgba(124, 58, 237, 0.3);
+          padding:2px 8px;
+          border-radius:4px;
         }
 
         .meta-pill-category {
-          font-size: 11px;
-          font-weight: 600;
-          color: #93c5fd;
-          background: rgba(59, 130, 246, 0.12);
-          border: 1px solid rgba(59, 130, 246, 0.25);
-          padding: 2px 8px;
-          border-radius: 4px;
+          font-size:11px;
+          font-weight:600;
+          color:var(--text-link);
+          background:rgba(59, 130, 246, 0.12);
+          border:1px solid rgba(59, 130, 246, 0.25);
+          padding:2px 8px;
+          border-radius:4px;
         }
 
         .meta-tags-inline {
-          display: flex;
-          align-items: center;
-          gap: 5px;
+          display:flex;
+          align-items:center;
+          gap:5px;
         }
 
         .meta-tag-item {
-          font-size: 10.5px;
-          color: #64748b;
-          font-family: var(--font-mono, monospace);
+          font-size:10.5px;
+          color:var(--text-muted);
+          font-family:var(--font-mono, monospace);
         }
 
         .skill-reading-body {
-          display: flex;
-          flex-direction: column;
-          gap: 10px;
+          display:flex;
+          flex-direction:column;
+          gap:10px;
         }
 
         .skill-h1 {
-          font-size: 18px;
-          font-weight: 700;
-          color: #f8fafc;
-          border-bottom: 1px solid #1e293b;
-          padding-bottom: 6px;
-          margin-top: 6px;
-          margin-bottom: 2px;
-          letter-spacing: -0.01em;
+          font-size:18px;
+          font-weight:700;
+          color:var(--text-primary);
+          border-bottom:1px solid var(--border-subtle);
+          padding-bottom:6px;
+          margin-top:6px;
+          margin-bottom:2px;
+          letter-spacing:-0.01em;
         }
 
         .skill-h2 {
-          font-size: 15px;
-          font-weight: 700;
-          color: #e2e8f0;
-          margin-top: 10px;
-          margin-bottom: 2px;
-          letter-spacing: -0.01em;
+          font-size:15px;
+          font-weight:700;
+          color:var(--text-primary);
+          margin-top:10px;
+          margin-bottom:2px;
+          letter-spacing:-0.01em;
         }
 
         .skill-h3 {
-          font-size: 13.5px;
-          font-weight: 600;
-          color: #cbd5e1;
-          margin-top: 6px;
-          margin-bottom: 2px;
+          font-size:13.5px;
+          font-weight:600;
+          color:var(--text-secondary);
+          margin-top:6px;
+          margin-bottom:2px;
         }
 
         .skill-h4 {
-          font-size: 12.5px;
-          font-weight: 600;
-          color: #94a3b8;
-          margin-top: 4px;
-          margin-bottom: 2px;
+          font-size:12.5px;
+          font-weight:600;
+          color:var(--text-secondary);
+          margin-top:4px;
+          margin-bottom:2px;
         }
 
         .skill-paragraph {
-          margin: 0;
-          color: #cbd5e1;
+          margin:0;
+          color:var(--text-secondary);
         }
 
         .skill-bold {
-          font-weight: 700;
-          color: #ffffff;
+          font-weight:700;
+          color:var(--text-primary);
         }
 
         .skill-italic {
-          font-style: italic;
-          color: #cbd5e1;
+          font-style:italic;
+          color:var(--text-secondary);
         }
 
         .skill-bold-italic {
-          font-weight: 700;
-          color: #ffffff;
+          font-weight:700;
+          color:var(--text-primary);
         }
 
         .skill-inline-code {
-          background: rgba(99, 102, 241, 0.12);
-          border: 1px solid rgba(99, 102, 241, 0.25);
-          color: #c084fc;
-          padding: 1px 5px;
-          border-radius: 4px;
-          font-size: 11.5px;
-          font-family: var(--font-mono, monospace);
+          background:rgba(99, 102, 241, 0.12);
+          border:1px solid rgba(99, 102, 241, 0.25);
+          color:var(--accent-purple-text);
+          padding:1px 5px;
+          border-radius:4px;
+          font-size:11.5px;
+          font-family:var(--font-mono, monospace);
         }
 
         .skill-del {
-          text-decoration: line-through;
-          color: #64748b;
+          text-decoration:line-through;
+          color:var(--text-muted);
         }
 
         .skill-link {
-          color: #60a5fa;
-          text-decoration: underline;
-          text-underline-offset: 2px;
+          color:var(--text-link);
+          text-decoration:underline;
+          text-underline-offset:2px;
         }
 
         .skill-link:hover {
-          color: #93c5fd;
+          color:var(--text-link);
         }
 
         .skill-ul, .skill-ol {
-          display: flex;
-          flex-direction: column;
-          gap: 5px;
-          padding-left: 2px;
-          margin: 0;
-          list-style: none;
+          display:flex;
+          flex-direction:column;
+          gap:5px;
+          padding-left:2px;
+          margin:0;
+          list-style:none;
         }
 
         .skill-li, .skill-ol-li {
-          display: flex;
-          align-items: flex-start;
-          gap: 8px;
+          display:flex;
+          align-items:flex-start;
+          gap:8px;
         }
 
         .skill-bullet-dot {
-          width: 5px;
-          height: 5px;
-          background: #818cf8;
-          border-radius: 50%;
-          margin-top: 7px;
-          flex-shrink: 0;
+          width:5px;
+          height:5px;
+          background:#818cf8;
+          border-radius:50%;
+          margin-top:7px;
+          flex-shrink:0;
         }
 
         .number-index {
-          color: #a78bfa;
-          font-size: 11.5px;
-          font-weight: 600;
-          min-width: 16px;
-          line-height: 1.6;
+          color:var(--accent-purple-text);
+          font-size:11.5px;
+          font-weight:600;
+          min-width:16px;
+          line-height:1.6;
         }
 
         .li-content {
-          flex: 1;
+          flex:1;
         }
 
         .skill-task-list {
-          display: flex;
-          flex-direction: column;
-          gap: 5px;
-          margin: 2px 0;
+          display:flex;
+          flex-direction:column;
+          gap:5px;
+          margin:2px 0;
         }
 
         .skill-task-item {
-          display: flex;
-          align-items: flex-start;
-          gap: 8px;
-          padding: 2px 4px;
-          border-radius: 4px;
+          display:flex;
+          align-items:flex-start;
+          gap:8px;
+          padding:2px 4px;
+          border-radius:4px;
         }
 
         .skill-task-item.completed .task-text {
-          color: #64748b;
-          text-decoration: line-through;
+          color:var(--text-muted);
+          text-decoration:line-through;
         }
 
         .task-icon-wrap {
-          margin-top: 3px;
-          flex-shrink: 0;
+          margin-top:3px;
+          flex-shrink:0;
         }
 
         .skill-blockquote {
-          border-left: 3px solid #7c3aed;
-          background: rgba(124, 58, 237, 0.06);
-          border-radius: 0 5px 5px 0;
-          padding: 7px 12px;
-          margin: 4px 0;
-          color: #cbd5e1;
-          font-style: italic;
+          border-left:3px solid #7c3aed;
+          background:rgba(124, 58, 237, 0.06);
+          border-radius:0 5px 5px 0;
+          padding:7px 12px;
+          margin:4px 0;
+          color:var(--text-secondary);
+          font-style:italic;
         }
 
         .skill-code-card {
-          background: #060911;
-          border: 1px solid #1a253a;
-          border-radius: 6px;
-          overflow: hidden;
-          margin: 5px 0;
+          background:var(--bg-card-inner);
+          border:1px solid var(--border-subtle);
+          border-radius:6px;
+          overflow:hidden;
+          margin:5px 0;
         }
 
         .skill-code-header {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          background: #0b101c;
-          border-bottom: 1px solid #151f33;
-          padding: 4px 10px;
+          display:flex;
+          align-items:center;
+          justify-content:space-between;
+          background:var(--bg-card-inner);
+          border-bottom:1px solid var(--border-subtle);
+          padding:4px 10px;
         }
 
         .skill-code-lang {
-          display: flex;
-          align-items: center;
-          gap: 5px;
-          font-size: 11px;
-          font-weight: 500;
-          color: #818cf8;
-          text-transform: lowercase;
+          display:flex;
+          align-items:center;
+          gap:5px;
+          font-size:11px;
+          font-weight:500;
+          color:var(--accent-indigo-text);
+          text-transform:lowercase;
         }
 
         .skill-copy-btn {
-          display: flex;
-          align-items: center;
-          gap: 4px;
-          background: transparent;
-          border: none;
-          color: #64748b;
-          font-size: 11px;
-          padding: 2px 6px;
-          border-radius: 4px;
-          cursor: pointer;
-          transition: all 0.12s;
+          display:flex;
+          align-items:center;
+          gap:4px;
+          background:transparent;
+          border:none;
+          color:var(--text-muted);
+          font-size:11px;
+          padding:2px 6px;
+          border-radius:4px;
+          cursor:pointer;
+          transition:all 0.12s;
         }
 
         .skill-copy-btn:hover {
-          background: #141d30;
-          color: #f1f5f9;
+          background:var(--bg-card);
+          color:var(--text-primary);
         }
 
         .skill-code-body {
-          padding: 10px 12px;
-          margin: 0;
-          font-size: 11.5px;
-          line-height: 1.55;
-          color: #93c5fd;
-          overflow-x: auto;
-          white-space: pre-wrap;
-          word-break: break-word;
+          padding:10px 12px;
+          margin:0;
+          font-size:11.5px;
+          line-height:1.55;
+          color:var(--text-link);
+          overflow-x:auto;
+          white-space:pre-wrap;
+          word-break:break-word;
         }
 
         .skill-hr {
-          border: none;
-          border-top: 1px solid #1e293b;
-          margin: 6px 0;
+          border:none;
+          border-top:1px solid var(--border-subtle);
+          margin:6px 0;
         }
       `}</style>
     </div>

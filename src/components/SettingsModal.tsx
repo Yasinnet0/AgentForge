@@ -24,10 +24,15 @@ import {
   Cable,
   Zap,
   Package,
-  FileCode
+  FileCode,
+  Sun,
+  Moon,
+  Monitor,
+  ArrowUpCircle,
 } from 'lucide-react';
 import { NavTab } from './Sidebar';
 import { useToast } from '../context/ToastContext';
+import { useTheme } from '../context/ThemeContext';
 import { clearActivities, getActivities } from '../services/activityLogger';
 import { SupportedAgent } from '../types/agent';
 import { INITIAL_SUPPORTED_AGENTS } from '../config/supportedAgents';
@@ -77,7 +82,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   initialCategory = 'general',
 }) => {
   const toast = useToast();
+  const { themeMode, setThemeMode } = useTheme();
   const [activeCategory, setActiveCategory] = useState<SettingsCategory>(initialCategory);
+  const [isCheckingUpdates, setIsCheckingUpdates] = useState(false);
+  const [updateCheckStatus, setUpdateCheckStatus] = useState<{
+    checked: boolean;
+    updateAvailable: boolean;
+    latestVersion: string;
+    releaseUrl?: string;
+    error?: string;
+  } | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -121,7 +135,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const [confirmClearCache, setConfirmClearCache] = useState(false);
   const [confirmClearActivities, setConfirmClearActivities] = useState(false);
-  const [appVersion, setAppVersion] = useState('0.2.0');
+  const [appVersion, setAppVersion] = useState('0.3.0');
 
   // Custom Launch Tab Dropdown state
   const [isLaunchTabDropdownOpen, setIsLaunchTabDropdownOpen] = useState(false);
@@ -682,15 +696,46 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </div>
                 )}
 
-                {matchesSearch('Color Theme Appearance Dark Mode Palette', ['theme', 'dark']) && (
+                {matchesSearch('Color Theme Appearance Dark Light White Mode Palette System', ['theme', 'dark', 'light', 'white']) && (
                   <div className="setting-row">
                     <div className="setting-info">
                       <span className="setting-label">Application Theme</span>
-                      <span className="setting-subtext">Optimized for high-contrast OLED dark workspaces and modern desktop environments.</span>
+                      <span className="setting-subtext">Switch between Deep Space dark, Daylight Studio white mode, or follow your OS setting.</span>
                     </div>
-                    <div className="theme-badge-preview font-mono">
-                      <span className="theme-chip dark" />
-                      <span>DEEP SPACE (DEFAULT)</span>
+                    <div className="setting-segmented font-mono" role="group" aria-label="Application theme mode">
+                      <button
+                        type="button"
+                        className={`setting-segment-btn ${themeMode === 'dark' ? 'active' : ''}`}
+                        onClick={(e) => {
+                          setThemeMode('dark', e);
+                          toast.info('Switched to Dark mode.', { duration: 1600 });
+                        }}
+                      >
+                        <Moon size={12} />
+                        <span>Dark</span>
+                      </button>
+                      <button
+                        type="button"
+                        className={`setting-segment-btn ${themeMode === 'light' ? 'active' : ''}`}
+                        onClick={(e) => {
+                          setThemeMode('light', e);
+                          toast.info('Switched to White mode.', { duration: 1600 });
+                        }}
+                      >
+                        <Sun size={12} />
+                        <span>Light</span>
+                      </button>
+                      <button
+                        type="button"
+                        className={`setting-segment-btn ${themeMode === 'system' ? 'active' : ''}`}
+                        onClick={(e) => {
+                          setThemeMode('system', e);
+                          toast.info('Theme set to match OS preference.', { duration: 1600 });
+                        }}
+                      >
+                        <Monitor size={12} />
+                        <span>System</span>
+                      </button>
                     </div>
                   </div>
                 )}
@@ -897,7 +942,61 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       <div className="about-title-row">
                         <h4 className="about-app-name font-mono">AgentForge</h4>
                         <span className="about-version-badge font-mono">v{appVersion}</span>
+                        <button
+                          type="button"
+                          className="setting-action-btn primary font-mono"
+                          style={{ marginLeft: 'auto' }}
+                          disabled={isCheckingUpdates}
+                          onClick={async () => {
+                            if (!window.electronAPI?.checkForUpdates) {
+                              window.electronAPI?.openExternal('https://github.com/Yasinnet0/AgentForge/releases');
+                              return;
+                            }
+                            setIsCheckingUpdates(true);
+                            try {
+                              const res = await window.electronAPI.checkForUpdates();
+                              setUpdateCheckStatus({
+                                checked: true,
+                                updateAvailable: res.updateAvailable,
+                                latestVersion: res.latestVersion,
+                                releaseUrl: res.releaseUrl,
+                                error: res.error,
+                              });
+                              if (res.error) {
+                                toast.warning(`Update check note: ${res.error}`);
+                              } else if (res.updateAvailable) {
+                                toast.success(`New version v${res.latestVersion} is available!`);
+                              } else {
+                                toast.info(`AgentForge v${res.currentVersion} is up to date.`);
+                              }
+                            } finally {
+                              setIsCheckingUpdates(false);
+                            }
+                          }}
+                        >
+                          <RefreshCw size={11} className={isCheckingUpdates ? 'spin' : ''} />
+                          <span>{isCheckingUpdates ? 'Checking...' : 'Check for Updates'}</span>
+                        </button>
                       </div>
+                      {updateCheckStatus?.checked && !updateCheckStatus.error && (
+                        <div style={{ marginTop: '4px', fontSize: '11.5px', color: updateCheckStatus.updateAvailable ? 'var(--status-green-text)' : 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <ArrowUpCircle size={12} />
+                          {updateCheckStatus.updateAvailable ? (
+                            <>
+                              <span>Update v{updateCheckStatus.latestVersion} ready on GitHub Releases.</span>
+                              <button
+                                type="button"
+                                className="setting-action-btn primary font-mono"
+                                onClick={() => window.electronAPI?.openExternal(updateCheckStatus.releaseUrl || 'https://github.com/Yasinnet0/AgentForge/releases')}
+                              >
+                                Download Release
+                              </button>
+                            </>
+                          ) : (
+                            <span>You are running the latest release (v{updateCheckStatus.latestVersion}).</span>
+                          )}
+                        </div>
+                      )}
                       <p className="about-app-desc">
                         Local-First Desktop Hub for AI Agents, MCP Servers, Skills & Plugins.
                       </p>
@@ -964,9 +1063,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         .settings-modal-backdrop {
           position: fixed;
           inset: 0;
-          background: radial-gradient(ellipse at 50% 40%, rgba(13, 19, 36, 0.62) 0%, rgba(4, 7, 15, 0.74) 100%);
-          backdrop-filter: blur(16px) saturate(180%) contrast(105%);
-          -webkit-backdrop-filter: blur(16px) saturate(180%) contrast(105%);
+          background: var(--bg-backdrop);
+          backdrop-filter: blur(10px);
+          -webkit-backdrop-filter: blur(10px);
           display: flex;
           align-items: center;
           justify-content: center;
@@ -993,14 +1092,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
         /* Modal Dialog Window */
         .settings-modal-card {
-          background: #0b101d;
-          border: 1px solid rgba(255, 255, 255, 0.09);
+          background: var(--bg-surface);
+          border: 1px solid var(--bg-card-border);
           border-radius: 14px;
           width: 900px;
           max-width: 95vw;
           height: 620px;
           max-height: 90vh;
-          box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6), 0 30px 80px -15px rgba(0, 0, 0, 0.9), inset 0 1px 0 0 rgba(255, 255, 255, 0.1);
+          box-shadow: var(--shadow-modal);
           overflow: hidden;
           display: flex;
           animation: settingsModalScaleIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
@@ -1037,8 +1136,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         /* 2-Column Layout */
         .settings-sidebar {
           width: 220px;
-          background: #080c16;
-          border-right: 1px solid rgba(255, 255, 255, 0.07);
+          background: var(--bg-sidebar);
+          border-right: 1px solid var(--border-subtle);
           display: flex;
           flex-direction: column;
           flex-shrink: 0;
@@ -1047,7 +1146,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
         .settings-sidebar-header {
           padding: 16px 14px 12px 14px;
-          border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+          border-bottom: 1px solid var(--border-subtle);
           display: flex;
           flex-direction: column;
           gap: 12px;
@@ -1063,9 +1162,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           width: 32px;
           height: 32px;
           border-radius: 9px;
-          background: rgba(168, 85, 247, 0.14);
+          background: var(--accent-purple-dim);
           border: 1px solid rgba(168, 85, 247, 0.35);
-          color: #c084fc;
+          color: var(--accent-purple-text);
           display: flex;
           align-items: center;
           justify-content: center;
@@ -1081,7 +1180,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         .settings-modal-title {
           font-size: 15px;
           font-weight: 700;
-          color: #f8fafc;
+          color: var(--text-primary);
           margin: 0;
           line-height: 1.2;
         }
@@ -1090,7 +1189,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           font-size: 9px;
           font-weight: 700;
           letter-spacing: 0.07em;
-          color: #94a3b8;
+          color: var(--text-secondary);
         }
 
         .settings-search-box {
@@ -1102,7 +1201,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         .settings-search-icon {
           position: absolute;
           left: 9px;
-          color: #64748b;
+          color: var(--text-muted);
           pointer-events: none;
         }
 
@@ -1110,17 +1209,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           width: 100%;
           height: 30px;
           padding: 0 26px 0 28px;
-          background: rgba(255, 255, 255, 0.035);
-          border: 1px solid rgba(255, 255, 255, 0.08);
+          background: var(--bg-input);
+          border: 1px solid var(--border-subtle);
           border-radius: 6px;
           font-size: 11px;
-          color: #f1f5f9;
+          color: var(--text-primary);
           outline: none;
           transition: all 0.15s ease;
         }
 
         .settings-search-input:focus {
-          background: rgba(255, 255, 255, 0.06);
           border-color: rgba(168, 85, 247, 0.5);
           box-shadow: 0 0 0 2px rgba(168, 85, 247, 0.12);
         }
@@ -1130,7 +1228,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           right: 7px;
           background: transparent;
           border: none;
-          color: #94a3b8;
+          color: var(--text-secondary);
           cursor: pointer;
           display: flex;
           align-items: center;
@@ -1140,8 +1238,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         }
 
         .settings-search-clear:hover {
-          color: #f1f5f9;
-          background: rgba(255, 255, 255, 0.08);
+          color: var(--text-primary);
+          background: var(--bg-surface-hover);
         }
 
         /* Category Nav */
@@ -1164,7 +1262,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           border-radius: 6px;
           border: 1px solid transparent;
           background: transparent;
-          color: #94a3b8;
+          color: var(--text-secondary);
           cursor: pointer;
           text-align: left;
           transition: background-color 0.14s ease, color 0.14s ease, border-color 0.14s ease;
@@ -1172,28 +1270,28 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         }
 
         .category-item-btn:hover {
-          color: #f1f5f9;
-          background: rgba(255, 255, 255, 0.04);
+          color: var(--text-primary);
+          background: var(--bg-surface-hover);
         }
 
         .category-item-btn.active {
-          color: #ffffff;
-          background: rgba(168, 85, 247, 0.14);
+          color: var(--accent-purple-text);
+          background: var(--accent-purple-dim);
           border-color: rgba(168, 85, 247, 0.32);
         }
 
         .cat-icon {
           flex-shrink: 0;
-          color: #64748b;
+          color: var(--text-muted);
           transition: color 0.14s ease;
         }
 
         .category-item-btn:hover .cat-icon {
-          color: #cbd5e1;
+          color: var(--text-primary);
         }
 
         .category-item-btn.active .cat-icon {
-          color: #c084fc;
+          color: var(--accent-purple-text);
         }
 
         .cat-title {
@@ -1206,12 +1304,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
         .category-item-btn.active .cat-title {
           font-weight: 600;
-          color: #ffffff;
+          color: var(--text-primary);
         }
 
         .settings-sidebar-footer {
           padding: 12px 14px;
-          border-top: 1px solid rgba(255, 255, 255, 0.05);
+          border-top: 1px solid var(--border-subtle);
         }
 
         .app-system-pill {
@@ -1219,14 +1317,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           align-items: center;
           gap: 6px;
           font-size: 10px;
-          color: #64748b;
+          color: var(--text-muted);
         }
 
         .system-dot {
           width: 5px;
           height: 5px;
           border-radius: 50%;
-          background: #10b981;
+          background: var(--status-green);
         }
 
         /* Right Content Pane */
@@ -1235,16 +1333,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           display: flex;
           flex-direction: column;
           min-width: 0;
-          background: #0d1322;
+          background: var(--bg-surface);
         }
 
         .settings-content-header {
           padding: 16px 20px 14px 22px;
-          border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+          border-bottom: 1px solid var(--border-subtle);
           display: flex;
           align-items: flex-start;
           justify-content: space-between;
-          background: linear-gradient(180deg, rgba(255, 255, 255, 0.02) 0%, transparent 100%), #0d1322;
+          background: var(--bg-header);
           flex-shrink: 0;
           gap: 16px;
         }
@@ -1260,14 +1358,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           font-size: 16px;
           font-weight: 700;
           letter-spacing: -0.015em;
-          color: #f8fafc;
+          color: var(--text-primary);
           margin: 0;
           line-height: 1.25;
         }
 
         .section-subtitle {
           font-size: 12px;
-          color: #94a3b8;
+          color: var(--text-secondary);
           line-height: 1.45;
         }
 
@@ -1276,9 +1374,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           width: 28px;
           height: 28px;
           padding: 0;
-          background: rgba(255, 255, 255, 0.04);
-          border: 1px solid rgba(255, 255, 255, 0.08);
-          color: #94a3b8;
+          background: var(--bg-pill);
+          border: 1px solid var(--border-subtle);
+          color: var(--text-secondary);
           cursor: pointer;
           border-radius: 7px;
           display: inline-flex;
@@ -1286,20 +1384,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           justify-content: center;
           transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
           flex-shrink: 0;
-          box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
           user-select: none;
         }
 
         .settings-modal-close-btn:hover {
-          color: #f8fafc;
-          background: rgba(255, 255, 255, 0.09);
-          border-color: rgba(255, 255, 255, 0.18);
+          color: var(--text-primary);
+          background: var(--bg-elevated-hover);
+          border-color: var(--border-hover);
           transform: translateY(-0.5px);
         }
 
         .settings-modal-close-btn:active {
           transform: translateY(0.5px);
-          background: rgba(255, 255, 255, 0.14);
         }
 
         /* Scroll Area */
@@ -1318,12 +1414,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         }
 
         .settings-content-scroll::-webkit-scrollbar-thumb {
-          background: rgba(255, 255, 255, 0.15);
+          background: var(--scrollbar-thumb);
           border-radius: 4px;
         }
 
         .settings-content-scroll::-webkit-scrollbar-thumb:hover {
-          background: rgba(255, 255, 255, 0.25);
+          background: var(--scrollbar-thumb-hover);
         }
 
         .settings-tab-panel {
@@ -1353,8 +1449,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
         /* Cards and Setting Rows */
         .settings-section-card {
-          background: rgba(255, 255, 255, 0.02);
-          border: 1px solid rgba(255, 255, 255, 0.06);
+          background: var(--bg-card-inner);
+          border: 1px solid var(--border-subtle);
           border-radius: 10px;
           padding: 4px 14px;
           display: flex;
@@ -1369,8 +1465,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           font-size: 10px;
           font-weight: 700;
           letter-spacing: 0.07em;
-          color: #94a3b8;
-          border-bottom: 1px dashed rgba(255, 255, 255, 0.08);
+          color: var(--text-secondary);
+          border-bottom: 1px dashed var(--border-subtle);
           margin-bottom: 4px;
         }
 
@@ -1379,7 +1475,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           align-items: center;
           justify-content: space-between;
           padding: 13px 0;
-          border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+          border-bottom: 1px solid var(--border-subtle);
           gap: 20px;
         }
 
@@ -1398,12 +1494,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         .setting-label {
           font-size: 13px;
           font-weight: 600;
-          color: #f1f5f9;
+          color: var(--text-primary);
         }
 
         .setting-subtext {
           font-size: 11px;
-          color: #94a3b8;
+          color: var(--text-secondary);
           line-height: 1.4;
         }
 
@@ -1421,10 +1517,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           justify-content: space-between;
           gap: 10px;
           padding: 0 10px;
-          background: #080c14;
-          border: 1px solid rgba(255, 255, 255, 0.09);
+          background: var(--bg-input);
+          border: 1px solid var(--border-subtle);
           border-radius: 6px;
-          color: #cbd5e1;
+          color: var(--text-primary);
           font-size: 11.5px;
           cursor: pointer;
           transition: border-color 0.15s ease, background-color 0.15s ease;
@@ -1434,9 +1530,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
         .custom-dropdown-trigger:hover,
         .custom-dropdown-trigger.active {
-          background: #0f1524;
+          background: var(--bg-surface-hover);
           border-color: rgba(168, 85, 247, 0.45);
-          color: #f8fafc;
+          color: var(--text-primary);
         }
 
         .dropdown-trigger-left {
@@ -1447,19 +1543,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         }
 
         .trigger-icon {
-          color: #a855f7;
+          color: var(--accent-purple);
           flex-shrink: 0;
         }
 
         .dropdown-trigger-chevron {
-          color: #64748b;
+          color: var(--text-muted);
           transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), color 0.15s ease;
           flex-shrink: 0;
         }
 
         .dropdown-trigger-chevron.open {
           transform: rotate(180deg);
-          color: #c084fc;
+          color: var(--accent-purple-text);
         }
 
         .custom-dropdown-menu {
@@ -1468,14 +1564,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           right: 0;
           width: 100%;
           min-width: 205px;
-          background: #0b101c;
-          border: 1px solid rgba(255, 255, 255, 0.1);
+          background: var(--bg-surface);
+          border: 1px solid var(--border-hover);
           border-radius: 8px;
           padding: 4px;
           display: flex;
           flex-direction: column;
           gap: 2px;
-          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(168, 85, 247, 0.15);
+          box-shadow: var(--shadow-dropdown);
           z-index: 1000;
           animation: customDropdownFade 0.12s cubic-bezier(0.16, 1, 0.3, 1) forwards;
           backdrop-filter: blur(12px);
@@ -1503,7 +1599,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           border-radius: 5px;
           border: none;
           background: transparent;
-          color: #94a3b8;
+          color: var(--text-secondary);
           font-size: 11px;
           cursor: pointer;
           transition: background-color 0.12s ease, color 0.12s ease;
@@ -1512,13 +1608,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         }
 
         .custom-dropdown-item:hover {
-          background: rgba(255, 255, 255, 0.05);
-          color: #f1f5f9;
+          background: var(--bg-surface-hover);
+          color: var(--text-primary);
         }
 
         .custom-dropdown-item.selected {
-          background: rgba(168, 85, 247, 0.14);
-          color: #ffffff;
+          background: var(--accent-purple-dim);
+          color: var(--accent-purple-text);
           font-weight: 600;
         }
 
@@ -1530,24 +1626,24 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         }
 
         .custom-dropdown-item .item-icon {
-          color: #64748b;
+          color: var(--text-muted);
           flex-shrink: 0;
         }
 
         .custom-dropdown-item.selected .item-icon {
-          color: #c084fc;
+          color: var(--accent-purple-text);
         }
 
         .custom-dropdown-item .item-check {
-          color: #a855f7;
+          color: var(--accent-purple);
           flex-shrink: 0;
         }
 
         .setting-select {
-          background: #080c14;
-          border: 1px solid rgba(255, 255, 255, 0.09);
+          background: var(--bg-input);
+          border: 1px solid var(--border-subtle);
           border-radius: 6px;
-          color: #cbd5e1;
+          color: var(--text-primary);
           font-size: 12px;
           padding: 5px 10px;
           outline: none;
@@ -1564,8 +1660,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           width: 38px;
           height: 20px;
           border-radius: 20px;
-          background: rgba(255, 255, 255, 0.1);
-          border: 1px solid rgba(255, 255, 255, 0.12);
+          background: var(--bg-toggle-off);
+          border: 1px solid var(--border-hover);
           position: relative;
           cursor: pointer;
           transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
@@ -1588,7 +1684,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           border-radius: 50%;
           background: #ffffff;
           transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
-          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
         }
 
         .setting-toggle-btn.active .toggle-switch-handle {
@@ -1597,8 +1693,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
         .setting-segmented {
           display: inline-flex;
-          background: #080c14;
-          border: 1px solid rgba(255, 255, 255, 0.07);
+          background: var(--bg-toggle-group);
+          border: 1px solid var(--border-subtle);
           border-radius: 6px;
           padding: 2px;
           gap: 2px;
@@ -1609,11 +1705,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           display: inline-flex;
           align-items: center;
           gap: 5px;
-          padding: 3px 9px;
+          padding: 4px 10px;
           border-radius: 4px;
           font-size: 11px;
           font-weight: 500;
-          color: #94a3b8;
+          color: var(--text-secondary);
           background: transparent;
           border: none;
           cursor: pointer;
@@ -1621,13 +1717,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         }
 
         .setting-segment-btn:hover {
-          color: #ffffff;
+          color: var(--text-primary);
         }
 
         .setting-segment-btn.active {
-          background: rgba(168, 85, 247, 0.18);
-          color: #c084fc;
-          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+          background: var(--bg-surface);
+          color: var(--accent-purple-text);
+          box-shadow: var(--shadow-card), inset 0 0 0 1px rgba(124, 58, 237, 0.32);
+          font-weight: 600;
         }
 
         .setting-action-btn {
@@ -1645,36 +1742,37 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         }
 
         .setting-action-btn.primary {
-          background: rgba(56, 189, 248, 0.1);
-          color: #38bdf8;
-          border-color: rgba(56, 189, 248, 0.25);
+          background: var(--status-cyan-dim);
+          color: var(--status-cyan-text);
+          border-color: rgba(56, 189, 248, 0.28);
         }
 
         .setting-action-btn.primary:hover:not(:disabled) {
-          background: rgba(56, 189, 248, 0.18);
-          border-color: rgba(56, 189, 248, 0.45);
-        }
-
-        .setting-action-btn.secondary {
-          background: rgba(255, 255, 255, 0.04);
-          color: #cbd5e1;
-          border-color: rgba(255, 255, 255, 0.08);
-        }
-
-        .setting-action-btn.secondary:hover {
-          background: rgba(255, 255, 255, 0.08);
+          background: var(--status-cyan);
+          border-color: var(--status-cyan);
           color: #ffffff;
         }
 
+        .setting-action-btn.secondary {
+          background: var(--bg-pill);
+          color: var(--text-primary);
+          border-color: var(--border-hover);
+        }
+
+        .setting-action-btn.secondary:hover {
+          background: var(--bg-elevated-hover);
+        }
+
         .setting-action-btn.danger {
-          background: rgba(239, 68, 68, 0.1);
-          color: #f87171;
-          border-color: rgba(239, 68, 68, 0.25);
+          background: var(--status-red-dim);
+          color: var(--status-red-text);
+          border-color: rgba(239, 68, 68, 0.34);
         }
 
         .setting-action-btn.danger:hover {
-          background: rgba(239, 68, 68, 0.2);
-          border-color: rgba(239, 68, 68, 0.45);
+          background: var(--status-red);
+          border-color: var(--status-red);
+          color: #ffffff;
         }
 
         .confirm-btn-group {
@@ -1693,8 +1791,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         }
 
         .storage-metric-tile {
-          background: rgba(255, 255, 255, 0.02);
-          border: 1px solid rgba(255, 255, 255, 0.05);
+          background: var(--bg-card);
+          border: 1px solid var(--border-subtle);
           border-radius: 7px;
           padding: 8px 10px;
           display: flex;
@@ -1706,33 +1804,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           font-size: 9px;
           font-weight: 700;
           letter-spacing: 0.06em;
-          color: #64748b;
+          color: var(--text-muted);
         }
 
         .metric-v {
           font-size: 13px;
           font-weight: 700;
-          color: #f1f5f9;
-        }
-
-        .theme-badge-preview {
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
-          padding: 3px 8px;
-          border-radius: 5px;
-          background: rgba(255, 255, 255, 0.04);
-          border: 1px solid rgba(255, 255, 255, 0.08);
-          font-size: 10px;
-          color: #94a3b8;
-        }
-
-        .theme-chip.dark {
-          width: 8px;
-          height: 8px;
-          border-radius: 50%;
-          background: #7c3aed;
-          box-shadow: 0 0 6px rgba(124, 58, 237, 0.8);
+          color: var(--text-primary);
         }
 
         /* About Card */
@@ -1753,8 +1831,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           width: 48px;
           height: 48px;
           border-radius: 12px;
-          background: rgba(255, 255, 255, 0.03);
-          border: 1px solid rgba(255, 255, 255, 0.08);
+          background: var(--bg-card);
+          border: 1px solid var(--border-subtle);
           display: flex;
           align-items: center;
           justify-content: center;
@@ -1772,26 +1850,29 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           display: flex;
           flex-direction: column;
           gap: 4px;
+          flex: 1;
+          min-width: 0;
         }
 
         .about-title-row {
           display: flex;
           align-items: center;
           gap: 8px;
+          flex-wrap: wrap;
         }
 
         .about-app-name {
           font-size: 15px;
           font-weight: 700;
-          color: #ffffff;
+          color: var(--text-primary);
           margin: 0;
         }
 
         .about-version-badge {
           font-size: 10px;
-          color: #c084fc;
-          background: rgba(168, 85, 247, 0.1);
-          border: 1px solid rgba(168, 85, 247, 0.25);
+          color: var(--accent-purple-text);
+          background: var(--accent-purple-dim);
+          border: 1px solid rgba(168, 85, 247, 0.28);
           padding: 1px 6px;
           border-radius: 4px;
           font-weight: 600;
@@ -1799,7 +1880,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
         .about-app-desc {
           font-size: 12px;
-          color: #94a3b8;
+          color: var(--text-secondary);
           margin: 0;
           line-height: 1.4;
         }
@@ -1813,9 +1894,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
         .platform-tag {
           font-size: 10px;
-          color: #64748b;
-          background: rgba(255, 255, 255, 0.03);
-          border: 1px solid rgba(255, 255, 255, 0.06);
+          color: var(--text-secondary);
+          background: var(--bg-elevated);
+          border: 1px solid var(--border-subtle);
           padding: 2px 7px;
           border-radius: 4px;
         }
@@ -1832,9 +1913,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           gap: 8px;
           padding: 8px 12px;
           border-radius: 7px;
-          background: rgba(255, 255, 255, 0.025);
-          border: 1px solid rgba(255, 255, 255, 0.06);
-          color: #cbd5e1;
+          background: var(--bg-card);
+          border: 1px solid var(--border-subtle);
+          color: var(--text-primary);
           font-size: 11px;
           font-weight: 500;
           cursor: pointer;
@@ -1843,18 +1924,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         }
 
         .about-link-btn:hover {
-          background: rgba(255, 255, 255, 0.06);
-          border-color: rgba(255, 255, 255, 0.14);
-          color: #ffffff;
+          background: var(--bg-surface-hover);
+          border-color: var(--border-hover);
+          color: var(--text-primary);
         }
 
         .about-link-btn .link-arrow {
           margin-left: auto;
-          color: #64748b;
+          color: var(--text-muted);
         }
 
         .about-link-btn:hover .link-arrow {
-          color: #93c5fd;
+          color: var(--text-link);
         }
 
         .spin {

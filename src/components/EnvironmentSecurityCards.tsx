@@ -89,145 +89,146 @@ export const EnvironmentSecurityCards: React.FC = () => {
 
       <style>{`
         .env-security-grid {
-          display: grid;
-          grid-template-columns: repeat(2, 1fr);
-          gap: 14px;
-          margin-bottom: 20px;
+          display:grid;
+          grid-template-columns:repeat(2, 1fr);
+          gap:14px;
+          margin-bottom:20px;
         }
 
         .info-card {
-          background: #121826;
-          border: 1px solid #1e283d;
-          border-radius: 9px;
-          padding: 16px 18px;
-          display: flex;
-          flex-direction: column;
-          gap: 12px;
-          transition: border-color 0.15s ease;
+          background:var(--bg-card);
+          border:1px solid var(--border-subtle);
+          border-radius:9px;
+          padding:16px 18px;
+          display:flex;
+          flex-direction:column;
+          gap:12px;
+          box-shadow:var(--shadow-card);
+          transition:border-color 0.15s ease;
         }
 
         .info-card:hover {
-          border-color: #2b3a56;
+          border-color:var(--border-hover);
         }
 
         .info-card-header {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          border-bottom: 1px solid #1c2638;
-          padding-bottom: 10px;
+          display:flex;
+          align-items:center;
+          justify-content:space-between;
+          border-bottom:1px solid var(--border-subtle);
+          padding-bottom:10px;
         }
 
         .card-title {
-          font-size: 13.5px;
-          font-weight: 700;
-          color: #f1f5f9;
-          letter-spacing: -0.01em;
+          font-size:13.5px;
+          font-weight:700;
+          color:var(--text-primary);
+          letter-spacing:-0.01em;
         }
 
         .active-tag {
-          color: #10b981;
-          font-size: 11px;
-          font-weight: 600;
-          background: rgba(16, 185, 129, 0.12);
-          border: 1px solid rgba(16, 185, 129, 0.25);
-          padding: 2px 8px;
-          border-radius: 4px;
+          color:var(--status-green-text);
+          font-size:11px;
+          font-weight:600;
+          background:var(--status-green-dim);
+          border:1px solid rgba(16, 185, 129, 0.3);
+          padding:2px 8px;
+          border-radius:4px;
         }
 
         .info-card-body {
-          display: flex;
-          flex-direction: column;
-          gap: 10px;
+          display:flex;
+          flex-direction:column;
+          gap:10px;
         }
 
         .env-primary-name {
-          font-size: 16px;
-          font-weight: 700;
-          color: #f8fafc;
+          font-size:16px;
+          font-weight:700;
+          color:var(--text-primary);
         }
 
         .security-summary-row {
-          display: flex;
-          align-items: center;
-          gap: 8px;
+          display:flex;
+          align-items:center;
+          gap:8px;
         }
 
         .check-icon {
-          color: #10b981;
-          flex-shrink: 0;
+          color:var(--status-green-text);
+          flex-shrink:0;
         }
 
         .security-summary-text {
-          font-size: 13px;
-          font-weight: 600;
-          color: #e2e8f0;
+          font-size:13px;
+          font-weight:600;
+          color:var(--text-primary);
         }
 
         .env-meta-rows {
-          display: flex;
-          flex-direction: column;
-          gap: 6px;
+          display:flex;
+          flex-direction:column;
+          gap:6px;
         }
 
         .meta-row {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          font-size: 12px;
+          display:flex;
+          align-items:center;
+          gap:8px;
+          font-size:12px;
         }
 
         .meta-icon {
-          color: #64748b;
-          flex-shrink: 0;
+          color:var(--text-muted);
+          flex-shrink:0;
         }
 
         .meta-icon.text-amber {
-          color: #f59e0b;
+          color:var(--status-amber-text);
         }
 
         .meta-icon.text-cyan {
-          color: #38bdf8;
+          color:var(--status-cyan-text);
         }
 
         .meta-label {
-          color: #64748b;
+          color:var(--text-muted);
         }
 
         .meta-value {
-          color: #cbd5e1;
+          color:var(--text-secondary);
         }
 
         .card-footer-tags {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          margin-top: 4px;
+          display:flex;
+          align-items:center;
+          gap:8px;
+          margin-top:4px;
         }
 
         .info-pill {
-          background: #0d121f;
-          border: 1px solid #202b3e;
-          color: #7b8ea6;
-          font-size: 10px;
-          padding: 3px 8px;
-          border-radius: 4px;
+          background:var(--bg-card-inner);
+          border:1px solid var(--border-subtle);
+          color:var(--text-secondary);
+          font-size:10px;
+          padding:3px 8px;
+          border-radius:4px;
         }
 
         .card-footer-audit {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          margin-top: 4px;
+          display:flex;
+          align-items:center;
+          gap:6px;
+          margin-top:4px;
         }
 
         .audit-icon {
-          color: #64748b;
+          color:var(--text-muted);
         }
 
         .audit-text {
-          font-size: 11px;
-          color: #64748b;
+          font-size:11px;
+          color:var(--text-muted);
         }
       `}</style>
     </div>

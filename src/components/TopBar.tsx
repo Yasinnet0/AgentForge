@@ -9,7 +9,10 @@ import {
   Sparkles,
   Boxes,
   CornerDownLeft,
+  Sun,
+  Moon,
 } from 'lucide-react';
+import { useTheme } from '../context/ThemeContext';
 import {
   SupportedAgent,
   AgentCapabilitiesPayload
@@ -97,6 +100,7 @@ const TopBarComponent: React.FC<TopBarProps> = ({
   onSelectSearchResult,
 }) => {
   const [isMaximized, setIsMaximized] = useState(false);
+  const { resolvedTheme, toggleTheme } = useTheme();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [categoryFilter, setCategoryFilter] = useState<'all' | 'skills' | 'mcp' | 'plugins' | 'agents'>('all');
@@ -236,7 +240,7 @@ const TopBarComponent: React.FC<TopBarProps> = ({
             command: c.command,
             url: c.url,
             sourceAgentName: c.category || 'Catalog',
-            sourceAgentColor: '#38bdf8',
+            sourceAgentColor: '#0284c7',
             isCatalog: true,
           },
           searchStr: `${c.name} ${c.description || ''} ${c.category || ''} ${c.author || ''} ${(c.tags || []).join(' ')} ${c.command || ''}`.toLowerCase(),
@@ -276,7 +280,7 @@ const TopBarComponent: React.FC<TopBarProps> = ({
             description: c.description,
             pluginName: c.category,
             sourceAgentName: c.author || 'Catalog',
-            sourceAgentColor: '#c084fc',
+            sourceAgentColor: '#7c3aed',
             isCatalog: true,
           },
           searchStr: `${c.name} ${c.description || ''} ${c.category || ''} ${c.author || ''} ${(c.tags || []).join(' ')}`.toLowerCase(),
@@ -316,7 +320,7 @@ const TopBarComponent: React.FC<TopBarProps> = ({
             description: c.description,
             skillsCount: c.bundledSkills?.length || 0,
             sourceAgentName: c.category || 'Catalog',
-            sourceAgentColor: '#fbbf24',
+            sourceAgentColor: '#d97706',
             isCatalog: true,
           },
           searchStr: `${c.name} ${c.description || ''} ${c.category || ''} ${c.author || ''} ${(c.tags || []).join(' ')}`.toLowerCase(),
@@ -417,7 +421,7 @@ const TopBarComponent: React.FC<TopBarProps> = ({
         title: s.name,
         subtitle: s.description || 'Specialized agent instructions and workflows',
         badge: s.pluginName ? s.pluginName : (s.isCatalog ? 'Catalog' : 'Skill'),
-        badgeColor: '#c084fc',
+        badgeColor: '#7c3aed',
         agentName: s.sourceAgentName,
         agentColor: s.sourceAgentColor,
         tab: 'skills',
@@ -432,7 +436,7 @@ const TopBarComponent: React.FC<TopBarProps> = ({
         title: m.name,
         subtitle: m.command ? `Command: ${m.command}` : (m.url ? `URL: ${m.url}` : 'MCP Server'),
         badge: m.transport.toUpperCase(),
-        badgeColor: m.transport === 'sse' ? '#10b981' : '#38bdf8',
+        badgeColor: m.transport === 'sse' ? '#059669' : '#0284c7',
         agentName: m.sourceAgentName,
         agentColor: m.sourceAgentColor,
         tab: 'mcp',
@@ -447,7 +451,7 @@ const TopBarComponent: React.FC<TopBarProps> = ({
         title: p.name,
         subtitle: p.description || 'Pre-configured capability kit',
         badge: `${p.skillsCount || 0} skills`,
-        badgeColor: '#fbbf24',
+        badgeColor: '#d97706',
         agentName: p.sourceAgentName,
         agentColor: p.sourceAgentColor,
         tab: 'plugins',
@@ -897,8 +901,22 @@ const TopBarComponent: React.FC<TopBarProps> = ({
         )}
       </div>
 
-      {/* Right: Window Controls */}
+      {/* Right: Theme Switch + Window Controls */}
       <div className="topbar-right no-drag">
+        <Tooltip content={resolvedTheme === 'light' ? 'Switch to Dark Mode' : 'Switch to White Mode'} position="bottom">
+          <button
+            type="button"
+            className={`theme-toggle-btn ${resolvedTheme === 'light' ? 'is-light' : 'is-dark'}`}
+            onClick={(e) => toggleTheme(e)}
+            aria-label={resolvedTheme === 'light' ? 'Switch to Dark Mode' : 'Switch to White Mode'}
+          >
+            <span className="theme-icon-stack" aria-hidden="true">
+              <Sun size={13} className="theme-icon sun-icon" />
+              <Moon size={13} className="theme-icon moon-icon" />
+            </span>
+          </button>
+        </Tooltip>
+
         {/* Custom Window Controls */}
         <div className="window-controls">
           <Tooltip content="Minimize" position="bottom">
@@ -965,8 +983,8 @@ const TopBarComponent: React.FC<TopBarProps> = ({
         .topbar-container {
           height: 48px;
           min-height: 48px;
-          background: #0d121f;
-          border-bottom: 1px solid #1c2538;
+          background: var(--bg-header);
+          border-bottom: 1px solid var(--border-subtle);
           display: flex;
           align-items: center;
           justify-content: space-between;
@@ -1006,7 +1024,7 @@ const TopBarComponent: React.FC<TopBarProps> = ({
           width: 26px;
           height: 26px;
           object-fit: contain;
-          filter: drop-shadow(0 2px 7px rgba(56, 189, 248, 0.45));
+          filter: drop-shadow(0 2px 7px rgba(56, 189, 248, 0.35));
           transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), filter 0.2s ease;
           user-select: none;
           -webkit-user-drag: none;
@@ -1014,7 +1032,7 @@ const TopBarComponent: React.FC<TopBarProps> = ({
 
         .brand-badge:hover .brand-logo-img {
           transform: scale(1.1) rotate(-3deg);
-          filter: drop-shadow(0 3px 12px rgba(168, 85, 247, 0.65));
+          filter: drop-shadow(0 3px 12px rgba(168, 85, 247, 0.55));
         }
 
         .brand-icon {
@@ -1035,28 +1053,28 @@ const TopBarComponent: React.FC<TopBarProps> = ({
           font-weight: 700;
           font-size: 15px;
           letter-spacing: -0.01em;
-          color: #f8fafc;
+          color: var(--text-primary);
         }
 
         .env-badge {
           display: flex;
           align-items: center;
           gap: 6px;
-          background: #131927;
-          border: 1px solid #1e283d;
+          background: var(--bg-card);
+          border: 1px solid var(--bg-card-border);
           padding: 4px 9px;
           border-radius: 6px;
           font-size: 11.5px;
         }
 
         .env-label {
-          color: #64748b;
+          color: var(--text-muted);
           font-size: 10.5px;
           font-weight: 500;
         }
 
         .env-value {
-          color: #93c5fd;
+          color: var(--text-link);
           font-weight: 600;
         }
 
@@ -1075,15 +1093,21 @@ const TopBarComponent: React.FC<TopBarProps> = ({
           z-index: 10;
         }
 
+        @media (max-width: 1340px) {
+          .topbar-center {
+            max-width: 440px;
+          }
+        }
+
         @media (max-width: 1100px) {
           .topbar-center {
-            max-width: 420px;
+            max-width: 390px;
           }
         }
 
         @media (max-width: 960px) {
           .topbar-center {
-            max-width: 320px;
+            max-width: 310px;
           }
         }
 
@@ -1093,25 +1117,25 @@ const TopBarComponent: React.FC<TopBarProps> = ({
           height: 36px;
           width: 100%;
           box-sizing: border-box;
-          background: #111726;
-          border: 1px solid #1f2c42;
+          background: var(--bg-input);
+          border: 1px solid var(--border-subtle);
           border-radius: 8px;
           padding: 0 12px;
           transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
         }
 
         .search-bar-container:hover {
-          border-color: #2b3d5b;
+          border-color: var(--border-hover);
         }
 
         .search-bar-container:focus-within {
-          border-color: #6366f1;
-          box-shadow: 0 0 0 1px #6366f1, 0 0 14px rgba(99, 102, 241, 0.18);
-          background: #131b2e;
+          border-color: var(--accent-indigo);
+          box-shadow: 0 0 0 1px var(--accent-indigo), 0 0 14px rgba(99, 102, 241, 0.18);
+          background: var(--bg-surface);
         }
 
         .search-icon {
-          color: #64748b;
+          color: var(--text-muted);
           margin-right: 8px;
           flex-shrink: 0;
         }
@@ -1121,14 +1145,14 @@ const TopBarComponent: React.FC<TopBarProps> = ({
           background: transparent;
           border: none;
           outline: none;
-          color: #f1f5f9;
+          color: var(--text-primary);
           font-size: 12.5px;
           font-family: inherit;
           min-width: 0;
         }
 
         .search-input::placeholder {
-          color: #55657e;
+          color: var(--text-muted);
         }
 
         .search-shortcut {
@@ -1148,9 +1172,9 @@ const TopBarComponent: React.FC<TopBarProps> = ({
           padding: 0 5px;
           font-size: 9.5px;
           font-weight: 600;
-          color: #7b8ea6;
-          background: rgba(255, 255, 255, 0.05);
-          border: 1px solid rgba(255, 255, 255, 0.09);
+          color: var(--text-secondary);
+          background: var(--bg-pill);
+          border: 1px solid var(--border-subtle);
           border-radius: 4px;
           line-height: 1;
         }
@@ -1167,7 +1191,7 @@ const TopBarComponent: React.FC<TopBarProps> = ({
           justify-content: center;
           background: transparent;
           border: none;
-          color: #7b8ea6;
+          color: var(--text-secondary);
           padding: 3px;
           border-radius: 4px;
           cursor: pointer;
@@ -1176,37 +1200,87 @@ const TopBarComponent: React.FC<TopBarProps> = ({
         }
 
         .search-clear-btn:hover {
-          color: #f1f5f9;
-          background: #1e2a42;
-        }
-          color: #7b8ea6;
-          padding: 2px;
-          border-radius: 4px;
-          cursor: pointer;
-          transition: all 0.15s ease;
-        }
-
-        .search-clear-btn:hover {
-          color: #f1f5f9;
-          background: #1e2a42;
+          color: var(--text-primary);
+          background: var(--bg-surface-hover);
         }
 
         .shortcut-divider {
-          color: #4b5d73;
+          color: var(--text-muted);
           margin-left: 2px;
         }
 
         .topbar-right {
           display: flex;
           align-items: center;
-          gap: 12px;
+          gap: 8px;
+        }
+
+        .theme-toggle-btn {
+          position: relative;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 28px;
+          height: 28px;
+          border-radius: 6px;
+          background: var(--bg-pill);
+          border: 1px solid var(--border-subtle);
+          color: var(--text-secondary);
+          cursor: pointer;
+          transition: background-color 0.14s ease, border-color 0.14s ease, color 0.14s ease;
+        }
+
+        .theme-toggle-btn:hover {
+          background: var(--bg-elevated-hover);
+          border-color: var(--border-hover);
+          color: var(--text-primary);
+        }
+
+        .theme-icon-stack {
+          position: relative;
+          width: 14px;
+          height: 14px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .theme-toggle-btn .theme-icon {
+          position: absolute;
+          inset: 0;
+          margin: auto;
+          transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.28s cubic-bezier(0.22, 1, 0.36, 1), color 0.2s ease;
+        }
+
+        .theme-toggle-btn.is-dark .sun-icon {
+          color: #f59e0b;
+          opacity: 1;
+          transform: rotate(0deg) scale(1);
+        }
+
+        .theme-toggle-btn.is-dark .moon-icon {
+          color: #4f46e5;
+          opacity: 0;
+          transform: rotate(90deg) scale(0.55);
+        }
+
+        .theme-toggle-btn.is-light .sun-icon {
+          color: #f59e0b;
+          opacity: 0;
+          transform: rotate(-90deg) scale(0.55);
+        }
+
+        .theme-toggle-btn.is-light .moon-icon {
+          color: #4f46e5;
+          opacity: 1;
+          transform: rotate(0deg) scale(1);
         }
 
         .icon-button {
           position: relative;
-          background: #151c2d;
-          border: 1px solid #23304a;
-          color: #94a3b8;
+          background: var(--bg-pill);
+          border: 1px solid var(--border-subtle);
+          color: var(--text-secondary);
           width: 32px;
           height: 32px;
           border-radius: 7px;
@@ -1218,17 +1292,16 @@ const TopBarComponent: React.FC<TopBarProps> = ({
         }
 
         .icon-button:hover {
-          background: #1d273e;
-          color: #f8fafc;
-          border-color: #334466;
+          background: var(--bg-elevated-hover);
+          color: var(--text-primary);
+          border-color: var(--border-hover);
         }
 
         .icon-button.active {
-          background: rgba(99, 102, 241, 0.18);
-          color: #a5b4fc;
+          background: var(--accent-purple-dim);
+          color: var(--accent-indigo-text);
           border-color: rgba(99, 102, 241, 0.4);
         }
-
 
         .window-controls {
           display: flex;
@@ -1239,7 +1312,7 @@ const TopBarComponent: React.FC<TopBarProps> = ({
         .window-control-btn {
           background: transparent;
           border: none;
-          color: #8393a8;
+          color: var(--text-secondary);
           width: 30px;
           height: 30px;
           border-radius: 5px;
@@ -1251,8 +1324,8 @@ const TopBarComponent: React.FC<TopBarProps> = ({
         }
 
         .window-control-btn:hover {
-          background: #1c263c;
-          color: #f1f5f9;
+          background: var(--bg-surface-hover);
+          color: var(--text-primary);
         }
 
         .window-control-btn.close:hover {
@@ -1268,10 +1341,10 @@ const TopBarComponent: React.FC<TopBarProps> = ({
           right: 0;
           width: 100%;
           box-sizing: border-box;
-          background: #0d1322;
-          border: 1px solid #1f2c42;
+          background: var(--bg-surface);
+          border: 1px solid var(--border-hover);
           border-radius: 8px;
-          box-shadow: 0 16px 44px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(99, 102, 241, 0.12);
+          box-shadow: var(--shadow-dropdown);
           z-index: 1000;
           overflow: hidden;
           display: flex;
@@ -1300,8 +1373,8 @@ const TopBarComponent: React.FC<TopBarProps> = ({
           max-height: 34px;
           box-sizing: border-box;
           padding: 0 10px;
-          background: #090e18;
-          border-bottom: 1px solid #1a2538;
+          background: var(--bg-card-inner);
+          border-bottom: 1px solid var(--border-subtle);
           gap: 8px;
         }
 
@@ -1321,12 +1394,12 @@ const TopBarComponent: React.FC<TopBarProps> = ({
           align-items: center;
           gap: 5px;
           padding: 0 8px;
-          background: #111724;
-          border: 1px solid #1d283c;
+          background: var(--bg-pill);
+          border: 1px solid var(--border-subtle);
           border-radius: 4px;
           font-size: 11px;
           font-weight: 500;
-          color: #8ea1b8;
+          color: var(--text-secondary);
           cursor: pointer;
           white-space: nowrap;
           line-height: 1;
@@ -1335,15 +1408,15 @@ const TopBarComponent: React.FC<TopBarProps> = ({
         }
 
         .filter-tab-pill:hover {
-          background: #182235;
-          border-color: #2b3b55;
-          color: #e2e8f0;
+          background: var(--bg-pill-hover);
+          border-color: var(--border-hover);
+          color: var(--text-primary);
         }
 
         .filter-tab-pill.active {
-          background: rgba(99, 102, 241, 0.18);
-          border-color: #6366f1;
-          color: #c7d2fe;
+          background: var(--accent-purple-dim);
+          border-color: var(--accent-indigo);
+          color: var(--accent-indigo-text);
         }
 
         .filter-tab-pill .tab-icon {
@@ -1353,22 +1426,22 @@ const TopBarComponent: React.FC<TopBarProps> = ({
 
         .filter-tab-pill.active .tab-icon {
           opacity: 1;
-          color: #a5b4fc;
+          color: var(--accent-indigo-text);
         }
 
         .tab-pill-count {
           font-size: 10px;
           font-weight: 600;
-          color: #64748b;
-          background: rgba(255, 255, 255, 0.04);
+          color: var(--text-muted);
+          background: var(--bg-elevated);
           padding: 1px 4px;
           border-radius: 3px;
           line-height: 1;
         }
 
         .filter-tab-pill.active .tab-pill-count {
-          color: #818cf8;
-          background: rgba(99, 102, 241, 0.2);
+          color: var(--accent-indigo-text);
+          background: rgba(99, 102, 241, 0.18);
         }
 
         .filter-clear-pill {
@@ -1380,12 +1453,12 @@ const TopBarComponent: React.FC<TopBarProps> = ({
           align-items: center;
           gap: 4px;
           padding: 0 7px;
-          background: rgba(239, 68, 68, 0.08);
+          background: var(--status-red-dim);
           border: 1px solid rgba(239, 68, 68, 0.25);
           border-radius: 4px;
           font-size: 10px;
           font-weight: 600;
-          color: #f87171;
+          color: var(--status-red-text);
           cursor: pointer;
           white-space: nowrap;
           line-height: 1;
@@ -1394,8 +1467,8 @@ const TopBarComponent: React.FC<TopBarProps> = ({
         }
 
         .filter-clear-pill:hover {
-          background: rgba(239, 68, 68, 0.18);
-          border-color: #ef4444;
+          background: var(--status-red);
+          border-color: var(--status-red);
           color: #ffffff;
         }
 
@@ -1409,18 +1482,18 @@ const TopBarComponent: React.FC<TopBarProps> = ({
         }
 
         .empty-search-icon {
-          color: #4b5d78;
+          color: var(--text-muted);
         }
 
         .empty-search-title {
           font-size: 13.5px;
           font-weight: 600;
-          color: #f1f5f9;
+          color: var(--text-primary);
         }
 
         .empty-search-subtitle {
           font-size: 11.5px;
-          color: #64748b;
+          color: var(--text-muted);
           max-width: 320px;
           line-height: 1.4;
         }
@@ -1447,16 +1520,16 @@ const TopBarComponent: React.FC<TopBarProps> = ({
           font-size: 9.5px;
           font-family: var(--font-mono);
           font-weight: 700;
-          color: #64748b;
+          color: var(--text-muted);
           padding: 4px 8px;
           letter-spacing: 0.05em;
         }
 
-        .section-icon.text-sky { color: #38bdf8; }
-        .section-icon.text-purple { color: #c084fc; }
-        .section-icon.text-amber { color: #fbbf24; }
-        .section-icon.text-blue { color: #60a5fa; }
-        .section-icon.text-indigo { color: #818cf8; }
+        .section-icon.text-sky { color: var(--status-cyan-text); }
+        .section-icon.text-purple { color: var(--accent-purple-text); }
+        .section-icon.text-amber { color: var(--status-amber-text); }
+        .section-icon.text-blue { color: var(--status-blue-text); }
+        .section-icon.text-indigo { color: var(--accent-indigo-text); }
 
         .result-item {
           display: flex;
@@ -1476,8 +1549,8 @@ const TopBarComponent: React.FC<TopBarProps> = ({
 
         .result-item:hover,
         .result-item.item-active {
-          background: #141c2c;
-          border-color: #243550;
+          background: var(--bg-surface-hover);
+          border-color: var(--border-hover);
         }
 
         .item-icon-wrapper {
@@ -1495,20 +1568,20 @@ const TopBarComponent: React.FC<TopBarProps> = ({
         }
 
         .icon-mcp {
-          color: #38bdf8;
-          background: rgba(56, 189, 248, 0.12);
+          color: var(--status-cyan-text);
+          background: var(--status-cyan-dim);
           border-color: rgba(56, 189, 248, 0.25);
         }
 
         .icon-skill {
-          color: #c084fc;
-          background: rgba(192, 132, 252, 0.12);
+          color: var(--accent-purple-text);
+          background: var(--accent-purple-dim);
           border-color: rgba(192, 132, 252, 0.25);
         }
 
         .icon-plugin {
-          color: #fbbf24;
-          background: rgba(245, 158, 11, 0.12);
+          color: var(--status-amber-text);
+          background: var(--status-amber-dim);
           border-color: rgba(245, 158, 11, 0.25);
         }
 
@@ -1536,7 +1609,7 @@ const TopBarComponent: React.FC<TopBarProps> = ({
         .item-title {
           font-size: 12px;
           font-weight: 600;
-          color: #f1f5f9;
+          color: var(--text-primary);
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
@@ -1547,7 +1620,7 @@ const TopBarComponent: React.FC<TopBarProps> = ({
 
         .item-desc {
           font-size: 11px;
-          color: #7d90a6;
+          color: var(--text-secondary);
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
@@ -1569,9 +1642,9 @@ const TopBarComponent: React.FC<TopBarProps> = ({
           justify-content: center;
           padding: 0 5px;
           border-radius: 3px;
-          background: #192336;
-          border: 1px solid #23344e;
-          color: #93c5fd;
+          background: var(--status-blue-dim);
+          border: 1px solid rgba(59, 130, 246, 0.25);
+          color: var(--status-blue-text);
           font-weight: 600;
           white-space: nowrap;
           flex-shrink: 0;
@@ -1589,9 +1662,9 @@ const TopBarComponent: React.FC<TopBarProps> = ({
           justify-content: center;
           padding: 0 5px;
           border-radius: 3px;
-          background: #1e1b38;
-          border: 1px solid #362d60;
-          color: #d8b4fe;
+          background: var(--accent-purple-dim);
+          border: 1px solid rgba(168, 85, 247, 0.28);
+          color: var(--accent-purple-text);
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
@@ -1613,7 +1686,7 @@ const TopBarComponent: React.FC<TopBarProps> = ({
           padding: 0 6px;
           border-radius: 4px;
           border: 1px solid;
-          background: rgba(255, 255, 255, 0.03);
+          background: var(--bg-pill);
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
@@ -1622,7 +1695,7 @@ const TopBarComponent: React.FC<TopBarProps> = ({
         }
 
         .jump-icon {
-          color: #4b5f76;
+          color: var(--text-muted);
           opacity: 0;
           transition: opacity 0.12s ease;
           flex-shrink: 0;
@@ -1631,7 +1704,7 @@ const TopBarComponent: React.FC<TopBarProps> = ({
         .result-item:hover .jump-icon,
         .result-item.item-active .jump-icon {
           opacity: 1;
-          color: #818cf8;
+          color: var(--accent-indigo-text);
         }
 
         .popover-footer {
@@ -1643,10 +1716,10 @@ const TopBarComponent: React.FC<TopBarProps> = ({
           max-height: 28px;
           box-sizing: border-box;
           padding: 0 12px;
-          background: #080c14;
-          border-top: 1px solid #1a2538;
+          background: var(--bg-card-inner);
+          border-top: 1px solid var(--border-subtle);
           font-size: 10px;
-          color: #64748b;
+          color: var(--text-muted);
           user-select: none;
         }
 
@@ -1655,7 +1728,7 @@ const TopBarComponent: React.FC<TopBarProps> = ({
           align-items: center;
           gap: 6px;
           font-size: 10px;
-          color: #64748b;
+          color: var(--text-muted);
           line-height: 1;
         }
 
@@ -1663,13 +1736,13 @@ const TopBarComponent: React.FC<TopBarProps> = ({
           width: 5px;
           height: 5px;
           border-radius: 50%;
-          background: #10b981;
+          background: var(--status-green);
           box-shadow: 0 0 6px rgba(16, 185, 129, 0.6);
           flex-shrink: 0;
         }
 
         .filtered-scope-tag {
-          color: #818cf8;
+          color: var(--accent-indigo-text);
           margin-left: 4px;
           font-weight: 600;
           text-transform: uppercase;
@@ -1692,7 +1765,7 @@ const TopBarComponent: React.FC<TopBarProps> = ({
           align-items: center;
           gap: 4px;
           font-size: 10px;
-          color: #64748b;
+          color: var(--text-muted);
           line-height: 1;
         }
 
@@ -1703,13 +1776,13 @@ const TopBarComponent: React.FC<TopBarProps> = ({
           height: 16px;
           min-width: 16px;
           box-sizing: border-box;
-          background: #131b2a;
-          border: 1px solid #233146;
+          background: var(--bg-elevated);
+          border: 1px solid var(--border-subtle);
           padding: 0 4px;
           border-radius: 3px;
           font-size: 9px;
           font-weight: 600;
-          color: #94a3b8;
+          color: var(--text-secondary);
           font-family: var(--font-mono);
           line-height: 1;
         }
@@ -1720,7 +1793,7 @@ const TopBarComponent: React.FC<TopBarProps> = ({
           padding: 0 10px;
           font-size: 11px;
           font-weight: 500;
-          color: #a5b4fc;
+          color: var(--accent-indigo-text);
           background: rgba(99, 102, 241, 0.12);
           border: 1px solid rgba(99, 102, 241, 0.3);
           border-radius: 4px;
@@ -1732,8 +1805,8 @@ const TopBarComponent: React.FC<TopBarProps> = ({
         }
 
         .empty-reset-btn:hover {
-          background: rgba(99, 102, 241, 0.22);
-          border-color: #818cf8;
+          background: var(--accent-indigo);
+          border-color: var(--accent-indigo);
           color: #ffffff;
         }
       `}</style>

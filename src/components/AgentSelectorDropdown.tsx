@@ -36,19 +36,32 @@ const AgentRow = React.memo<AgentRowProps>(({ agent, onToggle, onOnly }) => {
         {agent.selected && <Check size={11} strokeWidth={2.8} />}
       </div>
 
-      <div className="agent-icon-pill" style={{ color: agent.color, background: `${agent.color}15` }}>
+      <div
+        className="agent-icon-pill"
+        style={{
+          color: agent.color,
+          background: `${agent.color}16`,
+          border: `1px solid ${agent.color}38`,
+        }}
+      >
         <Icon size={14} />
       </div>
 
       <div className="agent-row-info">
         <div className="agent-row-name-line">
           <span className="agent-row-name" title={agent.name}>{agent.name}</span>
-          {agent.detected && <span className="detected-badge font-mono">DETECTED</span>}
+          {agent.detected && (
+            <span className="detected-pill" title="Installed and detected on this machine">
+              <span className="detected-indicator" />
+              <span>Detected</span>
+            </span>
+          )}
         </div>
         <span className="agent-row-path font-mono" title={effectiveBase}>{effectiveBase}</span>
       </div>
 
       <button
+        type="button"
         className="only-btn font-mono"
         onClick={(e) => {
           e.stopPropagation();
@@ -56,7 +69,7 @@ const AgentRow = React.memo<AgentRowProps>(({ agent, onToggle, onOnly }) => {
         }}
         title={`Select only ${agent.name}`}
       >
-        only
+        Only
       </button>
     </div>
   );
@@ -233,8 +246,7 @@ const AgentSelectorDropdownComponent: React.FC<AgentSelectorDropdownProps> = ({
   const getLabel = () => {
     if (selectedCount === 0) return 'No Agent Selected';
     if (selectedCount === 1) return selectedAgents[0].name;
-    if (selectedCount === 2) return `${selectedAgents[0].name}, ${selectedAgents[1].name}`;
-    return `${selectedAgents[0].name} +${selectedCount - 1} more`;
+    return `${selectedAgents[0].name} +${selectedCount - 1}`;
   };
 
   return (
@@ -245,19 +257,13 @@ const AgentSelectorDropdownComponent: React.FC<AgentSelectorDropdownProps> = ({
         title="Select target AI agents"
       >
         <div className="trigger-left">
-          <span 
-            className="target-dot" 
-            style={{ 
-              backgroundColor: selectedCount === 1 ? selectedAgents[0].color : '#8b5cf6',
-              boxShadow: `0 0 8px ${selectedCount === 1 ? selectedAgents[0].color : '#8b5cf6'}80`
-            }} 
-          />
-          <span className="target-label font-mono">Agent:</span>
-          <span className="target-name font-mono">{getLabel()}</span>
+          <Bot size={13} className="trigger-agent-icon" />
+          <span className="target-label">Agent:</span>
+          <span className="target-name">{getLabel()}</span>
         </div>
         <div className="trigger-right">
           <span className="agent-count-pill count-pill font-mono">{selectedCount}</span>
-          <ChevronDown size={11} className={`dropdown-chevron ${isOpen && !isClosing ? 'rotated' : ''}`} />
+          <ChevronDown size={12} className={`dropdown-chevron ${isOpen && !isClosing ? 'rotated' : ''}`} />
         </div>
       </button>
 
@@ -265,7 +271,7 @@ const AgentSelectorDropdownComponent: React.FC<AgentSelectorDropdownProps> = ({
         <div className={`agent-dropdown-menu ${isClosing ? 'closing' : ''}`}>
           <div className="dropdown-header">
             <span className="dropdown-title">TARGET AGENTS</span>
-            <span className="dropdown-sub">Active installation targets</span>
+            <span className="dropdown-active-pill font-mono">{selectedCount} / {localAgents.length}</span>
           </div>
 
           <div className="agent-items-list">
@@ -283,349 +289,396 @@ const AgentSelectorDropdownComponent: React.FC<AgentSelectorDropdownProps> = ({
 
       <style>{`
         .agent-selector-wrapper {
-          position: relative;
-          display: inline-block;
-          width: 240px;
-          max-width: 260px;
-          min-width: 120px;
-          flex-shrink: 1;
+          position:relative;
+          display:inline-block;
+          width:284px;
+          min-width:140px;
+          flex-shrink:0;
+        }
+
+        @media (max-width: 1340px) {
+          .agent-selector-wrapper {
+            width:244px;
+          }
         }
 
         @media (max-width: 1150px) {
           .agent-selector-wrapper {
-            width: 190px;
+            width:210px;
           }
           .target-label {
-            display: none;
+            display:none;
           }
         }
 
         @media (max-width: 960px) {
           .agent-selector-wrapper {
-            width: 155px;
+            width:176px;
           }
           .agent-selector-trigger {
-            padding: 0 8px !important;
+            padding:0 8px !important;
           }
         }
 
         .agent-selector-trigger {
-          width: 100%;
-          height: 34px;
-          box-sizing: border-box;
-          background: #131b2e;
-          border: 1px solid #22304a;
-          border-radius: 7px;
-          padding: 0 12px;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          cursor: pointer;
-          transition: all 0.15s ease;
+          width:100%;
+          height:34px;
+          box-sizing:border-box;
+          background:var(--bg-pill);
+          border:1px solid var(--border-subtle);
+          border-radius:8px;
+          padding:0 10px;
+          display:flex;
+          align-items:center;
+          justify-content:space-between;
+          gap:8px;
+          cursor:pointer;
+          transition:background 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease;
         }
 
-        .agent-selector-trigger:hover,
+        .agent-selector-trigger:hover {
+          background:var(--bg-pill-hover);
+          border-color:var(--border-hover);
+        }
+
         .agent-selector-trigger.open {
-          background: #18233c;
-          border-color: #6366f1;
+          background:var(--bg-surface);
+          border-color:var(--border-hover);
+          box-shadow:var(--shadow-card);
         }
 
         .trigger-left {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          min-width: 0;
-          flex: 1;
+          display:flex;
+          align-items:center;
+          gap:6px;
+          min-width:0;
+          flex:1;
         }
 
         .trigger-right {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          flex-shrink: 0;
+          display:flex;
+          align-items:center;
+          gap:6px;
+          flex-shrink:0;
         }
 
-        .target-dot {
-          width: 6px;
-          height: 6px;
-          border-radius: 50%;
-          background: #8b5cf6;
-          box-shadow: 0 0 8px rgba(139, 92, 246, 0.6);
-          flex-shrink: 0;
+        .trigger-agent-icon {
+          color:var(--text-muted);
+          flex-shrink:0;
+          transition:color 0.14s ease;
+        }
+
+        .agent-selector-trigger:hover .trigger-agent-icon,
+        .agent-selector-trigger.open .trigger-agent-icon {
+          color:var(--text-primary);
         }
 
         .target-label {
-          font-size: 11px;
-          color: #64748b;
-          flex-shrink: 0;
+          font-size:11px;
+          color:var(--text-muted);
+          flex-shrink:0;
         }
 
         .target-name {
-          font-size: 11.5px;
-          color: #f1f5f9;
-          font-weight: 600;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-          flex: 1;
-          text-align: left;
+          font-size:11.5px;
+          color:var(--text-primary);
+          font-weight:600;
+          overflow:hidden;
+          text-overflow:ellipsis;
+          white-space:nowrap;
+          flex:1;
+          text-align:left;
         }
 
         .agent-count-pill,
         .agent-selector-trigger .count-pill {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          height: 20px;
-          padding: 0 8px;
-          font-size: 10.5px;
-          font-weight: 700;
-          color: #c084fc;
-          background: rgba(168, 85, 247, 0.15);
-          border: 1px solid rgba(168, 85, 247, 0.32);
-          border-radius: 4px;
-          flex-shrink: 0;
-          line-height: 1;
+          display:inline-flex;
+          align-items:center;
+          justify-content:center;
+          height:20px;
+          min-width:22px;
+          padding:0 6px;
+          font-size:10.5px;
+          font-weight:600;
+          color:var(--text-secondary);
+          background:var(--bg-surface);
+          border:1px solid var(--border-subtle);
+          border-radius:5px;
+          flex-shrink:0;
+          line-height:1;
+        }
+
+        .agent-selector-trigger.open .agent-count-pill {
+          background:var(--bg-pill);
+          color:var(--text-primary);
+          border-color:var(--border-hover);
         }
 
         .dropdown-chevron {
-          color: #64748b;
-          transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), color 0.18s ease;
-          flex-shrink: 0;
+          color:var(--text-muted);
+          transition:transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), color 0.14s ease;
+          flex-shrink:0;
         }
 
         .dropdown-chevron.rotated {
-          transform: rotate(180deg);
-          color: #8b5cf6;
+          transform:rotate(180deg);
+          color:var(--text-primary);
         }
 
         @keyframes agentDropdownOpen {
           0% {
-            opacity: 0;
-            transform: translateY(-8px) scale(0.96);
+            opacity:0;
+            transform:translateY(-4px) scale(0.985);
           }
           100% {
-            opacity: 1;
-            transform: translateY(0) scale(1);
+            opacity:1;
+            transform:translateY(0) scale(1);
           }
         }
 
         @keyframes agentDropdownClose {
           0% {
-            opacity: 1;
-            transform: translateY(0) scale(1);
+            opacity:1;
+            transform:translateY(0) scale(1);
           }
           100% {
-            opacity: 0;
-            transform: translateY(-8px) scale(0.96);
+            opacity:0;
+            transform:translateY(-4px) scale(0.985);
           }
         }
 
         .agent-selector-wrapper .agent-dropdown-menu {
-          position: absolute;
-          top: calc(100% + 6px);
-          left: 0;
-          width: 100%;
-          min-width: 100%;
-          max-width: 100%;
-          box-sizing: border-box;
-          background: #0d121f;
-          border: 1px solid #1e283d;
-          border-radius: 10px;
-          box-shadow: 0 16px 36px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.05);
-          padding: 8px;
-          z-index: 1000;
-          display: flex;
-          flex-direction: column;
-          gap: 6px;
-          transform-origin: top center;
-          animation: agentDropdownOpen 0.16s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-          overflow: hidden;
+          position:absolute;
+          top:calc(100% + 5px);
+          left:0;
+          right:0;
+          width:100%;
+          min-width:100%;
+          max-width:100%;
+          box-sizing:border-box;
+          background:var(--bg-surface);
+          border:1px solid var(--border-hover);
+          border-radius:9px;
+          box-shadow:var(--shadow-dropdown);
+          padding:0;
+          z-index:1000;
+          display:flex;
+          flex-direction:column;
+          gap:0;
+          transform-origin:top center;
+          animation:agentDropdownOpen 0.14s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+          overflow:hidden;
         }
 
         .agent-selector-wrapper .agent-dropdown-menu.closing {
-          animation: agentDropdownClose 0.16s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-          pointer-events: none;
+          animation:agentDropdownClose 0.13s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+          pointer-events:none;
         }
 
         .dropdown-header {
-          padding: 4px 6px 8px 6px;
-          border-bottom: 1px solid #1c2638;
-          display: flex;
-          flex-direction: column;
-          gap: 2px;
+          padding:7px 11px;
+          background:var(--bg-surface-alt);
+          border-bottom:1px solid var(--border-subtle);
+          display:flex;
+          align-items:center;
+          justify-content:space-between;
+          gap:8px;
         }
 
         .dropdown-title {
-          font-size: 10px;
-          font-weight: 700;
-          letter-spacing: 0.05em;
-          color: #64748b;
-          font-family: var(--font-mono);
+          font-size:10px;
+          font-weight:700;
+          letter-spacing:0.06em;
+          color:var(--text-muted);
+          font-family:var(--font-mono);
         }
 
-        .dropdown-sub {
-          font-size: 10.5px;
-          color: #94a3b8;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
+        .dropdown-active-pill {
+          font-size:10px;
+          font-weight:600;
+          color:var(--text-secondary);
+          background:var(--bg-pill);
+          border:1px solid var(--border-subtle);
+          border-radius:4px;
+          padding:1px 6px;
+          line-height:1.3;
         }
 
         .agent-items-list {
-          display: flex;
-          flex-direction: column;
-          gap: 4px;
-          max-height: 280px;
-          overflow-y: auto;
-          overflow-x: hidden !important;
-          overscroll-behavior: contain;
-          padding-right: 2px;
+          display:flex;
+          flex-direction:column;
+          gap:2px;
+          max-height:312px;
+          overflow-y:auto;
+          overflow-x:hidden !important;
+          overscroll-behavior:contain;
+          padding:5px;
         }
 
         .agent-items-list::-webkit-scrollbar:horizontal {
-          display: none !important;
-          height: 0 !important;
-          width: 0 !important;
+          display:none !important;
+          height:0 !important;
+          width:0 !important;
         }
 
         .agent-dropdown-row {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          padding: 7px 8px;
-          border-radius: 6px;
-          cursor: pointer;
-          transition: background-color 0.06s ease, border-color 0.06s ease;
-          white-space: nowrap;
-          box-sizing: border-box;
-          width: 100%;
-          max-width: 100%;
-          min-width: 0;
-          border: 1px solid transparent;
-          user-select: none;
-          contain: layout style;
+          position:relative;
+          display:flex;
+          align-items:center;
+          gap:8px;
+          padding:6px 8px;
+          border-radius:6px;
+          cursor:pointer;
+          transition:background-color 0.1s ease;
+          white-space:nowrap;
+          box-sizing:border-box;
+          width:100%;
+          max-width:100%;
+          min-width:0;
+          border:none;
+          user-select:none;
+          contain:layout style;
         }
 
         .agent-dropdown-row:hover {
-          background: #141c2c;
-          border-color: rgba(99, 102, 241, 0.2);
+          background:var(--bg-surface-hover);
         }
 
         .agent-dropdown-row.selected {
-          background: rgba(99, 102, 241, 0.08);
-          border-color: rgba(99, 102, 241, 0.25);
+          background:var(--bg-elevated);
+        }
+
+        .agent-dropdown-row.selected:hover {
+          background:var(--bg-elevated-hover);
         }
 
         .custom-checkbox {
-          width: 16px;
-          height: 16px;
-          border-radius: 4px;
-          border: 1px solid #334155;
-          background: #090d16;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          color: #ffffff;
-          flex-shrink: 0;
-          transition: background-color 0.05s ease, border-color 0.05s ease;
-          contain: layout paint;
+          width:15px;
+          height:15px;
+          border-radius:4px;
+          border:1.5px solid var(--border-hover);
+          background:var(--bg-surface);
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          color:#ffffff;
+          flex-shrink:0;
+          transition:background-color 0.08s ease, border-color 0.08s ease;
+          contain:layout paint;
         }
 
         .custom-checkbox.checked {
-          background: #6366f1;
-          border-color: #6366f1;
+          background:var(--accent-indigo);
+          border-color:var(--accent-indigo);
+          color:#ffffff;
         }
 
         .custom-checkbox svg {
-          display: block;
-          flex-shrink: 0;
+          display:block;
+          flex-shrink:0;
         }
 
         .agent-icon-pill {
-          width: 24px;
-          height: 24px;
-          border-radius: 5px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          flex-shrink: 0;
+          width:24px;
+          height:24px;
+          border-radius:6px;
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          flex-shrink:0;
         }
 
         .agent-row-info {
-          display: flex;
-          flex-direction: column;
-          min-width: 0;
-          flex: 1;
-          overflow: hidden;
+          display:flex;
+          flex-direction:column;
+          gap:1px;
+          min-width:0;
+          flex:1;
+          overflow:hidden;
         }
 
         .agent-row-name-line {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          white-space: nowrap;
-          flex-wrap: nowrap;
-          min-width: 0;
-          overflow: hidden;
+          display:flex;
+          align-items:center;
+          gap:6px;
+          white-space:nowrap;
+          flex-wrap:nowrap;
+          min-width:0;
+          overflow:hidden;
         }
 
         .agent-row-name {
-          font-size: 12px;
-          font-weight: 600;
-          color: #f1f5f9;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          min-width: 0;
-          flex-shrink: 1;
+          font-size:12px;
+          font-weight:600;
+          color:var(--text-primary);
+          white-space:nowrap;
+          overflow:hidden;
+          text-overflow:ellipsis;
+          min-width:0;
+          flex-shrink:1;
         }
 
-        .detected-badge {
-          font-size: 8.5px;
-          font-weight: 700;
-          color: #10b981;
-          background: rgba(16, 185, 129, 0.12);
-          padding: 1px 4px;
-          border-radius: 3px;
-          flex-shrink: 0;
-          white-space: nowrap;
+        .detected-pill {
+          display:inline-flex;
+          align-items:center;
+          gap:4px;
+          font-size:9.5px;
+          font-weight:600;
+          color:var(--status-green-text);
+          flex-shrink:0;
+          white-space:nowrap;
+        }
+
+        .detected-indicator {
+          width:5px;
+          height:5px;
+          border-radius:50%;
+          background:var(--status-green);
+          flex-shrink:0;
         }
 
         .agent-row-path {
-          font-size: 10px;
-          color: #64748b;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
+          font-size:10px;
+          color:var(--text-muted);
+          overflow:hidden;
+          text-overflow:ellipsis;
+          white-space:nowrap;
         }
 
         .only-btn {
-          background: transparent;
-          border: 1px solid #1c2638;
-          color: #64748b;
-          font-size: 9.5px;
-          padding: 0 6px;
-          height: 20px;
-          border-radius: 3px;
-          cursor: pointer;
-          opacity: 0;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          box-sizing: border-box;
-          transition: all 0.15s ease;
-          flex-shrink: 0;
+          position:absolute;
+          right:8px;
+          top:50%;
+          transform:translateY(-50%);
+          background:var(--bg-surface);
+          border:1px solid var(--border-hover);
+          color:var(--text-secondary);
+          font-size:10px;
+          font-weight:600;
+          padding:0 7px;
+          height:20px;
+          border-radius:4px;
+          box-shadow:var(--shadow-card);
+          cursor:pointer;
+          opacity:0;
+          pointer-events:none;
+          display:inline-flex;
+          align-items:center;
+          justify-content:center;
+          box-sizing:border-box;
+          transition:opacity 0.12s ease, background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+          flex-shrink:0;
         }
 
         .agent-dropdown-row:hover .only-btn {
-          opacity: 1;
+          opacity:1;
+          pointer-events:auto;
         }
 
         .only-btn:hover {
-          color: #f1f5f9;
-          border-color: #6366f1;
-          background: rgba(99, 102, 241, 0.2);
+          color:var(--text-primary);
+          border-color:var(--border-hover);
+          background:var(--bg-pill-hover);
         }
       `}</style>
     </div>

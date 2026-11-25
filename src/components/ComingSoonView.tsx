@@ -190,15 +190,15 @@ export const ComingSoonView: React.FC<ComingSoonViewProps> = ({ tab, onNavigate 
         .coming-soon-card {
           width: 100%;
           max-width: 620px;
-          background: #111726;
-          border: 1px solid rgba(255, 255, 255, 0.08);
+          background: var(--bg-surface);
+          border: 1px solid var(--border-subtle);
           border-radius: 14px;
           padding: 36px 32px;
           display: flex;
           flex-direction: column;
           align-items: center;
           text-align: center;
-          box-shadow: 0 16px 48px -8px rgba(0, 0, 0, 0.55);
+          box-shadow: var(--shadow-card);
           position: relative;
           overflow: hidden;
         }
@@ -211,7 +211,7 @@ export const ComingSoonView: React.FC<ComingSoonViewProps> = ({ tab, onNavigate 
           transform: translateX(-50%);
           width: 320px;
           height: 240px;
-          background: radial-gradient(circle, rgba(99, 102, 241, 0.14) 0%, transparent 70%);
+          background: radial-gradient(circle, rgba(99, 102, 241, 0.12) 0%, transparent 70%);
           pointer-events: none;
         }
 
@@ -226,7 +226,7 @@ export const ComingSoonView: React.FC<ComingSoonViewProps> = ({ tab, onNavigate 
           padding: 4px 12px;
           background: rgba(99, 102, 241, 0.12);
           border: 1px solid rgba(99, 102, 241, 0.3);
-          color: #a5b4fc;
+          color: var(--accent-indigo-text);
           border-radius: 999px;
           font-size: 11px;
           font-weight: 700;
@@ -237,8 +237,8 @@ export const ComingSoonView: React.FC<ComingSoonViewProps> = ({ tab, onNavigate 
           width: 6px;
           height: 6px;
           border-radius: 50%;
-          background: #818cf8;
-          box-shadow: 0 0 8px #818cf8;
+          background: var(--accent-indigo);
+          box-shadow: 0 0 8px var(--accent-indigo);
           animation: pulseDot 2s infinite ease-in-out;
         }
 
@@ -253,25 +253,25 @@ export const ComingSoonView: React.FC<ComingSoonViewProps> = ({ tab, onNavigate 
           border-radius: 16px;
           background: rgba(99, 102, 241, 0.1);
           border: 1px solid rgba(99, 102, 241, 0.25);
-          color: #818cf8;
+          color: var(--accent-indigo-text);
           display: flex;
           align-items: center;
           justify-content: center;
           margin-bottom: 20px;
-          box-shadow: 0 8px 24px -4px rgba(99, 102, 241, 0.2);
+          box-shadow: 0 8px 24px -4px rgba(99, 102, 241, 0.15);
         }
 
         .coming-soon-title {
           font-size: 20px;
           font-weight: 700;
-          color: #f8fafc;
+          color: var(--text-primary);
           margin: 0 0 6px 0;
           letter-spacing: -0.015em;
         }
 
         .coming-soon-subtitle {
           font-size: 13px;
-          color: #94a3b8;
+          color: var(--text-secondary);
           margin: 0 0 16px 0;
           font-weight: 500;
         }
@@ -279,7 +279,7 @@ export const ComingSoonView: React.FC<ComingSoonViewProps> = ({ tab, onNavigate 
         .coming-soon-description {
           font-size: 13.5px;
           line-height: 1.6;
-          color: #cbd5e1;
+          color: var(--text-secondary);
           margin: 0 0 24px 0;
           max-width: 520px;
         }
@@ -291,8 +291,8 @@ export const ComingSoonView: React.FC<ComingSoonViewProps> = ({ tab, onNavigate 
           width: 100%;
           margin-bottom: 28px;
           padding: 16px;
-          background: rgba(15, 23, 42, 0.6);
-          border: 1px solid rgba(255, 255, 255, 0.05);
+          background: var(--bg-card-inner);
+          border: 1px solid var(--border-subtle);
           border-radius: 10px;
           box-sizing: border-box;
         }
@@ -302,13 +302,13 @@ export const ComingSoonView: React.FC<ComingSoonViewProps> = ({ tab, onNavigate 
           align-items: center;
           gap: 8px;
           font-size: 12px;
-          color: #cbd5e1;
+          color: var(--text-primary);
           font-weight: 500;
           text-align: left;
         }
 
         .highlight-icon {
-          color: #34d399;
+          color: var(--status-green);
           flex-shrink: 0;
         }
 
@@ -333,7 +333,7 @@ export const ComingSoonView: React.FC<ComingSoonViewProps> = ({ tab, onNavigate 
           font-weight: 600;
           cursor: pointer;
           transition: all 0.15s ease;
-          box-shadow: 0 4px 14px rgba(79, 70, 229, 0.35);
+          box-shadow: 0 4px 14px rgba(79, 70, 229, 0.3);
         }
 
         .action-btn-primary:hover {
@@ -346,9 +346,9 @@ export const ComingSoonView: React.FC<ComingSoonViewProps> = ({ tab, onNavigate 
           align-items: center;
           gap: 8px;
           padding: 9px 16px;
-          background: rgba(255, 255, 255, 0.04);
-          color: #cbd5e1;
-          border: 1px solid rgba(255, 255, 255, 0.1);
+          background: var(--bg-elevated);
+          color: var(--text-primary);
+          border: 1px solid var(--border-subtle);
           border-radius: 7px;
           font-size: 13px;
           font-weight: 500;
@@ -357,9 +357,8 @@ export const ComingSoonView: React.FC<ComingSoonViewProps> = ({ tab, onNavigate 
         }
 
         .action-btn-secondary:hover {
-          background: rgba(255, 255, 255, 0.08);
-          color: #ffffff;
-          border-color: rgba(255, 255, 255, 0.2);
+          background: var(--bg-elevated-hover);
+          border-color: var(--border-hover);
         }
       `}</style>
     </div>

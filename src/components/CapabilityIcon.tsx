@@ -54,127 +54,127 @@ export function getDomainTheme(category?: string, type?: 'skill' | 'mcp' | 'plug
     // 1. Frontend & UI
   if (normCat.includes('frontend') || normCat.includes('ui')) {
     return {
-      color: '#c084fc', // purple-400
-      bg: 'rgba(168, 85, 247, 0.08)',
-      border: 'rgba(168, 85, 247, 0.22)',
-      glow: 'rgba(168, 85, 247, 0.16)',
+      color: 'var(--domain-purple-fg)',
+      bg: 'var(--domain-purple-bg)',
+      border: 'var(--domain-purple-border)',
+      glow: 'var(--domain-purple-glow)',
     };
   }
 
   // 2. Backend, APIs & Developer Tools
   if (normCat.includes('backend') || normCat.includes('developer') || normCat.includes('engineering') || normCat.includes('desktop')) {
     return {
-      color: '#a855f7', // purple-500
-      bg: 'rgba(168, 85, 247, 0.08)',
-      border: 'rgba(168, 85, 247, 0.22)',
-      glow: 'rgba(168, 85, 247, 0.16)',
+      color: 'var(--domain-deep-purple-fg)',
+      bg: 'var(--domain-deep-purple-bg)',
+      border: 'var(--domain-deep-purple-border)',
+      glow: 'var(--domain-deep-purple-glow)',
     };
   }
 
   // 3. Web, Cloud, Browser & Network
   if (normCat.includes('web') || normCat.includes('browser') || normCat.includes('cloud') || normCat.includes('devops') || normCat.includes('git')) {
     return {
-      color: '#38bdf8', // sky-400
-      bg: 'rgba(56, 189, 248, 0.08)',
-      border: 'rgba(56, 189, 248, 0.22)',
-      glow: 'rgba(56, 189, 248, 0.16)',
+      color: 'var(--domain-sky-fg)',
+      bg: 'var(--domain-sky-bg)',
+      border: 'var(--domain-sky-border)',
+      glow: 'var(--domain-sky-glow)',
     };
   }
 
   // 4. Database & Storage
   if (normCat.includes('database') || normCat.includes('storage')) {
     return {
-      color: '#34d399', // emerald-400
-      bg: 'rgba(52, 211, 153, 0.08)',
-      border: 'rgba(52, 211, 153, 0.22)',
-      glow: 'rgba(52, 211, 153, 0.16)',
+      color: 'var(--domain-emerald-fg)',
+      bg: 'var(--domain-emerald-bg)',
+      border: 'var(--domain-emerald-border)',
+      glow: 'var(--domain-emerald-glow)',
     };
   }
 
   // 5. AI, Reasoning & Multi-Agent
   if (normCat.includes('ai') || normCat.includes('agent') || normCat.includes('brain') || normCat.includes('prompt')) {
     return {
-      color: '#fb923c', // orange-400
-      bg: 'rgba(251, 146, 60, 0.08)',
-      border: 'rgba(251, 146, 60, 0.22)',
-      glow: 'rgba(251, 146, 60, 0.16)',
+      color: 'var(--domain-orange-fg)',
+      bg: 'var(--domain-orange-bg)',
+      border: 'var(--domain-orange-border)',
+      glow: 'var(--domain-orange-glow)',
     };
   }
 
   // 6. Testing, Quality & Code Review
   if (normCat.includes('testing') || normCat.includes('quality') || normCat.includes('review') || normCat.includes('qa') || normCat.includes('debugging')) {
     return {
-      color: '#818cf8', // indigo-400
-      bg: 'rgba(99, 102, 241, 0.08)',
-      border: 'rgba(99, 102, 241, 0.22)',
-      glow: 'rgba(99, 102, 241, 0.16)',
+      color: 'var(--domain-indigo-fg)',
+      bg: 'var(--domain-indigo-bg)',
+      border: 'var(--domain-indigo-border)',
+      glow: 'var(--domain-indigo-glow)',
     };
   }
 
   // 7. Security & Forensics
   if (normCat.includes('security') || normCat.includes('forensics')) {
     return {
-      color: '#f43f5e', // rose-500
-      bg: 'rgba(244, 63, 94, 0.08)',
-      border: 'rgba(244, 63, 94, 0.22)',
-      glow: 'rgba(244, 63, 94, 0.16)',
+      color: 'var(--domain-rose-fg)',
+      bg: 'var(--domain-rose-bg)',
+      border: 'var(--domain-rose-border)',
+      glow: 'var(--domain-rose-glow)',
     };
   }
 
   // 8. Creative, 3D & Gaming
   if (normCat.includes('creative') || normCat.includes('3d') || normCat.includes('game') || normCat.includes('media')) {
     return {
-      color: '#f472b6', // pink-400
-      bg: 'rgba(244, 114, 182, 0.08)',
-      border: 'rgba(244, 114, 182, 0.22)',
-      glow: 'rgba(244, 114, 182, 0.16)',
+      color: 'var(--domain-pink-fg)',
+      bg: 'var(--domain-pink-bg)',
+      border: 'var(--domain-pink-border)',
+      glow: 'var(--domain-pink-glow)',
     };
   }
 
   // 9. System, Automation & Productivity
   if (normCat.includes('system') || normCat.includes('automation') || normCat.includes('productivity') || normCat.includes('monitoring')) {
     return {
-      color: '#2dd4bf', // teal-400
-      bg: 'rgba(45, 212, 191, 0.08)',
-      border: 'rgba(45, 212, 191, 0.22)',
-      glow: 'rgba(45, 212, 191, 0.16)',
+      color: 'var(--domain-teal-fg)',
+      bg: 'var(--domain-teal-bg)',
+      border: 'var(--domain-teal-border)',
+      glow: 'var(--domain-teal-glow)',
     };
   }
 
   // 10. Research & Science
   if (normCat.includes('research') || normCat.includes('science')) {
     return {
-      color: '#a78bfa', // violet-400
-      bg: 'rgba(167, 139, 250, 0.08)',
-      border: 'rgba(167, 139, 250, 0.22)',
-      glow: 'rgba(167, 139, 250, 0.16)',
+      color: 'var(--domain-violet-fg)',
+      bg: 'var(--domain-violet-bg)',
+      border: 'var(--domain-violet-border)',
+      glow: 'var(--domain-violet-glow)',
     };
   }
 
   // Fallbacks by type
   if (type === 'mcp') {
     return {
-      color: '#38bdf8',
-      bg: 'rgba(56, 189, 248, 0.08)',
-      border: 'rgba(56, 189, 248, 0.22)',
-      glow: 'rgba(56, 189, 248, 0.16)',
+      color: 'var(--domain-sky-fg)',
+      bg: 'var(--domain-sky-bg)',
+      border: 'var(--domain-sky-border)',
+      glow: 'var(--domain-sky-glow)',
     };
   }
 
   if (type === 'plugin') {
     return {
-      color: '#c084fc',
-      bg: 'rgba(168, 85, 247, 0.08)',
-      border: 'rgba(168, 85, 247, 0.22)',
-      glow: 'rgba(168, 85, 247, 0.16)',
+      color: 'var(--domain-purple-fg)',
+      bg: 'var(--domain-purple-bg)',
+      border: 'var(--domain-purple-border)',
+      glow: 'var(--domain-purple-glow)',
     };
   }
 
     return {
-      color: '#cbd5e1',
-      bg: 'rgba(255, 255, 255, 0.04)',
-      border: 'rgba(255, 255, 255, 0.09)',
-      glow: 'rgba(255, 255, 255, 0.08)',
+      color: 'var(--text-secondary)',
+      bg: 'var(--bg-elevated)',
+      border: 'var(--border-subtle)',
+      glow: 'rgba(100, 116, 139, 0.12)',
     };
   };
 

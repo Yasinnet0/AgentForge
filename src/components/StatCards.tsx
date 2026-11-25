@@ -26,6 +26,13 @@ const StatCardsComponent: React.FC<StatCardsProps> = ({ stats }) => {
   const skillsCount = stats?.skillsCount ?? 0;
   const rulesCount = stats?.rulesCount ?? 0;
 
+  const iconBgById: Record<string, string> = {
+    agents: 'var(--domain-indigo-bg)',
+    mcp: 'var(--domain-sky-bg)',
+    skills: 'var(--domain-purple-bg)',
+    rules: 'var(--domain-emerald-bg)',
+  };
+
   const cards: StatCardItem[] = [
     {
       id: 'agents',
@@ -33,8 +40,8 @@ const StatCardsComponent: React.FC<StatCardsProps> = ({ stats }) => {
       count: agentsCount,
       subtitle: agentsCount > 0 ? `${agentsCount} selected active` : 'None active',
       icon: Bot,
-      accentColor: '#94a3b8',
-      borderColor: 'rgba(255, 255, 255, 0.08)',
+      accentColor: 'var(--domain-indigo-fg)',
+      borderColor: 'var(--domain-indigo-border)',
     },
     {
       id: 'mcp',
@@ -42,8 +49,8 @@ const StatCardsComponent: React.FC<StatCardsProps> = ({ stats }) => {
       count: mcpCount,
       subtitle: mcpCount > 0 ? `${mcpCount} servers connected` : 'None connected',
       icon: Cable,
-      accentColor: '#94a3b8',
-      borderColor: 'rgba(255, 255, 255, 0.08)',
+      accentColor: 'var(--domain-sky-fg)',
+      borderColor: 'var(--domain-sky-border)',
     },
     {
       id: 'skills',
@@ -51,8 +58,8 @@ const StatCardsComponent: React.FC<StatCardsProps> = ({ stats }) => {
       count: skillsCount,
       subtitle: skillsCount > 0 ? `${skillsCount} skills indexed` : 'None discovered',
       icon: Zap,
-      accentColor: '#94a3b8',
-      borderColor: 'rgba(255, 255, 255, 0.08)',
+      accentColor: 'var(--domain-purple-fg)',
+      borderColor: 'var(--domain-purple-border)',
     },
     {
       id: 'rules',
@@ -60,8 +67,8 @@ const StatCardsComponent: React.FC<StatCardsProps> = ({ stats }) => {
       count: rulesCount,
       subtitle: rulesCount > 0 ? `${rulesCount} rules loaded` : 'None configured',
       icon: FileCode,
-      accentColor: '#94a3b8',
-      borderColor: 'rgba(255, 255, 255, 0.08)',
+      accentColor: 'var(--domain-emerald-fg)',
+      borderColor: 'var(--domain-emerald-border)',
     },
   ];
 
@@ -76,6 +83,11 @@ const StatCardsComponent: React.FC<StatCardsProps> = ({ stats }) => {
               <span className="stat-card-title">{card.title}</span>
               <div
                 className="stat-icon-wrapper"
+                style={{
+                  background: iconBgById[card.id] || 'var(--bg-card-inner)',
+                  borderColor: card.borderColor,
+                  color: card.accentColor,
+                }}
               >
                 <Icon size={14} strokeWidth={1.75} className="stat-icon" />
               </div>
@@ -108,8 +120,8 @@ const StatCardsComponent: React.FC<StatCardsProps> = ({ stats }) => {
         }
 
         .stat-card {
-          background: #121826;
-          border: 1px solid #1e283d;
+          background: var(--bg-surface);
+          border: 1px solid var(--bg-card-border);
           border-radius: 9px;
           padding: 14px 16px;
           display: flex;
@@ -117,11 +129,12 @@ const StatCardsComponent: React.FC<StatCardsProps> = ({ stats }) => {
           justify-content: space-between;
           min-width: 0;
           box-sizing: border-box;
+          box-shadow: var(--shadow-card);
           transition: border-color 0.15s ease;
         }
 
         .stat-card:hover {
-          border-color: #2b3a56;
+          border-color: var(--border-hover);
         }
 
         .stat-card-header {
@@ -137,7 +150,7 @@ const StatCardsComponent: React.FC<StatCardsProps> = ({ stats }) => {
           font-size: 10.5px;
           font-weight: 700;
           letter-spacing: 0.05em;
-          color: #64748b;
+          color: var(--text-muted);
           font-family: var(--font-mono);
           min-width: 0;
           overflow: hidden;
@@ -149,8 +162,8 @@ const StatCardsComponent: React.FC<StatCardsProps> = ({ stats }) => {
           width: 26px;
           height: 26px;
           border-radius: 6px;
-          background: #0d121f;
-          border: 1px solid #1c2638;
+          background: var(--bg-card-inner);
+          border: 1px solid var(--border-subtle);
           display: flex;
           align-items: center;
           justify-content: center;
@@ -158,12 +171,12 @@ const StatCardsComponent: React.FC<StatCardsProps> = ({ stats }) => {
         }
 
         .stat-icon {
-          color: #7d90a6;
-          transition: color 0.15s ease;
+          color: inherit;
+          transition: transform 0.15s ease;
         }
 
         .stat-card:hover .stat-icon {
-          color: #cbd5e1;
+          transform: scale(1.06);
         }
 
         .stat-card-body {
@@ -176,7 +189,7 @@ const StatCardsComponent: React.FC<StatCardsProps> = ({ stats }) => {
         .stat-count {
           font-size: 26px;
           font-weight: 800;
-          color: #f8fafc;
+          color: var(--text-primary);
           letter-spacing: -0.02em;
           line-height: 1.1;
           font-variant-numeric: tabular-nums;
@@ -184,7 +197,7 @@ const StatCardsComponent: React.FC<StatCardsProps> = ({ stats }) => {
 
         .stat-subtitle {
           font-size: 11.5px;
-          color: #8899ac;
+          color: var(--text-secondary);
           min-width: 0;
           overflow: hidden;
           text-overflow: ellipsis;
