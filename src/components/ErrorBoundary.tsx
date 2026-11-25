@@ -39,8 +39,8 @@ export class ErrorBoundary extends Component<Props, State> {
         <div style={{
           height: '100vh',
           width: '100vw',
-          background: '#090d16',
-          color: '#f8fafc',
+          background: 'var(--bg-app, #090d16)',
+          color: 'var(--text-primary, #f8fafc)',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
@@ -50,14 +50,14 @@ export class ErrorBoundary extends Component<Props, State> {
           boxSizing: 'border-box',
         }}>
           <div style={{
-            background: '#0d1322',
+            background: 'var(--bg-surface, #0d1322)',
             border: '1px solid rgba(239, 68, 68, 0.3)',
             borderRadius: '14px',
             padding: '28px 32px',
             maxWidth: '520px',
             width: '100%',
             textAlign: 'center',
-            boxShadow: '0 20px 60px rgba(0, 0, 0, 0.8)',
+            boxShadow: 'var(--shadow-modal, 0 20px 60px rgba(0, 0, 0, 0.8))',
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
@@ -78,10 +78,10 @@ export class ErrorBoundary extends Component<Props, State> {
             </div>
 
             <div>
-              <h2 style={{ fontSize: '17px', fontWeight: 700, margin: '0 0 6px 0', color: '#f8fafc' }}>
+              <h2 style={{ fontSize: '17px', fontWeight: 700, margin: '0 0 6px 0', color: 'var(--text-primary, #f8fafc)' }}>
                 Something went wrong
               </h2>
-              <p style={{ fontSize: '13px', color: '#94a3b8', margin: 0, lineHeight: 1.5 }}>
+              <p style={{ fontSize: '13px', color: 'var(--text-secondary, #94a3b8)', margin: 0, lineHeight: 1.5 }}>
                 {this.state.error?.message || 'An unexpected rendering error occurred.'}
               </p>
             </div>

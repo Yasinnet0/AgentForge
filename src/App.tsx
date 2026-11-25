@@ -26,6 +26,19 @@ import { SecurityView } from './components/SecurityView';
 import { SettingsModal } from './components/SettingsModal';
 import { Tooltip } from './components/Tooltip';
 
+const VALID_NAV_TABS: ReadonlySet<NavTab> = new Set([
+  'overview',
+  'agents',
+  'mcp',
+  'skills',
+  'plugins',
+  'rules',
+  'updates',
+  'hooks',
+  'environments',
+  'security',
+]);
+
 export const App: React.FC = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
@@ -34,10 +47,10 @@ export const App: React.FC = () => {
       const remember = localStorage.getItem('agentforge_remember_last_tab') === 'true';
       if (remember) {
         const last = localStorage.getItem('agentforge_last_active_tab') as NavTab;
-        if (last && last !== 'settings') return last;
+        if (last && VALID_NAV_TABS.has(last)) return last;
       }
       const def = localStorage.getItem('agentforge_default_tab') as NavTab;
-      if (def && def !== 'settings') return def;
+      if (def && VALID_NAV_TABS.has(def)) return def;
     } catch {}
     return 'overview';
   });
@@ -331,7 +344,10 @@ export const App: React.FC = () => {
       try {
         const raw = localStorage.getItem('agentforge_selected_agents');
         if (raw) {
-          savedSelectedIds = JSON.parse(raw);
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            savedSelectedIds = parsed.filter((id): id is string => typeof id === 'string');
+          }
         }
       } catch (err) {
         console.warn('Failed to parse saved agent selection:', err);
@@ -832,21 +848,21 @@ export const App: React.FC = () => {
           width: 38px;
           height: 38px;
           border-radius: 8px;
-          background: rgba(13, 20, 36, 0.94);
+          background: var(--bg-surface);
           backdrop-filter: blur(14px);
-          border: 1px solid rgba(56, 189, 248, 0.3);
-          color: #38bdf8;
+          border: 1px solid rgba(56, 189, 248, 0.35);
+          color: var(--status-cyan-text);
           cursor: pointer;
-          box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5), 0 0 14px rgba(56, 189, 248, 0.12);
+          box-shadow: var(--shadow-dropdown);
           transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
         .scroll-to-top-btn:hover {
-          background: rgba(20, 32, 56, 0.98);
-          border-color: rgba(56, 189, 248, 0.65);
-          color: #7dd3fc;
+          background: var(--bg-elevated-hover);
+          border-color: var(--status-cyan);
+          color: var(--text-primary);
           transform: translateY(-2px);
-          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6), 0 0 18px rgba(56, 189, 248, 0.25);
+          box-shadow: var(--shadow-modal);
         }
 
         .scroll-to-top-btn:active {
@@ -859,7 +875,7 @@ export const App: React.FC = () => {
           overflow-y: auto;
           overflow-x: hidden;
           padding: 20px 24px 30px;
-          background: #090d16;
+          background: var(--bg-app);
           box-sizing: border-box;
         }
 
@@ -902,19 +918,19 @@ export const App: React.FC = () => {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          border-bottom: 1px solid #1c2638;
+          border-bottom: 1px solid var(--border-subtle);
           padding-bottom: 14px;
         }
 
         .view-title {
           font-size: 18px;
           font-weight: 700;
-          color: #f8fafc;
+          color: var(--text-primary);
         }
 
         .view-desc {
           font-size: 12.5px;
-          color: #8899ac;
+          color: var(--text-secondary);
           margin-top: 2px;
         }
 
@@ -925,8 +941,8 @@ export const App: React.FC = () => {
           justify-content: center;
           text-align: center;
           padding: 64px 24px;
-          background: #111726;
-          border: 1px dashed #1f2c42;
+          background: var(--bg-surface);
+          border: 1px dashed var(--border-hover);
           border-radius: 12px;
           gap: 12px;
           margin-top: 10px;
@@ -936,24 +952,24 @@ export const App: React.FC = () => {
           width: 52px;
           height: 52px;
           border-radius: 12px;
-          background: #162035;
-          border: 1px solid #223250;
+          background: var(--bg-elevated);
+          border: 1px solid var(--border-subtle);
           display: flex;
           align-items: center;
           justify-content: center;
-          color: #7d90a6;
+          color: var(--text-secondary);
           margin-bottom: 4px;
         }
 
         .empty-title {
           font-size: 15px;
           font-weight: 700;
-          color: #f1f5f9;
+          color: var(--text-primary);
         }
 
         .empty-desc {
           font-size: 12.5px;
-          color: #7d90a6;
+          color: var(--text-secondary);
           max-width: 360px;
           line-height: 1.45;
         }
@@ -963,9 +979,9 @@ export const App: React.FC = () => {
           display: inline-flex;
           align-items: center;
           gap: 6px;
-          background: #172033;
-          border: 1px solid #283650;
-          color: #93c5fd;
+          background: var(--bg-elevated);
+          border: 1px solid var(--border-hover);
+          color: var(--text-link);
           font-size: 12px;
           font-weight: 600;
           padding: 6px 14px;
@@ -975,9 +991,9 @@ export const App: React.FC = () => {
         }
 
         .empty-action-btn:hover {
-          background: #1e2c47;
-          border-color: #3b5077;
-          color: #ffffff;
+          background: var(--bg-elevated-hover);
+          border-color: var(--accent-indigo);
+          color: var(--text-primary);
         }
 
         .placeholder-tab {
@@ -1000,24 +1016,24 @@ export const App: React.FC = () => {
           width: 56px;
           height: 56px;
           border-radius: 14px;
-          background: #141b2b;
-          border: 1px solid #23304a;
+          background: var(--bg-surface);
+          border: 1px solid var(--border-subtle);
           display: flex;
           align-items: center;
           justify-content: center;
-          color: #818cf8;
+          color: var(--accent-indigo-text);
         }
 
         .placeholder-box h3 {
           font-size: 16px;
           font-weight: 700;
-          color: #f8fafc;
+          color: var(--text-primary);
           letter-spacing: 0.02em;
         }
 
         .placeholder-box p {
           font-size: 13px;
-          color: #8899ac;
+          color: var(--text-secondary);
         }
       `}</style>
     </div>

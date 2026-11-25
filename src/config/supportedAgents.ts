@@ -69,7 +69,7 @@ export const INITIAL_SUPPORTED_AGENTS: SupportedAgent[] = [
     name: 'Windsurf',
     tagline: 'Codeium agentic IDE with Cascade intelligence',
     iconName: 'Compass',
-    color: '#06b6d4',
+    color: '#0891b2',
     detected: false,
     selected: false,
     installedCounts: {
@@ -111,7 +111,7 @@ export const INITIAL_SUPPORTED_AGENTS: SupportedAgent[] = [
     name: 'OpenAI Codex',
     tagline: 'OpenAI agent orchestrator & assistants',
     iconName: 'Boxes',
-    color: '#10b981',
+    color: '#059669',
     detected: false,
     selected: false,
     installedCounts: {
@@ -153,7 +153,7 @@ export const INITIAL_SUPPORTED_AGENTS: SupportedAgent[] = [
     name: 'Aider AI',
     tagline: 'Terminal-based AI pair programming agent',
     iconName: 'Terminal',
-    color: '#14b8a6',
+    color: '#0d9488',
     detected: false,
     selected: false,
     installedCounts: {
@@ -174,7 +174,7 @@ export const INITIAL_SUPPORTED_AGENTS: SupportedAgent[] = [
     name: 'Continue.dev',
     tagline: 'Open-source modular AI assistant & IDE bridge',
     iconName: 'Cpu',
-    color: '#eab308',
+    color: '#d97706',
     detected: false,
     selected: false,
     installedCounts: {
@@ -195,7 +195,7 @@ export const INITIAL_SUPPORTED_AGENTS: SupportedAgent[] = [
     name: 'OpenCode',
     tagline: 'Open-source autonomous developer agent',
     iconName: 'Terminal',
-    color: '#38bdf8',
+    color: '#0284c7',
     detected: false,
     selected: false,
     installedCounts: {
@@ -216,7 +216,7 @@ export const INITIAL_SUPPORTED_AGENTS: SupportedAgent[] = [
     name: 'Pi',
     tagline: 'Personal AI companion & adaptive conversational agent',
     iconName: 'Bot',
-    color: '#00b894',
+    color: '#059669',
     detected: false,
     selected: false,
     installedCounts: {
@@ -237,7 +237,7 @@ export const INITIAL_SUPPORTED_AGENTS: SupportedAgent[] = [
     name: 'Zed AI',
     tagline: 'Ultra-fast Rust code editor with integrated AI assistant & ACP',
     iconName: 'Terminal',
-    color: '#38bdf8',
+    color: '#2563eb',
     detected: false,
     selected: false,
     installedCounts: {
