@@ -1,4 +1,23 @@
 import { contextBridge, ipcRenderer } from 'electron';
+import type {
+  McpToolSchemaProperty,
+  McpToolDefinition,
+  McpPlaygroundConnectParams,
+  McpPlaygroundConnectResult,
+  McpPlaygroundToolCallParams,
+  McpPlaygroundToolCallResult,
+  McpPlaygroundStatusResult,
+} from './mcpPlayground';
+
+export type {
+  McpToolSchemaProperty,
+  McpToolDefinition,
+  McpPlaygroundConnectParams,
+  McpPlaygroundConnectResult,
+  McpPlaygroundToolCallParams,
+  McpPlaygroundToolCallResult,
+  McpPlaygroundStatusResult,
+};
 
 export interface AgentPathConfigPayload {
   id: string;
@@ -316,6 +335,16 @@ export interface InstalledPluginDetails {
   error?: string;
 }
 
+export interface AppUpdateCheckResult {
+  currentVersion: string;
+  latestVersion: string;
+  updateAvailable: boolean;
+  releaseUrl: string;
+  releaseNotes?: string;
+  publishedAt?: string;
+  error?: string;
+}
+
 export interface ElectronAPI {
   minimizeWindow: () => void;
   maximizeWindow: () => void;
@@ -323,6 +352,8 @@ export interface ElectronAPI {
   isMaximized: () => Promise<boolean>;
   onMaximizeChange: (callback: (isMaximized: boolean) => void) => () => void;
   getAppVersion: () => Promise<string>;
+  setTheme: (params: { themeMode: 'dark' | 'light' | 'system'; resolvedTheme: 'dark' | 'light' }) => Promise<boolean>;
+  checkForUpdates: () => Promise<AppUpdateCheckResult>;
   detectAgents: (configs: AgentPathConfigPayload[]) => Promise<Record<string, AgentDetectionResult>>;
   scanCapabilities: (
     configs: (AgentPathConfigPayload & { name: string; color: string; iconName: string })[]
@@ -353,6 +384,11 @@ export interface ElectronAPI {
   readSkill: (params: ReadSkillParams) => Promise<ReadSkillResult>;
   getFileContent: (filePath: string) => Promise<{ success: boolean; content?: string; path?: string; error?: string }>;
   checkDependencies: (binaries?: string[]) => Promise<DependencyReport>;
+  mcpPlaygroundConnect: (params: McpPlaygroundConnectParams) => Promise<McpPlaygroundConnectResult>;
+  mcpPlaygroundListTools: (sessionId: string) => Promise<{ success: boolean; tools?: McpToolDefinition[]; latencyMs: number; stderrLogs?: string[]; error?: string }>;
+  mcpPlaygroundCallTool: (params: McpPlaygroundToolCallParams) => Promise<McpPlaygroundToolCallResult>;
+  mcpPlaygroundStatus: (sessionId: string) => Promise<McpPlaygroundStatusResult>;
+  mcpPlaygroundDisconnect: (sessionId: string) => Promise<boolean>;
 }
 
 export interface DependencyInstallSnippets {
@@ -388,6 +424,8 @@ const electronAPI: ElectronAPI = {
     };
   },
   getAppVersion: () => ipcRenderer.invoke('app:version'),
+  setTheme: (params) => ipcRenderer.invoke('app:setTheme', params),
+  checkForUpdates: () => ipcRenderer.invoke('app:checkForUpdates'),
   detectAgents: (configs: AgentPathConfigPayload[]) => ipcRenderer.invoke('agents:detectAll', configs),
   scanCapabilities: (configs) => ipcRenderer.invoke('agents:scanCapabilities', configs),
   installSkill: (params: InstallSkillParams) => ipcRenderer.invoke('catalog:installSkill', params),
@@ -414,6 +452,11 @@ const electronAPI: ElectronAPI = {
   readSkill: (params: ReadSkillParams) => ipcRenderer.invoke('skills:readSkill', params),
   getFileContent: (filePath: string) => ipcRenderer.invoke('diff:getFileContent', filePath),
   checkDependencies: (binaries) => ipcRenderer.invoke('env:checkDependencies', binaries),
+  mcpPlaygroundConnect: (params) => ipcRenderer.invoke('mcp:playgroundConnect', params),
+  mcpPlaygroundListTools: (sessionId) => ipcRenderer.invoke('mcp:playgroundListTools', sessionId),
+  mcpPlaygroundCallTool: (params) => ipcRenderer.invoke('mcp:playgroundCallTool', params),
+  mcpPlaygroundStatus: (sessionId) => ipcRenderer.invoke('mcp:playgroundStatus', sessionId),
+  mcpPlaygroundDisconnect: (sessionId) => ipcRenderer.invoke('mcp:playgroundDisconnect', sessionId),
 };
 
 

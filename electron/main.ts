@@ -1,10 +1,32 @@
-import { app, BrowserWindow, ipcMain, screen, shell, dialog, Menu, nativeImage } from 'electron';
+import { app, BrowserWindow, ipcMain, screen, shell, dialog, Menu, nativeImage, nativeTheme } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
 import AdmZip from 'adm-zip';
-import { execSync } from 'child_process';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+import {
+  parseJsoncSafe,
+  listMcpServersFromObject,
+  applyMcpInstallToObject,
+  applyMcpUninstallToObject,
+  applyMcpToggleToObject,
+  readMcpConfigFile,
+  writeJsonAtomicWithBackup,
+  backupCorruptConfigFile,
+} from './mcpConfigStore';
+import {
+  connectPlayground,
+  listPlaygroundTools,
+  callPlaygroundTool,
+  getPlaygroundStatus,
+  disconnectPlayground,
+  cleanupAllPlaygroundSessions,
+  McpPlaygroundConnectParams,
+  McpPlaygroundToolCallParams,
+} from './mcpPlayground';
 
+const execAsync = promisify(exec);
 const isDev = process.env.NODE_ENV === 'development';
 
 // Set application identity early so Windows Task Manager and Taskbar register AgentForge branding
@@ -26,6 +48,46 @@ if (!gotTheLock) {
 }
 
 let mainWindow: BrowserWindow | null = null;
+
+type ThemeMode = 'dark' | 'light' | 'system';
+
+interface UiPrefs {
+  themeMode: ThemeMode;
+  resolvedTheme: 'dark' | 'light';
+}
+
+function getUiPrefsPath(): string {
+  return path.join(app.getPath('userData'), 'ui-prefs.json');
+}
+
+function loadUiPrefs(): UiPrefs {
+  try {
+    const filePath = getUiPrefsPath();
+    if (fs.existsSync(filePath)) {
+      const parsed = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+      const mode: ThemeMode = parsed?.themeMode === 'light' || parsed?.themeMode === 'system' ? parsed.themeMode : 'dark';
+      const resolved: 'dark' | 'light' = parsed?.resolvedTheme === 'light'
+        ? 'light'
+        : mode === 'system'
+        ? (nativeTheme.shouldUseDarkColors ? 'dark' : 'light')
+        : mode === 'light'
+        ? 'light'
+        : 'dark';
+      return { themeMode: mode, resolvedTheme: resolved };
+    }
+  } catch {}
+  return { themeMode: 'dark', resolvedTheme: 'dark' };
+}
+
+function saveUiPrefs(prefs: UiPrefs): void {
+  try {
+    const filePath = getUiPrefsPath();
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(filePath, JSON.stringify(prefs, null, 2), 'utf-8');
+  } catch (err) {
+    console.warn('Failed saving UI preferences:', err);
+  }
+}
 
 interface WindowState {
   width: number;
@@ -111,11 +173,40 @@ function saveWindowState(win: BrowserWindow) {
         };
       }
 
-      fs.writeFileSync(getStateFilePath(), JSON.stringify(stateToSave, null, 2), 'utf-8');
+      const statePath = getStateFilePath();
+      fs.mkdirSync(path.dirname(statePath), { recursive: true });
+      fs.writeFileSync(statePath, JSON.stringify(stateToSave, null, 2), 'utf-8');
     } catch (err) {
       console.warn('Failed to save window state:', err);
     }
   }, 250);
+}
+
+function escapeHtml(str: string): string {
+  return String(str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function buildLoadFailureHtml(reason: string, isLight: boolean): string {
+  const bg = isLight ? '#eaeff6' : '#090d16';
+  const card = isLight ? '#ffffff' : '#121826';
+  const border = isLight ? '#e2e8f0' : '#1e283d';
+  const text = isLight ? '#0f172a' : '#f8fafc';
+  const muted = isLight ? '#475569' : '#94a3b8';
+  return `<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>AgentForge Startup Recovery</title></head>
+<body style="margin:0;height:100vh;display:flex;align-items:center;justify-content:center;background:${bg};color:${text};font-family:system-ui,-apple-system,sans-serif;-webkit-app-region:drag;">
+  <div style="max-width:460px;padding:28px;background:${card};border:1px solid ${border};border-radius:12px;text-align:center;-webkit-app-region:no-drag;box-shadow:0 18px 40px rgba(0,0,0,0.22);">
+    <h2 style="margin:0 0 8px;font-size:17px;">AgentForge encountered a startup issue</h2>
+    <p style="margin:0 0 18px;font-size:13px;line-height:1.5;color:${muted};">${escapeHtml(reason)}</p>
+    <button onclick="location.reload()" style="padding:8px 18px;border-radius:8px;border:none;background:#6366f1;color:#fff;font-weight:600;font-size:13px;cursor:pointer;">Retry Launch</button>
+  </div>
+</body>
+</html>`;
 }
 
 function getAppIconPath(): string {
@@ -155,6 +246,9 @@ function getAppIconPath(): string {
 function createWindow() {
   Menu.setApplicationMenu(null);
   const windowState = loadWindowState();
+  const uiPrefs = loadUiPrefs();
+  nativeTheme.themeSource = uiPrefs.themeMode;
+  const initialBg = uiPrefs.resolvedTheme === 'light' ? '#eaeff6' : '#090d16';
   const iconPath = getAppIconPath();
   const appIcon = iconPath ? nativeImage.createFromPath(iconPath) : undefined;
 
@@ -169,13 +263,13 @@ function createWindow() {
     minHeight: 600,
     frame: false,
     titleBarStyle: 'hidden',
-    backgroundColor: '#0d1117',
+    backgroundColor: initialBg,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
-      devTools: false,
+      devTools: isDev,
     },
     show: false,
   });
@@ -183,18 +277,20 @@ function createWindow() {
   mainWindow.removeMenu();
   mainWindow.setMenuBarVisibility(false);
 
-  // Block Developer Tools and Inspect Element keyboard shortcuts
-  mainWindow.webContents.on('before-input-event', (event, input) => {
-    const isCtrlOrCmd = input.control || input.meta;
-    const key = input.key.toLowerCase();
-    if (
-      key === 'f12' ||
-      (isCtrlOrCmd && input.shift && (key === 'i' || key === 'j' || key === 'c')) ||
-      (isCtrlOrCmd && key === 'u')
-    ) {
-      event.preventDefault();
-    }
-  });
+  // Block Developer Tools and Inspect Element keyboard shortcuts in production
+  if (!isDev) {
+    mainWindow.webContents.on('before-input-event', (event, input) => {
+      const isCtrlOrCmd = input.control || input.meta;
+      const key = input.key.toLowerCase();
+      if (
+        key === 'f12' ||
+        (isCtrlOrCmd && input.shift && (key === 'i' || key === 'j' || key === 'c')) ||
+        (isCtrlOrCmd && key === 'u')
+      ) {
+        event.preventDefault();
+      }
+    });
+  }
 
   // Block Chromium context menu to disable Inspect Element
   mainWindow.webContents.on('context-menu', (event) => {
@@ -243,12 +339,31 @@ function createWindow() {
     mainWindow?.show();
   });
 
-  // Window visibility
+  // Prevent silent white-screen hangs if renderer load fails or crashes
+  let fallbackRendered = false;
+  const showRecoveryScreen = (reason: string) => {
+    if (fallbackRendered || !mainWindow || mainWindow.isDestroyed()) return;
+    fallbackRendered = true;
+    const isLight = loadUiPrefs().resolvedTheme === 'light';
+    mainWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(buildLoadFailureHtml(reason, isLight))}`).catch(() => {});
+    if (!mainWindow.isVisible()) mainWindow.show();
+  };
+
+  mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, _validatedURL, isMainFrame) => {
+    if (!isMainFrame || errorCode === -3) return;
+    showRecoveryScreen(`Failed to load desktop UI (${errorDescription || `code ${errorCode}`}).`);
+  });
+
+  mainWindow.webContents.on('render-process-gone', (_event, details) => {
+    showRecoveryScreen(`Renderer process exited unexpectedly (${details?.reason || 'unknown'}).`);
+  });
+
+  // Window visibility fallback
   setTimeout(() => {
-    if (mainWindow && !mainWindow.isVisible()) {
+    if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) {
       mainWindow.show();
     }
-  }, 1200);
+  }, 1500);
 
   mainWindow.on('resize', () => {
     if (mainWindow) saveWindowState(mainWindow);
@@ -276,13 +391,18 @@ function createWindow() {
     mainWindow?.webContents.send('window:maximize-change', false);
   });
 
+  const distIndex = path.join(__dirname, '../dist/index.html');
   if (isDev) {
     mainWindow.loadURL('http://127.0.0.1:5173').catch((err) => {
       console.warn('Dev server not reachable, loading dist/index.html:', err);
-      mainWindow?.loadFile(path.join(__dirname, '../dist/index.html'));
+      mainWindow?.loadFile(distIndex).catch((fileErr) => {
+        showRecoveryScreen(`Could not load UI bundle: ${fileErr?.message || 'Unknown error'}`);
+      });
     });
   } else {
-    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+    mainWindow.loadFile(distIndex).catch((fileErr) => {
+      showRecoveryScreen(`Could not load packaged UI bundle: ${fileErr?.message || 'Unknown error'}`);
+    });
   }
 
   mainWindow.on('close', () => {
@@ -298,7 +418,9 @@ function createWindow() {
           y: isMaximized ? prev.y : bounds.y,
           isMaximized,
         };
-        fs.writeFileSync(getStateFilePath(), JSON.stringify(finalState, null, 2), 'utf-8');
+        const statePath = getStateFilePath();
+        fs.mkdirSync(path.dirname(statePath), { recursive: true });
+        fs.writeFileSync(statePath, JSON.stringify(finalState, null, 2), 'utf-8');
       } catch (err) {
         console.warn('Failed to save final window state:', err);
       }
@@ -333,6 +455,93 @@ ipcMain.handle('window:isMaximized', () => {
 
 ipcMain.handle('app:version', () => {
   return app.getVersion();
+});
+
+ipcMain.handle('app:setTheme', (_event, params: { themeMode: ThemeMode; resolvedTheme: 'dark' | 'light' }) => {
+  try {
+    const mode: ThemeMode = params?.themeMode === 'light' || params?.themeMode === 'system' ? params.themeMode : 'dark';
+    const resolved: 'dark' | 'light' = params?.resolvedTheme === 'light' ? 'light' : 'dark';
+    nativeTheme.themeSource = mode;
+    saveUiPrefs({ themeMode: mode, resolvedTheme: resolved });
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.setBackgroundColor(resolved === 'light' ? '#eaeff6' : '#090d16');
+    }
+    return true;
+  } catch (err) {
+    console.warn('Failed setting app theme:', err);
+    return false;
+  }
+});
+
+function compareVersionsSimple(currentVer: string, latestVer: string): boolean {
+  const parse = (v: string) =>
+    v.replace(/^v/i, '').split('-')[0].split('.').map((n) => parseInt(n, 10) || 0);
+  const c = parse(currentVer);
+  const l = parse(latestVer);
+  const len = Math.max(c.length, l.length);
+  for (let i = 0; i < len; i++) {
+    const cv = c[i] || 0;
+    const lv = l[i] || 0;
+    if (lv > cv) return true;
+    if (lv < cv) return false;
+  }
+  return false;
+}
+
+ipcMain.handle('app:checkForUpdates', async () => {
+  const currentVersion = app.getVersion();
+  const repoUrl = 'https://github.com/Yasinnet0/AgentForge/releases';
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5000);
+    const res = await fetch('https://api.github.com/repos/Yasinnet0/AgentForge/releases/latest', {
+      headers: {
+        'User-Agent': `AgentForge-Desktop/${currentVersion}`,
+        Accept: 'application/vnd.github+json',
+      },
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+
+    if (res.status === 404) {
+      return {
+        currentVersion,
+        latestVersion: currentVersion,
+        updateAvailable: false,
+        releaseUrl: repoUrl,
+      };
+    }
+
+    if (!res.ok) {
+      return {
+        currentVersion,
+        latestVersion: currentVersion,
+        updateAvailable: false,
+        releaseUrl: repoUrl,
+        error: `GitHub API returned status ${res.status}`,
+      };
+    }
+
+    const json: any = await res.json();
+    const tagName = String(json?.tag_name || json?.name || currentVersion).replace(/^v/i, '').trim();
+    const updateAvailable = compareVersionsSimple(currentVersion, tagName);
+    return {
+      currentVersion,
+      latestVersion: tagName,
+      updateAvailable,
+      releaseUrl: json?.html_url || repoUrl,
+      releaseNotes: typeof json?.body === 'string' ? json.body : undefined,
+      publishedAt: json?.published_at,
+    };
+  } catch (err: any) {
+    return {
+      currentVersion,
+      latestVersion: currentVersion,
+      updateAvailable: false,
+      releaseUrl: repoUrl,
+      error: err?.name === 'AbortError' ? 'Update check timed out' : (err?.message || 'Offline or network unreachable'),
+    };
+  }
 });
 
 ipcMain.handle('app:openExternal', async (_event, url: string) => {
@@ -396,60 +605,12 @@ function resolveHome(filepath: string): string {
   return filepath;
 }
 
-function parseJsonc(text: string): any {
-  let inString = false;
-  let inSingle = false;
-  let inMulti = false;
-  let quote = '';
-  let res = '';
-
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i];
-    const next = text[i + 1];
-
-    if (inSingle) {
-      if (ch === '\n' || ch === '\r') {
-        inSingle = false;
-        res += ch;
-      }
-      continue;
-    }
-
-    if (inMulti) {
-      if (ch === '*' && next === '/') {
-        inMulti = false;
-        i++;
-      }
-      continue;
-    }
-
-    if (inString) {
-      res += ch;
-      if (ch === '\\' && i + 1 < text.length) {
-        i++;
-        res += text[i];
-      } else if (ch === quote) {
-        inString = false;
-      }
-      continue;
-    }
-
-    if (ch === '"' || ch === "'") {
-      inString = true;
-      quote = ch;
-      res += ch;
-    } else if (ch === '/' && next === '/') {
-      inSingle = true;
-      i++;
-    } else if (ch === '/' && next === '*') {
-      inMulti = true;
-      i++;
-    } else {
-      res += ch;
-    }
+function safeExists(targetPath: string): boolean {
+  try {
+    return Boolean(targetPath && fs.existsSync(targetPath));
+  } catch {
+    return false;
   }
-
-  return JSON.parse(res.replace(/,\s*([}\]])/g, '$1'));
 }
 
 function checkCliCommandExists(commandName: string): boolean {
@@ -466,11 +627,11 @@ function checkCliCommandExists(commandName: string): boolean {
       if (process.platform === 'win32') {
         for (const ext of extensions) {
           const target = path.join(dir, commandName.toLowerCase().endsWith(ext.toLowerCase()) ? commandName : `${commandName}${ext}`);
-          if (fs.existsSync(target)) return true;
+          if (safeExists(target)) return true;
         }
       } else {
         const target = path.join(dir, commandName);
-        if (fs.existsSync(target)) return true;
+        if (safeExists(target)) return true;
       }
     }
   } catch {}
@@ -600,14 +761,14 @@ const AGENT_FALLBACK_PATHS: Record<string, AgentFallbackConfig> = {
 function resolveFirstExisting(primaryPath: string | undefined, candidates: string[] | undefined): string {
   if (primaryPath) {
     const resolved = resolveHome(primaryPath);
-    if (resolved && fs.existsSync(resolved)) {
+    if (safeExists(resolved)) {
       return resolved;
     }
   }
   if (Array.isArray(candidates)) {
     for (const cand of candidates) {
       const resolved = resolveHome(cand);
-      if (resolved && fs.existsSync(resolved)) {
+      if (safeExists(resolved)) {
         return resolved;
       }
     }
@@ -670,11 +831,11 @@ ipcMain.handle('agents:detectAll', async (_event, agentConfigs: any[]) => {
       cliDetected,
     } = resolveAgentEffectivePaths(agent);
 
-    const baseExists = resolvedBase ? fs.existsSync(resolvedBase) : false;
-    const skillsExists = resolvedSkills ? fs.existsSync(resolvedSkills) : false;
-    const mcpExists = resolvedMcp ? fs.existsSync(resolvedMcp) : false;
-    const rulesExists = resolvedRules ? fs.existsSync(resolvedRules) : false;
-    const pluginsExists = resolvedPlugins ? fs.existsSync(resolvedPlugins) : false;
+    const baseExists = safeExists(resolvedBase);
+    const skillsExists = safeExists(resolvedSkills);
+    const mcpExists = safeExists(resolvedMcp);
+    const rulesExists = safeExists(resolvedRules);
+    const pluginsExists = safeExists(resolvedPlugins);
 
     const detected = baseExists || skillsExists || mcpExists || rulesExists || pluginsExists || cliDetected;
 
@@ -689,10 +850,10 @@ ipcMain.handle('agents:detectAll', async (_event, agentConfigs: any[]) => {
     let mcpsCount = 0;
     if (mcpExists) {
       try {
-        const content = parseJsonc(fs.readFileSync(resolvedMcp, 'utf-8'));
-        const mcpServers = content.mcpServers || content.servers || content.mcp?.servers || {};
-        const disabledServers = content.disabledMcpServers || content.disabledServers || content.mcp?.disabledServers || {};
-        mcpsCount = Object.keys(mcpServers).length + Object.keys(disabledServers).length;
+        const parsed = readMcpConfigFile(resolvedMcp);
+        if (parsed.ok) {
+          mcpsCount = listMcpServersFromObject(parsed.data).length;
+        }
       } catch {}
     }
 
@@ -946,73 +1107,36 @@ ipcMain.handle('agents:scanCapabilities', async (_event, agentConfigs: any[]) =>
     }
 
     // Scan MCP configs
-    if (resolvedMcp && fs.existsSync(resolvedMcp)) {
+    if (safeExists(resolvedMcp)) {
       try {
         let mcpMtime = 0;
         try {
           mcpMtime = fs.statSync(resolvedMcp).mtimeMs;
         } catch {}
-        const mcpContent = parseJsonc(fs.readFileSync(resolvedMcp, 'utf-8'));
-        const servers = mcpContent.mcpServers || mcpContent.servers || mcpContent.mcp?.servers || {};
-        const disabledServers = mcpContent.disabledMcpServers || mcpContent.disabledServers || mcpContent.mcp?.disabledServers || {};
-
-        for (const [sKey, sVal] of Object.entries<any>(servers)) {
-          let command = sVal?.command;
-          let args = sVal?.args || [];
-          if (Array.isArray(sVal?.command)) {
-            command = sVal.command[0];
-            args = sVal.command.slice(1);
+        const parsed = readMcpConfigFile(resolvedMcp);
+        if (parsed.ok) {
+          const entries = listMcpServersFromObject(parsed.data);
+          for (const entry of entries) {
+            allMcps.push({
+              id: `${agent.id}-mcp-${entry.key}`,
+              name: entry.key,
+              command: entry.command,
+              args: entry.args,
+              url: entry.url,
+              transport: entry.transport,
+              env: entry.env,
+              envKeys: Object.keys(entry.env),
+              sourceAgentId: agent.id,
+              sourceAgentName: agent.name,
+              sourceAgentColor: agent.color || '#818cf8',
+              sourceAgentIcon: agent.iconName || 'Server',
+              sourcePath: resolvedMcp,
+              disabled: entry.disabled,
+              mtimeMs: mcpMtime,
+            });
           }
-          const url = sVal?.url || sVal?.options?.url;
-          const transport = url ? 'sse' : (sVal?.type === 'sse' ? 'sse' : 'stdio');
-
-          allMcps.push({
-            id: `${agent.id}-mcp-${sKey}`,
-            name: sKey,
-            command,
-            args,
-            url,
-            transport,
-            env: sVal?.env || {},
-            envKeys: Object.keys(sVal?.env || {}),
-            sourceAgentId: agent.id,
-            sourceAgentName: agent.name,
-            sourceAgentColor: agent.color || '#818cf8',
-            sourceAgentIcon: agent.iconName || 'Server',
-            sourcePath: resolvedMcp,
-            disabled: Boolean(sVal?.disabled),
-            mtimeMs: mcpMtime,
-          });
-        }
-
-        for (const [sKey, sVal] of Object.entries<any>(disabledServers)) {
-          if (servers[sKey]) continue;
-          let command = sVal?.command;
-          let args = sVal?.args || [];
-          if (Array.isArray(sVal?.command)) {
-            command = sVal.command[0];
-            args = sVal.command.slice(1);
-          }
-          const url = sVal?.url || sVal?.options?.url;
-          const transport = url ? 'sse' : (sVal?.type === 'sse' ? 'sse' : 'stdio');
-
-          allMcps.push({
-            id: `${agent.id}-mcp-${sKey}`,
-            name: sKey,
-            command,
-            args,
-            url,
-            transport,
-            env: sVal?.env || {},
-            envKeys: Object.keys(sVal?.env || {}),
-            sourceAgentId: agent.id,
-            sourceAgentName: agent.name,
-            sourceAgentColor: agent.color || '#818cf8',
-            sourceAgentIcon: agent.iconName || 'Server',
-            sourcePath: resolvedMcp,
-            disabled: true,
-            mtimeMs: mcpMtime,
-          });
+        } else {
+          console.warn(`Invalid JSON/JSONC in ${resolvedMcp}: ${parsed.error}`);
         }
       } catch (err) {
         console.warn(`Failed scanning MCP config for ${agent.name}:`, err);
@@ -1378,79 +1502,30 @@ ipcMain.handle('catalog:installMcp', async (_event, params: {
 
   try {
     let installedCount = 0;
+    const errors: string[] = [];
+
     for (const target of targets) {
       const { resolvedMcp: effectiveMcp } = resolveAgentEffectivePaths({ id: target.agentId, mcpConfigPath: target.mcpConfigPath });
       const resolvedMcp = effectiveMcp || resolveHome(target.mcpConfigPath);
       if (!resolvedMcp) continue;
 
-      fs.mkdirSync(path.dirname(resolvedMcp), { recursive: true });
-
-      let configObj: any = { mcpServers: {} };
-      if (fs.existsSync(resolvedMcp)) {
-        try {
-          configObj = parseJsonc(fs.readFileSync(resolvedMcp, 'utf-8'));
-        } catch {
-          configObj = { mcpServers: {} };
-        }
+      const readRes = readMcpConfigFile(resolvedMcp);
+      if (!readRes.ok) {
+        // NEVER overwrite corrupt user config with an empty object; preserve forensic copy and abort target
+        const bak = backupCorruptConfigFile(resolvedMcp);
+        const msg = `Existing ${path.basename(resolvedMcp)} has invalid JSON (${readRes.error}). ${bak ? `Backed up to ${path.basename(bak)} and skipped overwrite.` : 'Skipped overwrite.'}`;
+        console.warn(msg);
+        errors.push(msg);
+        continue;
       }
 
-      // Detect container structure (nested mcp.servers vs flat mcpServers/servers)
-      let activeContainer: any;
-      let disabledContainer: any;
-
-      if (configObj.mcp && typeof configObj.mcp === 'object') {
-        if (!configObj.mcp.servers) configObj.mcp.servers = {};
-        if (!configObj.mcp.disabledServers) configObj.mcp.disabledServers = {};
-        activeContainer = configObj.mcp.servers;
-        disabledContainer = configObj.mcp.disabledServers;
-      } else {
-        if (!configObj.mcpServers && !configObj.servers) {
-          configObj.mcpServers = {};
-        }
-        activeContainer = configObj.mcpServers !== undefined ? configObj.mcpServers : configObj.servers;
-        if (!configObj.disabledMcpServers && !configObj.disabledServers) {
-          configObj.disabledMcpServers = {};
-        }
-        disabledContainer = configObj.disabledMcpServers !== undefined ? configObj.disabledMcpServers : configObj.disabledServers;
-      }
-
-      // 1. Find existing config for this serverKey
-      let existingConfig: any = activeContainer[serverKey] || disabledContainer[serverKey];
-
-      // 2. Safely merge env variables so user tokens / secrets are NEVER wiped out
-      const finalConfig = { ...serverConfig };
-      if (existingConfig?.env || serverConfig.env) {
-        const mergedEnv: Record<string, string> = { ...(serverConfig.env || {}) };
-        if (existingConfig?.env && typeof existingConfig.env === 'object') {
-          for (const [k, v] of Object.entries(existingConfig.env)) {
-            const newV = mergedEnv[k];
-            const isNewValPlaceholder = typeof newV === 'string' && (newV.trim() === '' || newV.startsWith('<') || newV.toLowerCase().includes('your_token') || newV.toLowerCase().includes('your_api_key'));
-            if (v !== undefined && v !== null && v !== '' && (isNewValPlaceholder || !newV)) {
-              mergedEnv[k] = v as string;
-            }
-          }
-        }
-        finalConfig.env = mergedEnv;
-      }
-
-      // 3. Preserve Windows command wrapper (npx.cmd, uvx.cmd) if matching
-      if (process.platform === 'win32' && existingConfig?.command) {
-        const normOld = existingConfig.command.toLowerCase().replace(/\.(cmd|exe|bat)$/i, '').trim();
-        const normNew = (serverConfig.command || '').toLowerCase().replace(/\.(cmd|exe|bat)$/i, '').trim();
-        if (normOld === normNew) {
-          finalConfig.command = existingConfig.command;
-        }
-      }
-      
-      // Preserve disabled state if currently disabled
-      if (disabledContainer[serverKey]) {
-        disabledContainer[serverKey] = finalConfig;
-      } else {
-        activeContainer[serverKey] = finalConfig;
-      }
-
-      fs.writeFileSync(resolvedMcp, JSON.stringify(configObj, null, 2), 'utf-8');
+      const configObj = applyMcpInstallToObject(target.agentId, readRes.data, serverKey, serverConfig);
+      writeJsonAtomicWithBackup(resolvedMcp, configObj);
       installedCount++;
+    }
+
+    if (installedCount === 0 && errors.length > 0) {
+      return { success: false, error: errors.join(' | ') };
     }
     return { success: true, count: installedCount };
   } catch (err: any) {
@@ -1473,37 +1548,14 @@ ipcMain.handle('catalog:uninstallMcp', async (_event, params: {
     for (const target of targets) {
       const { resolvedMcp: effectiveMcp } = resolveAgentEffectivePaths({ id: target.agentId, mcpConfigPath: target.mcpConfigPath });
       const resolvedMcp = effectiveMcp || resolveHome(target.mcpConfigPath);
-      if (!resolvedMcp || !fs.existsSync(resolvedMcp)) continue;
+      if (!safeExists(resolvedMcp)) continue;
 
       try {
-        const configObj = parseJsonc(fs.readFileSync(resolvedMcp, 'utf-8'));
-        let modified = false;
-        if (configObj.mcp?.servers && configObj.mcp.servers[serverKey]) {
-          delete configObj.mcp.servers[serverKey];
-          modified = true;
-        }
-        if (configObj.mcp?.disabledServers && configObj.mcp.disabledServers[serverKey]) {
-          delete configObj.mcp.disabledServers[serverKey];
-          modified = true;
-        }
-        if (configObj.mcpServers && configObj.mcpServers[serverKey]) {
-          delete configObj.mcpServers[serverKey];
-          modified = true;
-        }
-        if (configObj.servers && configObj.servers[serverKey]) {
-          delete configObj.servers[serverKey];
-          modified = true;
-        }
-        if (configObj.disabledMcpServers && configObj.disabledMcpServers[serverKey]) {
-          delete configObj.disabledMcpServers[serverKey];
-          modified = true;
-        }
-        if (configObj.disabledServers && configObj.disabledServers[serverKey]) {
-          delete configObj.disabledServers[serverKey];
-          modified = true;
-        }
+        const readRes = readMcpConfigFile(resolvedMcp);
+        if (!readRes.ok) continue;
+        const { modified } = applyMcpUninstallToObject(readRes.data, serverKey);
         if (modified) {
-          fs.writeFileSync(resolvedMcp, JSON.stringify(configObj, null, 2), 'utf-8');
+          writeJsonAtomicWithBackup(resolvedMcp, readRes.data);
           uninstalledCount++;
         }
       } catch {}
@@ -1530,54 +1582,15 @@ ipcMain.handle('catalog:toggleMcp', async (_event, params: {
   for (const target of targets) {
     const { resolvedMcp: effectiveMcp } = resolveAgentEffectivePaths({ id: target.agentId, mcpConfigPath: target.mcpConfigPath });
     const resolvedMcp = effectiveMcp || resolveHome(target.mcpConfigPath);
-    if (!resolvedMcp || !fs.existsSync(resolvedMcp)) continue;
+    if (!safeExists(resolvedMcp)) continue;
 
     try {
-      const configObj = parseJsonc(fs.readFileSync(resolvedMcp, 'utf-8'));
-      let activeContainer: any;
-      let disabledContainer: any;
-
-      if (configObj.mcp && typeof configObj.mcp === 'object') {
-        if (!configObj.mcp.servers) configObj.mcp.servers = {};
-        if (!configObj.mcp.disabledServers) configObj.mcp.disabledServers = {};
-        activeContainer = configObj.mcp.servers;
-        disabledContainer = configObj.mcp.disabledServers;
-      } else {
-        if (!configObj.mcpServers && !configObj.servers) {
-          configObj.mcpServers = {};
-        }
-        activeContainer = configObj.mcpServers !== undefined ? configObj.mcpServers : configObj.servers;
-        if (!configObj.disabledMcpServers && !configObj.disabledServers) {
-          configObj.disabledMcpServers = {};
-        }
-        disabledContainer = configObj.disabledMcpServers !== undefined ? configObj.disabledMcpServers : configObj.disabledServers;
-      }
-
-      if (enabled) {
-        // Move from disabledContainer -> activeContainer
-        const serverDef = disabledContainer[serverKey] || activeContainer[serverKey];
-        if (serverDef) {
-          const cleanedDef = { ...serverDef };
-          delete cleanedDef.disabled;
-          activeContainer[serverKey] = cleanedDef;
-          delete disabledContainer[serverKey];
-          fs.writeFileSync(resolvedMcp, JSON.stringify(configObj, null, 2), 'utf-8');
-          modifiedCount++;
-        }
-      } else {
-        // Move from activeContainer -> disabledContainer
-        const serverDef = activeContainer[serverKey];
-        if (serverDef) {
-          disabledContainer[serverKey] = {
-            ...serverDef,
-            disabled: true,
-          };
-          delete activeContainer[serverKey];
-          fs.writeFileSync(resolvedMcp, JSON.stringify(configObj, null, 2), 'utf-8');
-          modifiedCount++;
-        } else if (disabledContainer[serverKey]) {
-          modifiedCount++;
-        }
+      const readRes = readMcpConfigFile(resolvedMcp);
+      if (!readRes.ok) continue;
+      const { modified } = applyMcpToggleToObject(target.agentId, readRes.data, serverKey, enabled);
+      if (modified) {
+        writeJsonAtomicWithBackup(resolvedMcp, readRes.data);
+        modifiedCount++;
       }
     } catch (err: any) {
       console.warn(`Failed toggling MCP ${serverKey} on ${target.agentId}:`, err);
@@ -1870,26 +1883,22 @@ This skill is part of the **${pluginDisplayName}** plugin bundle.
           'utf-8'
         );
 
-        // Also merge into agent's main MCP config if available
+        // Also merge into agent's main MCP config cleanly using shared secret-preserving store
         if (target.mcpConfigPath) {
-          const resolvedMcp = resolveHome(target.mcpConfigPath);
+          const { resolvedMcp: effectiveMcp } = resolveAgentEffectivePaths({ id: target.agentId, mcpConfigPath: target.mcpConfigPath });
+          const resolvedMcp = effectiveMcp || resolveHome(target.mcpConfigPath);
           if (resolvedMcp) {
             try {
-              fs.mkdirSync(path.dirname(resolvedMcp), { recursive: true });
-              let agentMcpConfig: any = { mcpServers: {} };
-              if (fs.existsSync(resolvedMcp)) {
-                try {
-                  agentMcpConfig = JSON.parse(fs.readFileSync(resolvedMcp, 'utf-8'));
-                } catch {
-                  agentMcpConfig = { mcpServers: {} };
+              const readRes = readMcpConfigFile(resolvedMcp);
+              if (!readRes.ok) {
+                backupCorruptConfigFile(resolvedMcp);
+                console.warn(`Skipped merging plugin MCPs into corrupt ${resolvedMcp}: ${readRes.error}`);
+              } else {
+                for (const [sKey, sVal] of Object.entries(mcpServersMap)) {
+                  applyMcpInstallToObject(target.agentId, readRes.data, sKey, sVal);
                 }
+                writeJsonAtomicWithBackup(resolvedMcp, readRes.data);
               }
-              const key = agentMcpConfig.mcpServers !== undefined ? 'mcpServers' : 'servers';
-              if (!agentMcpConfig[key]) agentMcpConfig[key] = {};
-              for (const [sKey, sVal] of Object.entries(mcpServersMap)) {
-                agentMcpConfig[key][sKey] = sVal;
-              }
-              fs.writeFileSync(resolvedMcp, JSON.stringify(agentMcpConfig, null, 2), 'utf-8');
             } catch (err) {
               console.warn(`Failed merging MCP configs for ${target.agentId}:`, err);
             }
@@ -2313,10 +2322,12 @@ ipcMain.handle('plugin:loadPluginDetails', async (_event, pluginPath: string) =>
     const mcpServersList: Array<{ name: string; command?: string; args?: string[]; env?: Record<string, string>; url?: string; transport?: 'stdio' | 'sse' }> = [];
     const mcpConfigFile = path.join(resolvedPath, 'mcp_config.json');
     let mcpServersObj = manifest.mcpServers || {};
-    if (fs.existsSync(mcpConfigFile)) {
+    if (safeExists(mcpConfigFile)) {
       try {
-        const mcpJson = JSON.parse(fs.readFileSync(mcpConfigFile, 'utf-8'));
-        mcpServersObj = { ...mcpServersObj, ...(mcpJson.mcpServers || mcpJson.servers || {}) };
+        const parsed = parseJsoncSafe(fs.readFileSync(mcpConfigFile, 'utf-8'));
+        if (parsed.ok) {
+          mcpServersObj = { ...mcpServersObj, ...(parsed.data.mcpServers || parsed.data.servers || parsed.data.context_servers || {}) };
+        }
       } catch {}
     }
     for (const [key, val] of Object.entries<any>(mcpServersObj)) {
@@ -2661,7 +2672,7 @@ ipcMain.handle('env:checkDependencies', async (_event, requestedBinaries?: strin
 
   const report: Record<string, any> = {};
 
-  for (const binKey of binsToCheck) {
+  await Promise.all(binsToCheck.map(async (binKey) => {
     const spec = DEPENDENCY_SPECS[binKey] || {
       name: binKey,
       description: `System CLI binary requirement: ${binKey}`,
@@ -2680,19 +2691,17 @@ ipcMain.handle('env:checkDependencies', async (_event, requestedBinaries?: strin
 
     for (const c of candidates) {
       try {
-        const out = execSync((isWin ? 'where ' : 'which ') + c, {
-          stdio: ['pipe', 'pipe', 'ignore'],
-          timeout: 1500,
-        }).toString().trim().split(/[\r\n]+/)[0];
+        const safeName = c.replace(/[^a-zA-Z0-9._-]/g, '');
+        if (!safeName) continue;
+        const { stdout } = await execAsync(`${isWin ? 'where' : 'which'} ${safeName}`, { timeout: 1500 });
+        const out = String(stdout || '').trim().split(/[\r\n]+/)[0];
 
         if (out && !out.toLowerCase().includes('windowsapps\\python3.exe') && !out.toLowerCase().includes('windowsapps\\python.exe')) {
           foundPath = out;
           if (spec.versionCmd) {
             try {
-              foundVersion = execSync(spec.versionCmd, {
-                stdio: ['pipe', 'pipe', 'ignore'],
-                timeout: 1500,
-              }).toString().trim().split(/[\r\n]+/)[0];
+              const { stdout: vOut } = await execAsync(spec.versionCmd, { timeout: 1500 });
+              foundVersion = String(vOut || '').trim().split(/[\r\n]+/)[0];
             } catch {}
           }
           break;
@@ -2713,31 +2722,57 @@ ipcMain.handle('env:checkDependencies', async (_event, requestedBinaries?: strin
       docsUrl: spec.docsUrl,
       isCritical: spec.isCritical,
     };
-  }
+  }));
 
   return report;
 });
 
-app.whenReady().then(() => {
-  createWindow();
-
-  app.on('second-instance', () => {
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.focus();
-    }
-  });
-
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
-    }
-  });
+ipcMain.handle('mcp:playgroundConnect', async (_event, params: McpPlaygroundConnectParams) => {
+  return connectPlayground(params);
 });
 
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit();
-  }
+ipcMain.handle('mcp:playgroundListTools', async (_event, sessionId: string) => {
+  return listPlaygroundTools(sessionId);
 });
+
+ipcMain.handle('mcp:playgroundCallTool', async (_event, params: McpPlaygroundToolCallParams) => {
+  return callPlaygroundTool(params);
+});
+
+ipcMain.handle('mcp:playgroundStatus', async (_event, sessionId: string) => {
+  return getPlaygroundStatus(sessionId);
+});
+
+ipcMain.handle('mcp:playgroundDisconnect', async (_event, sessionId: string) => {
+  return disconnectPlayground(sessionId);
+});
+
+if (gotTheLock) {
+  app.whenReady().then(() => {
+    createWindow();
+
+    app.on('second-instance', () => {
+      if (mainWindow) {
+        if (mainWindow.isMinimized()) mainWindow.restore();
+        mainWindow.focus();
+      }
+    });
+
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) {
+        createWindow();
+      }
+    });
+  });
+
+  app.on('before-quit', () => {
+    cleanupAllPlaygroundSessions();
+  });
+
+  app.on('window-all-closed', () => {
+    if (process.platform !== 'darwin') {
+      app.quit();
+    }
+  });
+}
 

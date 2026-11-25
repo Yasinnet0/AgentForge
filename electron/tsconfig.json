@@ -13,6 +13,8 @@
   },
   "include": [
     "main.ts",
-    "preload.ts"
+    "preload.ts",
+    "mcpConfigStore.ts",
+    "mcpPlayground.ts"
   ]
 }
