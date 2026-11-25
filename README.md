@@ -17,6 +17,7 @@
   <a href="#quick-start"><b>Quick Start</b></a> &bull;
   <a href="#core-capabilities"><b>Capabilities</b></a> &bull;
   <a href="#supported-agents"><b>Supported Agents</b></a> &bull;
+  <a href="SOURCES.md"><b>Sources</b></a> &bull;
   <a href="#build-from-source"><b>Build from Source</b></a> &bull;
   <a href="#license"><b>License</b></a>
 </p>
@@ -96,6 +97,20 @@ npm run electron:linux      # Linux (AppImage & DEB)
 ```
 
 Packaged outputs will be located in the `release/` directory.
+
+---
+
+## Upstream Sources & Registries
+
+AgentForge aggregates tools, playbooks, and protocol connectors from vetted open-source registries and your machine's local configuration files:
+
+- **Official Model Context Protocol (MCP) Registry** (`registry.modelcontextprotocol.io`)
+- **Anthropic Official & Community Plugins** (`claude-plugins-official`, `claude-plugins-community`)
+- **Agentic Awesome Skills (AAS)** curated playbooks and editorial bundles
+- **GitHub Copilot Marketplace** (`awesome-copilot`)
+- **Local Dotfile Scanners** across all 12 supported assistant directories
+
+For full endpoint URLs, offline fallback behavior, custom feed schemas, and upstream attribution, see [**`SOURCES.md`**](SOURCES.md).
 
 ---
 
